@@ -1,0 +1,22 @@
+# History files
+.Rhistory
+.Rapp.history
+# Session Data files
+.RData
+.RDataTmp
+# User-specific files
+.Ruserdata
+# R Environment Variables
+.Renviron
+# RStudio files
+.Rproj.user/
+#vs code things
+.vscode/
+#python files
+.env
+.venv/
+venv/
+
+#quarto temporary files
+tmp_template_files/
+tmp_template.qmd
