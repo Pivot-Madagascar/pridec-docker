@@ -1,5 +1,10 @@
 # PRIDE-C Forecast
-#### A Snakemake workflow to run a forecast on one dataElement
+
+A docker container to run the PRIDE-C Forecast Workflow
+
+## Installation
+
+## Usage
 
 Don't forget to activate env before running.
 
