@@ -5,7 +5,15 @@
 
 `source .venv/bin/activate`: to start the python venv [only to use the data fetch]
 
+## 2025-08-02
 
+Adjusting my prototype docker to this actual workflow to see how it works. It works!! I added the code to run it to the `README.md`. I may have to think about what is the actual best way to set this up. Probably have a folder for each datastream, they can all use the same container/image, but then will have different input and output folders.
+
+Question to ask Paul is whether it is better to just run the data fetching from within the docker container? probably not.
+
+**TO DO:**
+- make schematic of workflow (python fetch, docker container, output)
+- create a Makefile that runs everything for one dataSource (fetching, docker, post output)
 
 ## 2025-08-01
 
@@ -16,9 +24,8 @@ Finished a basic quarto doc as part of the workflow.
 Tested using docker using a quick test on the Desktop. Seems to work fine, the only thing is the image build takes a very long time to install the INLA and PRIDE-C packages and the resulting image is quick big (5.8 GB).
 
 
-
 **TO DO**:
-- create automated reports to check input data and predictions [just a little quarto doc]
+- ~~create automated reports to check input data and predictions [just a little quarto doc]~~
 - ~~update to new PRIDEC package to make sure it fixes ARIMA issue~~ 
 - figure out how this works with Docker (use a dumb example that only uses a naive model to test). probably needs INLA image
 

@@ -6,17 +6,16 @@ A backup version of this data is saved in `base`.
 
 Python scripts are used to FETCH the climate, disease, and geojson data. Configuration and external data are provided manually.
 
-You should have a `.env` file in teh root directory with the following structure:
+You should have a `.env` file in the root directory with the following structure:
 
 ```
 DHIS2_PRIDEC_URL="YOUR URL"
 TOKEN_DHIS_PRIDEC_MICHELLE="YOUR ACCESS TOKEN"
 PARENT_OU="VtP4BdCeXIo" #corresponds to Ifanadiana
-OU_LEVEL="5" #6=fokontany, 5 = CSB
 DISEASE_CODE="pridec_historic_CSBMalaria" #code of DHIS2 data element you want to predict
 ```
 
-To fetch all the input data at once, run the following:
+To fetch all the input data from DHIS2 at once, run the following:
 
 ```
 source .venv/bin/activate
@@ -25,7 +24,7 @@ python python-fetch-scripts/fetch_disease_input.py
 python python-fetch-scripts/fetch_geojson_input.py 
 ```
 
-
+This step will eventually be done via the ETL that will provide the data to the docker container.
 
 ## `climate_data.json`
 

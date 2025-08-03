@@ -18,5 +18,8 @@
 venv/
 
 #quarto temporary files
-tmp_template_files/
-tmp_template.qmd
+*/tmp_template_files/
+*/tmp_template.qmd
+
+#output of docker workflow
+forecast/output/

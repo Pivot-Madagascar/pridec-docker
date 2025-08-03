@@ -46,7 +46,7 @@ library(dplyr)
 ```{r load data}
 #| include: false
 forecast_df <- jsonlite::fromJSON(txt = here("output/forecast.json"))$dataValues
-input_set <- qs2::qs_read(here("output/input_data.qs"))
+input_set <- readRDS(here("output/input_data.RData"))
 analysis_data <- input_set$analysis
 assess_data <- input_set$assessment
 poly <- sf::st_read(here("output/polygon.gpkg"), quiet = TRUE)
@@ -227,6 +227,8 @@ check_dhis_value(forecast_df)
 
 All should be zero.
 
+## Add table of forecasts or some other sanity check. distribution?
+
 ## Time Series
 
 ```{r}
@@ -303,6 +305,7 @@ ggplot() +
 # R Session Info
 
 ```{r}
+#| output: true
 sessionInfo()
 ```
 

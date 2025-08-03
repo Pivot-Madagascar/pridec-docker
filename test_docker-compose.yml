@@ -1,0 +1,22 @@
+version: '1.0'
+
+services:
+  pridec-forecasting:
+    build: .
+    container_name: disease-forecasting
+    volumes:
+      # Mount input directory
+      - ./input:/app/input:ro
+      # Mount output directory
+      - ./output:/app/output:rw
+    environment:
+      # Set any environment variables if needed
+      - R_MAX_VSIZE=32Gb
+      - OMP_NUM_THREADS=4
+    # Override default command if needed
+    # command: ["Rscript", "/app/entrypoint.R", "/app/input/custom_data.csv"]
+    
+    # For debugging, you can use interactive mode:
+    # command: ["R", "--interactive"]
+    # stdin_open: true
+    # tty: true

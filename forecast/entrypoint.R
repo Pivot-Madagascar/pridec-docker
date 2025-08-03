@@ -33,7 +33,6 @@ suppressPackageStartupMessages({
   library(optparse)
   
   library(tidyr)
-  library(qs2)
   
   library(PRIDEC)
   
@@ -162,7 +161,7 @@ write(forecast_json, paste0(output_dir,"forecast.json"))
 #' inspects input data and outputs
 
 #save input data to investigate
-qs2::qs_save(forecast_cv, paste0(output_dir, "input_data.qs"))
+saveRDS(forecast_cv, paste0(output_dir, "input_data.RData"))
 sf::st_write(inputs$graph_poly, paste0(output_dir, "polygon.gpkg"), append = FALSE,
              quiet = TRUE)
 
