@@ -10,7 +10,7 @@ import requests
 import json
 
 DHIS2_URL = os.getenv("DHIS2_PRIDEC_URL")
-API_TOKEN = os.getenv("TOKEN_DHIS_PRIDEC_MICHELLE")
+API_TOKEN = os.getenv("DHIS2_TOKEN")
 DISEASE_CODE = os.getenv("DISEASE_CODE")
 OU_LEVEL = 5 if "CSB" in DISEASE_CODE else 6 #csb (5) for csb-level predictions, otherwise fokontany (6)
 OU_PARENT = os.getenv("PARENT_OU")
@@ -51,7 +51,7 @@ flattened = []
 
 analytics_url = (
         f"{DHIS2_URL}api/analytics.json"
-        f"?dimension=dx:{DISEASE_UID[0]["id"]}"
+        f"?dimension=dx:{DISEASE_UID[0]['id']}"
         f"&dimension=ou:{ORGUNITS}"
         f"&dimension=pe:{periods}"
         f"&includeNumDen=false"
@@ -68,10 +68,10 @@ headers_map = {h['name']: i for i, h in enumerate(data.get("headers", []))}
 
 for row in data.get("rows", []):
     flattened.append({
-        "orgUnit": row[headers_map["ou"]],
-        "period": row[headers_map["pe"]],
+        "orgUnit": row[headers_map['ou']],
+        "period": row[headers_map['pe']],
         "dataElement": DISEASE_CODE,
-        "value": float(row[headers_map["value"]])
+        "value": float(row[headers_map['value']])
      })
     
 # --- Save combined result to JSON ---

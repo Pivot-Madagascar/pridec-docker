@@ -10,7 +10,7 @@ import requests
 import json
 
 DHIS2_URL = os.getenv("DHIS2_PRIDEC_URL")
-API_TOKEN = os.getenv("TOKEN_DHIS_PRIDEC_MICHELLE")
+API_TOKEN = os.getenv("DHIS2_TOKEN")
 DISEASE_CODE = os.getenv("DISEASE_CODE")
 OU_LEVEL = 5 if "CSB" in DISEASE_CODE else 6 #csb (5) for csb-level predictions, otherwise fokontany (6)
 OU_PARENT = os.getenv("PARENT_OU")
@@ -73,7 +73,6 @@ for element in data_elements:
 
     data = resp.json()
 
-    # Get index positions of columns
     headers_map = {h['name']: i for i, h in enumerate(data.get("headers", []))}
 
     for row in data.get("rows", []):

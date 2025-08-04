@@ -8,7 +8,7 @@ import requests
 import json
 
 DHIS2_URL = os.getenv("DHIS2_PRIDEC_URL")
-API_TOKEN = os.getenv("TOKEN_DHIS_PRIDEC_MICHELLE")
+API_TOKEN = os.getenv("DHIS2_TOKEN")
 DISEASE_CODE = os.getenv("DISEASE_CODE")
 OU_PARENT = os.getenv("PARENT_OU")
 OU_LEVEL = 5 if "CSB" in DISEASE_CODE else 6 #csb (5) for csb-level predictions, otherwise fokontany (6)

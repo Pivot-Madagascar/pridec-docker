@@ -1,2 +1,3 @@
 python_dateutil==2.9.0.post0
 Requests==2.32.4
+dotenv
