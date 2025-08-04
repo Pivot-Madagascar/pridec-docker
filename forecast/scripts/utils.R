@@ -37,7 +37,7 @@ load_validate_inputs <- function(args){
     err_count <- err_count + 1
   }
   
-  #add check for period format, quantile levels (3 of them, numeric), month_analysis and month_asses(postivie integer)
+  #TO DO: add check for period format, quantile levels (3 of them, numeric), month_analysis and month_asses (positive integer)
   
   
   ## External Data ################
@@ -71,6 +71,9 @@ load_validate_inputs <- function(args){
            .by = "orgUnit") |>
       dplyr::filter(n_months>=36) |>
       dplyr::select(-n_months)
+  
+  #update config to match
+  config$disease_dataElement <- disease_data$dataElement[1]
   
   ## Combine into one dataframe to use ###########
     
@@ -194,9 +197,9 @@ check_dhis_value <- function(this_df){
 #' @param doc_title Title of report. Default = "PRIDE-C Forecast Report"
 #' @param output_dir Directory for output for docker runs
 #' @returns Creates a HTML report of forecast at output/forecast_report.html
-create_forecast_report <- function(config_file = "input/config.json",
-                                   doc_title = "PRIDE-C Forecast Report",
-                                   output_dir){
+create_forecast_report <- function(doc_title = "PRIDE-C Forecast Report",
+                                   output_dir,
+                                   quiet = TRUE){
   
   #move template to output to run
   file.copy("templates/validation_report_template.qmd", to = "tmp_template.qmd",
@@ -205,8 +208,9 @@ create_forecast_report <- function(config_file = "input/config.json",
   quarto::quarto_render(
     input = "tmp_template.qmd",
     output_file = "tmp_quarto-out.html",
-    execute_params = list(config_json = config_file),
-    quarto_args = c("--metadata", paste0("title=", doc_title))
+    execute_params = list(config_json = paste0(output_dir, "config.json")),
+    quarto_args = c("--metadata", paste0("title=", doc_title)),
+    quiet = quiet
   )
   
   #move and clean up files
@@ -216,3 +220,4 @@ create_forecast_report <- function(config_file = "input/config.json",
   file.remove("tmp_quarto-out.html")
   
 }
+

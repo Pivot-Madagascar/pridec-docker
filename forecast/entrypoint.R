@@ -20,7 +20,7 @@ parser <- optparse::add_option(parser, c("--disease_data"), default = "input/dis
 parser <- optparse::add_option(parser, c("--orgUnit_poly"), default = "input/orgUnit_poly.geojson",
                                type = "character",
                                help = "Path to geojson file containing polygons of the orgUnit catchments to use in INLA model.")
-parser <- optparse::add_option(parser, c("--config"), default = "input/config.json",
+parser <- optparse::add_option(parser, c("--config"), default = "input/test_config.json",
                                type = "character",
                                help = "Path to json file containing model configurations for forecast.
                                See `templates/config_ex.json` for an example.")
@@ -43,8 +43,7 @@ suppressPackageStartupMessages({
 
 source("scripts/utils.R")
 
-#set output dir
-output_dir <- "output/"
+
 
 # Start ##############################################
 
@@ -55,13 +54,15 @@ cli::cli_alert_info(c("Using the following arguments:\n",
                       ))
 print(fromJSON(args$config))
 
+
 # Validate Input Files #################################
 
 cli::cli_h2(paste(round(Sys.time()), ": Importing and validating inputs"))
 
 validate_args_exist(args = args)
 inputs <- load_validate_inputs(args = args)
-
+                        
+output_dir <- "output/"
 
 # Clean and Process Data ##############################
 
@@ -147,7 +148,6 @@ stack_forecast <- PRIDEC::ensemble_forecast(cv_set = forecast_cv,
 
 # Save Forecast Data ---------------#
 #' can also save a file of metadata if you want (or provide this in report)
-#' 
 
 dhis2_forecast <- format_forecast_dhis2(forecast_out = stack_forecast, 
                                         disease_dataElement = inputs$config$disease_dataElement,
@@ -159,16 +159,19 @@ write(forecast_json, paste0(output_dir,"forecast.json"))
 # Generate HTML Report from Results --------------------------------#
 #' this will be saved in outputs
 #' inspects input data and outputs
+#' 
+
+cli::cli_h2(paste(round(Sys.time()), ": Creating validation report"))
 
 #save input data to investigate
 saveRDS(forecast_cv, paste0(output_dir, "input_data.RData"))
 sf::st_write(inputs$graph_poly, paste0(output_dir, "polygon.gpkg"), append = FALSE,
              quiet = TRUE)
-
-suppressMessages({
-  create_forecast_report(config_file = args$config,
-                         output_dir = output_dir)
-})
+write(toJSON(inputs$config), paste0(output_dir, "config.json"))
 
 
-cli::cli_alert_success(paste0(round(Sys.time()), " : Created forecast report at ", output_dir, "forecast_report.html"))
+create_forecast_report(output_dir = output_dir, quiet = TRUE)
+
+
+
+cli::cli_alert_success(paste0(round(Sys.time()), ":\nCreated forecast report at ", output_dir, "forecast_report.html"))

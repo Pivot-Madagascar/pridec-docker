@@ -5,6 +5,28 @@
 
 `source .venv/bin/activate`: to start the python venv [only to use the data fetch]
 
+### Docker code I was using before
+
+
+## 2025-08-04
+
+Met with Paul to plan some of this architecture. Probably the `fetch` and `post` steps will be handled by the ETL, and then the `forecast` will be within this docker container. Currently continuing to add the `fetch` step to this so we have one container that just works locally for now.
+
+I was also thinking about how the `fetch` for disease data could be different for different instances. For example, our IRA data is the combination of multiple diagnoses/dataElements. Because this is kind of created seperately and then turned into pridec_historic_..., this is a seperate process and will just have to be part of what whoever manages that system will need to configure themselves.
+
+**TO DO:**
+- ~~get `fetch` service working~~
+- test in some seperate workflow to make sure the process works
+- write documentation and post to github. Update to be cleaner and just for the docker compose workflow. Move old notes to lab-notebook
+- ~~somehow ensure the DISEASE_CODE in .env and config.json are the same. Easiest may be to not include it in config.json and just get it from the environmental variables or the disease data itself. [done, it is now based on the disease_data]~~
+
+## 2025-08-03
+
+I think I want to restructure to have one compose file that does all three services (fetch, forecast, post). This will make it easier to run the whole workflow and also can have simpler python-based containers for fetch and post. To do this, I created subdirectories for each service. Each subdirectory contains the Dockerfile needed for that service, following some instructions here: https://mariusniemet20.medium.com/containerize-your-multi-services-app-with-docker-compose-96c26c1fb8b6
+
+I also want to adjust the location of the input and output directories to be higher up so they aren't nested probably? I've also added somethign so they are svaed by dataElement and date so they can be inspected and seperated from other forecasts. Then the post can just be provided the output directory to POST. Okay, actually I think this makes things more confusing so I will go back to just saving it within a folder. If someone wants to create their own "output" folder on a local machine then they can. This should keep the docker workflow from getting weird
+
+
 ## 2025-08-02
 
 Adjusting my prototype docker to this actual workflow to see how it works. It works!! I added the code to run it to the `README.md`. I may have to think about what is the actual best way to set this up. Probably have a folder for each datastream, they can all use the same container/image, but then will have different input and output folders.
@@ -13,7 +35,7 @@ Question to ask Paul is whether it is better to just run the data fetching from 
 
 **TO DO:**
 - make schematic of workflow (python fetch, docker container, output)
-- create a Makefile that runs everything for one dataSource (fetching, docker, post output)
+- create a Makefile that runs everything for one dataSource (fetching, docker, post output) [doing with docker compose now]
 
 ## 2025-08-01
 

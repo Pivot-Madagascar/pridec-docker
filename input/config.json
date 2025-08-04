@@ -1,0 +1,32 @@
+{
+    "pred_vars": ["net_p2", "month_since_llin", "pridec_climate_temperatureMean", 
+                    "pridec_climate_mndwi", "pridec_climate_evi", "wealth_index", 
+                    "pridec_climate_relHumidity", "pridec_climate_precipitation"],
+    "disease_dataElement": "pridec_historic_CSBMalaria",
+    "model_weights": [
+        {
+            "model" : "inla",
+            "weight": 0.6
+        },
+                {
+            "model" : "glm_nb",
+            "weight": 0.2
+        },
+                {
+            "model" : "ranger",
+            "weight": 0.76
+        },
+                {
+            "model" : "arimax",
+            "weight": 0.57
+        },
+                {
+            "model" : "naive",
+            "weight": 0.3
+        }
+    ],
+    "quantile_levels" : [0.05, 0.5, 0.95],
+    "forecast_start" : "202504",
+    "month_analysis" : 60,
+    "month_assess" : 3
+}

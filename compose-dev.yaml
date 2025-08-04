@@ -1,0 +1,17 @@
+name: pridec-forecast-workflow
+
+services:
+  fetch:
+    build:
+      context: ./fetch
+      dockerfile: Dockerfile
+    volumes:
+    - ./input:/app/input:rw
+    #specify new DISEASE_CODE env variable via `DISEASE_CODE=new_value docker compose run --rm fetch`
+    #env_file:
+    #- .env
+    environment:
+      DHIS2_PRIDEC_URL: "http://44.218.51.103:8080/"
+      DHIS2_TOKEN: "${DHIS2_TOKEN}"
+      PARENT_OU: "VtP4BdCeXIo"
+      DISEASE_CODE: "pridec_historic_CSBMalaria"

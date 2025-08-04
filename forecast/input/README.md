@@ -1,4 +1,4 @@
-# Input data
+# Input data for testing
 
 This folder contains the data that should be input to the docker applicatioon to create the PRIDE-C forecasts. All of this data comes from a DHIS2 instance in the full workflow, but is saved locally for development purposes.
 
@@ -63,7 +63,6 @@ This is the json config file that contains the configuratoin for the modeling wo
 ```
 {
     "pred_vars": ["pridec_climate_temperatureMean", "pridec_climate_precipitation"],
-    "disease_dataElement": "pridec_historic_CSBMalaria",
     "model_weights": [
         {
             "model" : "inla",
@@ -104,7 +103,7 @@ python python-fetch-scripts/fetch_disease_input.py
 
 ## `external_data.json`
 
-Optional data to be provided that can not be stored following the DHIS2 structure. It requires columns `orgUnit` and `period` that match those from DHIS2. It would be provided by the user (uploaded via the GUI). For now, it is just stored locally.
+Optional data to be provided that can not be stored following the DHIS2 structure. It requires columns `orgUnit` and `period` that match those from DHIS2. It would be provided by the user (uploaded via the GUI). For now, it is just stored locally. It is the same for all Pivot PRIDE-C data sources.
 
 
 ## `orgUnit_poly.geojson`
