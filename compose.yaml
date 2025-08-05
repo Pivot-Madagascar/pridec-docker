@@ -19,7 +19,7 @@ services:
     #env_file:
     #- .env
     environment:
-      DHIS2_PRIDEC_URL: "http://44.218.51.103:8080/"
+      DHIS2_PRIDEC_URL: "${DHIS2_PRIDEC_URL}" 
       DHIS2_TOKEN: "${DHIS2_TOKEN}"
       PARENT_OU: "VtP4BdCeXIo"
       DISEASE_CODE: "${DISEASE_CODE}"
@@ -44,4 +44,20 @@ services:
     #commands can be overridden when using docker compose run (not up)
     command: --config "input/test_config.json"
 
-    #3rd service is POST, to post the predictions to a pride-c instance. TO DO
+  post:
+    build:
+      context: ./post
+      dockerfile: Dockerfile
+    volumes:
+      - type: bind
+        source: ./output
+        target: /app/output
+        bind:
+          create_host_path: false
+        read_only: true
+    environment:
+      DHIS2_PRIDEC_URL: "${DHIS2_PRIDEC_URL}"
+      DHIS2_TOKEN: "${DHIS2_TOKEN}"
+      DISEASE_CODE: "${DISEASE_CODE}"
+      DRYRUN: "true"
+
