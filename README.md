@@ -5,6 +5,7 @@ A docker container to run the PRIDE-C Forecast Workflow
 ## Requirements
 
 - [docker compose](https://docs.docker.com/compose/install/)
+- 6 GB storage space for docker image
 
 ## Installation
 
@@ -36,7 +37,7 @@ HOST_PWD="$(pwd)"
 HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_DIR/compose-auto.yaml" "$@"
 ```
 
-Run the install script:
+Run the install script. This will take 15-20 minutes depending on your internet connection.:
 
 ```
 
@@ -53,7 +54,7 @@ which pridec
 
 ### Use `docker compose build` directly (manual install)
 
-You can also use the application directly via `docker compose
+You can also use the application directly via `docker compose`. This will take about 15 minutes the first time it is run.
 
 ```
 docker compose build
@@ -76,7 +77,23 @@ PARENT_OU="VtP4BdCeXIo" #id of parent orgUnit. Ifanadiana: "VtP4BdCeXIo"
 DISEASE_CODE="pridec_historic_yourDataElement" #corresponds to DHIS2 dataElement code of disease to predict
 ```
 
-NOT DONE YET
+5. Run the full workflow. Some example code is below:
+
+```
+pridec run --env-from-file .env --rm fetch
+#allows you to keept same URL and TOKEN and just change DISEASE_CODE
+pridec run --env-from-file .env --env DISEASE_CODE="pridec_historic_CSBMalaria" --rm fetch
+
+#config file can be changed for each disease
+pridec run --rm forecast --config "input/config_malaria.json"
+
+#YOU SHOULD INSPECT output/forecast_report.html NOW
+
+#PAY ATTENTION HERE AS THIS WILL CHANGE YOUR INSTANCE. update DRYRUN as needed
+pridec run --env-from-file .env --env DRYRUN=true --rm post
+
+pridec down --remove-orphans
+```
 
 ## Usage (manual install)
 

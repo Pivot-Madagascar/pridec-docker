@@ -1,9 +1,15 @@
-# Lab Notebook : PRIDE-C Forecast
+# Lab Notebook : PRIDE-C Docker
 ## Michelle Evans (mevans@pivotworks.org)
 
 ## Useful things
 
-`source .venv/bin/activate`: to start the python venv [only to use the data fetch]
+`source .venv/bin/activate`: to start the python venv 
+
+for testing on d2 docker-test: 
+```
+DHIS2_PRIDEC_URL="http://localhost:8082/"
+DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
+```
 
 ## 2025-08-05
 
@@ -23,12 +29,25 @@ pridec run --env DISEASE_CODE="pridec_historic_CSBMalaria" --rm fetch
 
 pridec run --rm forecast --config "input/config_malaria.json"
 
-#PAY ATTENTION HERE AS THIS WILL CHANGE YOUR INSTANCE
-pridec run --env DRYRUN=false --rm post 
+#PAY ATTENTION HERE AS THIS WILL CHANGE YOUR INSTANCE. update DRYRUN as needed
+pridec run --env-from-file .env --env DRYRUN=true --rm post
 
 pridec down --remove-orphans
 ```
 
+**Testing on other dataStreams**
+
+I started testing on other dataStreams. When using the COMDiarrhea, I seem to be getting values at CSB levels in addition to fokontany. I think this is an error in fetch_disease_input.py. OO or it may becuase the external_data is at the CSB level and needs to be provided at the fokontnay level. I will see if that fixes it. It did.
+
+I also spun it up on a local d2 instance to test it and it seems to work. When testing something on a local d2 instance, we have to linkt he local host. I updated the compose files to include `network_mode; "host"` to deal with this.
+
+I also created a new repo that contains the workflow specific to Pivot (`pridec-pivot-update`). This would be what another sysadmin would use to base their own thing own. 
+
+I am getting a weird error with the polygons for the fokontany data, so I need to look into this and see what is going on.
+
+**TO DO:**
+- investigate fokontany geojson error with ADJ data. This may also have to do with how we don't use all teh fokontany for the COM predictions
+- finish writing documentation and go through a full "clean" run
 
 ## 2025-08-04
 
