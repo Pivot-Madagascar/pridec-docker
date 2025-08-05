@@ -8,6 +8,8 @@ services:
     build:
       context: ./fetch
       dockerfile: Dockerfile
+    #this is needed for tsting thing using localhost
+    network_mode: "host"
     volumes:
      - type: bind
        source: ${HOST_PWD}/input
@@ -26,6 +28,8 @@ services:
     build: 
       context: ./forecast
       dockerfile: Dockerfile
+    #this is needed for testing using d2 instances on the localhost
+    network_mode: "host"
     volumes:
      - type: bind
        source: ${HOST_PWD}/input
@@ -46,6 +50,8 @@ services:
     build:
       context: ./post
       dockerfile: Dockerfile
+    #this is needed for testing using d2 instances on the localhost
+    network_mode: "host"
     volumes:
       - type: bind
         source: ${HOST_PWD}/output
