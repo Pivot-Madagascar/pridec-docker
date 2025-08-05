@@ -31,3 +31,4 @@ build.log
 #output of docker workflow
 forecast/output/
 output/
+input/

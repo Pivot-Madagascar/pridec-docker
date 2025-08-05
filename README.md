@@ -48,6 +48,7 @@ Check it is installed correctly:
 
 ```
 pridec config
+which pridec
 ```
 
 ### Use `docker compose build` directly (manual install)
@@ -65,7 +66,7 @@ To use `pridec`, it must be run from within the `pridec-docker` directory. This 
 
 1. Create a directory for the dataElement you wish to predict
 2. Create `input` and `output` subdirectories
-3. Copy your `config.json` and `external_data.csv` into the `input` directory. See example files here (TO DO).
+3. Copy your `config.json` and `external_data.csv` into the `input` directory. See example files [here](https://github.com/Pivot-Madagascar/pridec-docker/tree/main/forecast_assets).
 4. Create a `.env` file with the following variables:
 
 ```
@@ -75,8 +76,7 @@ PARENT_OU="VtP4BdCeXIo" #id of parent orgUnit. Ifanadiana: "VtP4BdCeXIo"
 DISEASE_CODE="pridec_historic_yourDataElement" #corresponds to DHIS2 dataElement code of disease to predict
 ```
 
-
-
+NOT DONE YET
 
 ## Usage (manual install)
 
@@ -97,7 +97,9 @@ docker compose --verbose run --rm fetch
 
 Example providing ENV_VARIABLES directly:
 
-TO DO
+```
+docker compose run --env DISEASE_CODE="pridec_historic_CSBMalaria" --rm fetch
+```
 
 ### 2. Run `forecast` service
 
@@ -111,13 +113,40 @@ You should now inspect the model validation report in `output/forecast_report.ht
 
 ### 3. Run `post` service
 
-ADD STEPS FOR THIS
+By default, this is always a dry run (makes no changes to an instance). This is to serve as a kind of double-check to make production data is only changed purposefully.
+
+```
+docker compose --verbose run --env DRYRUN=true --rm post
+```
 
 ### 4. Clean up unused containers (optional)
 
 ```
 docker compose down --remove-orphans
 ```
+
+## Uninstall
+
+To uninstall the automatic installation, first remove the symlinked application:
+
+```
+rm -f $HOME/bin/pridec
+which pridec
+```
+This should return `pridec not found` or nothing.
+
+Stop all containers and rm images associated with `pridec`:
+
+```
+docker container ps -a
+docker container rm <CONTAINER-ID>
+
+
+docker image ls
+docker image rm <IMAGE-ID>
+```
+
+Delete the `pridec-docker` directory that you had initially downloaded.
 
 ## Helpful commands for testing and debugging
 
