@@ -23,7 +23,7 @@ git clone https://github.com/Pivot-Madagascar/pridec-docker.git
 cd pridec-docker
 ```
 
-### Install via `install.sh` (recommended, Unix only)
+### Install via `install.sh` (recommended, Mac/Linux only)
 
 This shell script will install the PRIDE-C Docker app and make it available via the command `pridec`. This will allow you to access the pridec services from anywhere using `pridec` instead of `docker compose`.
 
@@ -65,10 +65,14 @@ To use `pridec`, it must be run from within the `pridec-docker` directory. This 
 
 ## Usage (auto install)
 
-1. Create a directory for the dataElement you wish to predict
+An example of an automated workflow using a shell script is available in the [pridec-pivot-update repo](https://github.com/Pivot-Madagascar/pridec-pivot-update/tree/main).
+
+The primary steps are:
+
+1. Create a project directory for the dataElement you wish to predict
 2. Create `input` and `output` subdirectories
-3. Copy your `config.json` and `external_data.csv` into the `input` directory. See example files [here](https://github.com/Pivot-Madagascar/pridec-docker/tree/main/forecast_assets).
-4. Create a `.env` file with the following variables:
+3. Copy your `config.json` and `external_data.csv` into the `input` directory. See example files [here](https://github.com/Pivot-Madagascar/pridec-pivot-update/tree/main/forecast_assets).
+4. Create a `.env` file with the following variables at project directory:
 
 ```
 DHIS2_PRIDEC_URL="your-url" 
@@ -77,7 +81,7 @@ PARENT_OU="VtP4BdCeXIo" #id of parent orgUnit. Ifanadiana: "VtP4BdCeXIo"
 DISEASE_CODE="pridec_historic_yourDataElement" #corresponds to DHIS2 dataElement code of disease to predict
 ```
 
-5. Run the full workflow. Some example code is below:
+5. Run the full workflow from the project directory. Some example code is below:
 
 ```
 pridec run --env-from-file .env --rm fetch
@@ -96,6 +100,8 @@ pridec down --remove-orphans
 ```
 
 ## Usage (manual install)
+
+If it is manually installed, these steps need to be run from the `pridec-docker` project directory.
 
 This needs to be run in order (fetch > forecast > post).
 
