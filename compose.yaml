@@ -1,4 +1,4 @@
-name: pridec-workflow
+name: pridec
 
 # NOTE: because forecsat relies on fetch, these should always be run via `docker compose run` to
 # launch a specific service and not the whole workflow at once
