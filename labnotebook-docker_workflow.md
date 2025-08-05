@@ -14,7 +14,7 @@ The way it works is:
 
 1. follow the automated install to have `pridec` available as a command line application
 2. create a folder for the dataStream you want to forecast. It should contain `input/`, `output/`, and `.env`. In the `input/` folder should be the external_data.csv and the configurations for that dataStream/diesease. the .env should also include the correct `DISEASE_CODE`
-3. Run the workflow via the following fromw within the dataStream folder:
+3. Run the workflow via the following from within the dataStream folder:
 
 ```
 #use etiher way to specify dataStream
@@ -23,7 +23,8 @@ pridec run --env DISEASE_CODE="pridec_historic_CSBMalaria" --rm fetch
 
 pridec run --rm forecast --config "input/config_malaria.json"
 
-# ADD POST step
+#PAY ATTENTION HERE AS THIS WILL CHANGE YOUR INSTANCE
+pridec run --env DRYRUN=false --rm post 
 
 pridec down --remove-orphans
 ```
