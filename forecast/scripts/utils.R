@@ -110,7 +110,7 @@ load_validate_inputs <- function(args){
   missing_orgPoly <-all_ou[which(!(all_ou %in% graph_poly$orgUnit))]
   if(length(missing_orgPoly)>0){
     cli::cli_alert_danger(c("The following orgUnits are missing corresponding polygons in `OrgUnit_poly`:\n",
-                            missing_orgPoly))
+                            paste(missing_orgPoly, "\n")))
     err_count <- err_count + 1
   }
   
