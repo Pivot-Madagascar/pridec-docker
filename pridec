@@ -1,0 +1,6 @@
+#!/bin/bash
+
+#COMPOSE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE_DIR="/home/mevans/Dropbox/PIVOT/pride-c/appDev/pridec-docker" #update to be path to installed repo
+HOST_PWD="$(pwd)"
+HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_DIR/compose-auto.yaml" "$@"

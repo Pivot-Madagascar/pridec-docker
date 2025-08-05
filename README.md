@@ -2,26 +2,92 @@
 
 A docker container to run the PRIDE-C Forecast Workflow
 
+## Requirements
+
+- [docker compose](https://docs.docker.com/compose/install/)
+
 ## Installation
 
-## Usage
+### Download
 
-This needs to be run in order( fetch > forecast).
+Download via `curl`
+```
+curl -L -O https://github.com/Pivot-Madagascar/pridec-docker/archive/refs/head/main.tar.gz | tar xz #can also use git clone as below
+cd pridec-docker
+```
 
-The directories `input` and `output` must already exist. You will receive an error if that is not the case.
+Download via `git`
+```
+git clone https://github.com/Pivot-Madagascar/pridec-docker.git
+cd pridec-docker
+```
 
-The `.env` file must be updated for your use case, or the ENV_VARIABLES provided directly to `docker compose run`.
+### Install via `install.sh` (recommended, Unix only)
 
-0. Build the docker image
+This shell script will install the PRIDE-C Docker app and make it available via the command `pridec`. This will allow you to access the pridec services from anywhere using `pridec` instead of `docker compose`.
 
-Build the docker image. This only needs to be done once.
+change the `COMPOSE_DIR` variable in `pridec` to the path to `pridec-docker`. your `pridec` file should look like this:
+
+```
+#!/bin/bash
+
+COMPOSE_DIR="/path/to/pridec-docker" #update to be path to installed repo
+HOST_PWD="$(pwd)"
+HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_DIR/compose-auto.yaml" "$@"
+```
+
+Run the install script:
+
+```
+
+chmod +x install.sh
+./install.sh
+```
+
+Check it is installed correctly:
+
+```
+pridec config
+```
+
+### Use `docker compose build` directly (manual install)
+
+You can also use the application directly via `docker compose
 
 ```
 docker compose build
-docker compose build --no-cache #takes 15 minutes. assures it is clean
+docker compose build --no-cache #takes 15 minutes. ensures it is clean
 ```
 
-1. Run `fetch` service
+To use `pridec`, it must be run from within the `pridec-docker` directory. This is best used for one off runs, and not full automated workflows where multiple dataElements are predicted. This follows the Manual Install usage below.
+
+## Usage (auto install)
+
+1. Create a directory for the dataElement you wish to predict
+2. Create `input` and `output` subdirectories
+3. Copy your `config.json` and `external_data.csv` into the `input` directory. See example files here (TO DO).
+4. Create a `.env` file with the following variables:
+
+```
+DHIS2_PRIDEC_URL="your-url" 
+DHIS2_TOKEN="your-token"
+PARENT_OU="VtP4BdCeXIo" #id of parent orgUnit. Ifanadiana: "VtP4BdCeXIo"
+DISEASE_CODE="pridec_historic_yourDataElement" #corresponds to DHIS2 dataElement code of disease to predict
+```
+
+
+
+
+## Usage (manual install)
+
+This needs to be run in order (fetch > forecast > post).
+
+The directories `input` and `output` must already exist in the `pridec-docker` directory. You will receive an error if that is not the case.
+
+The `.env` file must be updated for your use case, or the ENV_VARIABLES provided directly to `docker compose run`.
+
+
+### 1. Run `fetch` service
 
 This uses the ENV_VARIABLES stored in the `.env` file. It needs to be updated when using a different DHIS2 instance or dataSource following `.env.example`
 
@@ -33,29 +99,29 @@ Example providing ENV_VARIABLES directly:
 
 TO DO
 
-2. Run `forecast` service
+### 2. Run `forecast` service
 
 For `forecast`, input must contain a `config.json` file and `external_data.csv` file. They can have other names, but must be in the `input` directory to work with compose. If their name is different, it needs to be supplied via an argument to `docker run`, as in the below example
 
 ```
-docker compose --verbose run --rm forecast --config "input/test_config.json"
+docker compose --verbose run --rm forecast --config "input/config.json"
 ```
 
-3. Clean up unused containers
+You should now inspect the model validation report in `output/forecast_report.html`. If everything seems okay, proceed to step 3 to import the data into the PRIDE-C instance.
+
+### 3. Run `post` service
+
+ADD STEPS FOR THIS
+
+### 4. Clean up unused containers (optional)
 
 ```
 docker compose down --remove-orphans
 ```
 
-4. To run a service interactively
+## Helpful commands for testing and debugging
 
-```
-docker compose run --rm --entrypoint "/bin/bash" <service-name>
-```
-
-## Helpful testing code
-
-**Never use `docker compose up` because it will run both services at once, and the `fetch` service must be run before the `forecast` service.** Eventualy I will write  a shell script that does this for all our data sources and will handle this automatically.
+**Never use `docker compose up` because it will run both services at once, and the `fetch` service must be run before the `forecast` service.** Eventually I will write  a shell script that does this for all our data sources and will handle this automatically.
 
 ```
 docker compose run --rm --entrypoint "/bin/bash" <service-name> #interactive shell

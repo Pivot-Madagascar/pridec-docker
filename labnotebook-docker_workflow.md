@@ -5,7 +5,28 @@
 
 `source .venv/bin/activate`: to start the python venv [only to use the data fetch]
 
-### Docker code I was using before
+## 2025-08-05
+
+Today, I am working on the install script and the `post` service. The idea is the install script wlil make it an "app" that is available anywhere and so should be easier for us to do updates of multiple data streams.
+
+
+The way it works is:
+
+1. follow the automated install to have `pridec` available as a command line application
+2. create a folder for the dataStream you want to forecast. It should contain `input/`, `output/`, and `.env`. In the `input/` folder should be the external_data.csv and the configurations for that dataStream/diesease. the .env should also include the correct `DISEASE_CODE`
+3. Run the workflow via the following fromw within the dataStream folder:
+
+```
+#use etiher way to specify dataStream
+pridec run --env-from-file .env --rm fetch
+pridec run --env DISEASE_CODE="pridec_historic_CSBMalaria" --rm fetch
+
+pridec run --rm forecast --config "input/config_malaria.json"
+
+# ADD POST step
+
+pridec down --remove-orphans
+```
 
 
 ## 2025-08-04
@@ -14,11 +35,23 @@ Met with Paul to plan some of this architecture. Probably the `fetch` and `post`
 
 I was also thinking about how the `fetch` for disease data could be different for different instances. For example, our IRA data is the combination of multiple diagnoses/dataElements. Because this is kind of created seperately and then turned into pridec_historic_..., this is a seperate process and will just have to be part of what whoever manages that system will need to configure themselves.
 
+### Docker code I was using before
+
+```
+docker build -t pridec-forecast -D --progress=plain . 2>&1 | tee build.log
+
+docker run --volume "$(pwd)/input:/app/input:ro" \
+  --volume "$(pwd)/output:/app/output:rw" \
+  --rm  pridec-forecast \
+  --config "input/test_config.json"
+```
+
 **TO DO:**
 - ~~get `fetch` service working~~
 - test in some seperate workflow to make sure the process works
-- write documentation and post to github. Update to be cleaner and just for the docker compose workflow. Move old notes to lab-notebook
+- ~~write documentation and post to github. Update to be cleaner and just for the docker compose workflow. Move old notes to lab-notebook~~
 - ~~somehow ensure the DISEASE_CODE in .env and config.json are the same. Easiest may be to not include it in config.json and just get it from the environmental variables or the disease data itself. [done, it is now based on the disease_data]~~
+- add a script that "installs" the PRIDE-C software via a shell script to set the compose file path, then create a script to run this on multiple data sources. This is what I will have Toky run.
 
 ## 2025-08-03
 

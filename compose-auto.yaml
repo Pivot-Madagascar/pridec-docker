@@ -10,7 +10,7 @@ services:
       dockerfile: Dockerfile
     volumes:
      - type: bind
-       source: ./input
+       source: ${HOST_PWD}/input
        target: /app/input
        bind:
           create_host_path: false
@@ -30,18 +30,18 @@ services:
       dockerfile: Dockerfile
     volumes:
      - type: bind
-       source: ./input
+       source: ${HOST_PWD}/input
        target: /app/input
        bind:
           create_host_path: false
        read_only: true
      - type: bind
-       source: ./output
+       source: ${HOST_PWD}/output
        target: /app/output
        bind:
           create_host_path: false
        read_only: false
     #commands can be overridden when using docker compose run (not up)
-    command: --config "input/test_config.json"
+    command: --config "input/config.json"
 
     #3rd service is POST, to post the predictions to a pride-c instance. TO DO
