@@ -102,7 +102,7 @@ load_validate_inputs <- function(args){
   
   ## geojson polygons ########################
   
-  graph_poly <- sf::st_read(args$orgUnit_poly, quiet = TRUE)
+  graph_poly <- sf::st_make_valid(sf::st_read(args$orgUnit_poly, quiet = TRUE))
   graph_poly$org_ID <- 1:nrow(graph_poly)
   
   #check every orgunit has a polygon

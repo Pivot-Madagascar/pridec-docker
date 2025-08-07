@@ -11,6 +11,10 @@ DHIS2_PRIDEC_URL="http://localhost:8082/"
 DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 ```
 
+## 2025-08-07
+
+workign on debuggin the issue with the geojson. The issue was that the polygons on the instance are very old and not valid by newer spatial norms, this was fixed via `sf::st_make_valid()`.
+
 ## 2025-08-05
 
 Today, I am working on the install script and the `post` service. The idea is the install script wlil make it an "app" that is available anywhere and so should be easier for us to do updates of multiple data streams.
