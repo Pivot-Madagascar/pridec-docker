@@ -19,10 +19,10 @@ services:
        read_only: false
     #specify new DISEASE_CODE env variable via ` docker compose run --env DISEASE_CODE=new_value --rm fetch`
     environment:
-      DHIS2_PRIDEC_URL: "${DHIS2_PRIDEC_URL}"
-      DHIS2_TOKEN: "${DHIS2_TOKEN}"
+      DHIS2_PRIDEC_URL: ""
+      DHIS2_TOKEN: ""
       PARENT_OU: "VtP4BdCeXIo"
-      DISEASE_CODE: "${DISEASE_CODE}"
+      DISEASE_CODE: ""
 
   forecast:
     build: 
@@ -60,7 +60,7 @@ services:
           create_host_path: false
         read_only: true
     environment:
-      DHIS2_PRIDEC_URL: "${DHIS2_PRIDEC_URL}"
-      DHIS2_TOKEN: "${DHIS2_TOKEN}"
-      DISEASE_CODE: "${DISEASE_CODE}"
+      DHIS2_PRIDEC_URL: ""
+      DHIS2_TOKEN: ""
+      DISEASE_CODE: ""
       DRYRUN: "true"
