@@ -48,11 +48,6 @@ source("scripts/utils.R")
 # Start ##############################################
 
 cli::cli_h1(paste(round(Sys.time()),": Running PRIDE-C Forecast Pipeline"))
-cli::cli_alert_info(c("Using the following arguments:\n",
-                          "External data:", args$external_data, "\n",
-                          "Configurations:"
-                      ))
-print(fromJSON(args$config))
 
 
 # Validate Input Files #################################
@@ -61,6 +56,12 @@ cli::cli_h2(paste(round(Sys.time()), ": Importing and validating inputs"))
 
 validate_args_exist(args = args)
 inputs <- load_validate_inputs(args = args)
+
+cli::cli_alert_info(c("Using the following arguments:\n",
+                      "External data:", args$external_data, "\n",
+                      "Configurations:"
+))
+print(fromJSON(inputs$config))
                         
 output_dir <- "output/"
 
