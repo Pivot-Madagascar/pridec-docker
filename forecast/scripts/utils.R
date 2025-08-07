@@ -52,6 +52,7 @@ load_validate_inputs <- function(args){
                                           c("orgUnit", "period", config$pred_vars))]
   external_data$period <- as.character(external_data$period)
   
+  
 
   
   ## Climate Data #################
@@ -83,7 +84,9 @@ load_validate_inputs <- function(args){
   input_data <- dplyr::bind_rows(disease_data, climate_data) |>
     tidyr::pivot_wider(names_from = "dataElement", values_from = "value") |>
     dplyr::full_join(external_data, by = c("orgUnit", "period")) |>
-    dplyr::filter(as.Date(paste0(period, "01"), format = "%Y%m%d") >= min_date)
+    dplyr::filter(as.Date(paste0(period, "01"), format = "%Y%m%d") >= min_date) |>
+    #the joins above will sometimes add variables for orgUnits we don't have data for, drop them
+    dplyr::filter(orgUnit %in% disease_data$orgUnit)
   
   ## Check all the predictor variables are there ################
   
