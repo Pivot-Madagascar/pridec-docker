@@ -15,6 +15,13 @@ DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 
 workign on debuggin the issue with the geojson. The issue was that the polygons on the instance are very old and not valid by newer spatial norms, this was fixed via `sf::st_make_valid()`.
 
+Also checked on CSB, ADJ, and COM data and it seems to work.
+
+
+**TO DO:**
+- ~~investigate fokontany geojson error with ADJ data. This may also have to do with how we don't use all the fokontany for the COM predictions~~
+- finish writing documentation and go through a full "clean" run
+
 ## 2025-08-05
 
 Today, I am working on the install script and the `post` service. The idea is the install script wlil make it an "app" that is available anywhere and so should be easier for us to do updates of multiple data streams.
