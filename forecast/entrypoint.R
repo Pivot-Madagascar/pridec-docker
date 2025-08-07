@@ -61,7 +61,7 @@ cli::cli_alert_info(c("Using the following arguments:\n",
                       "External data:", args$external_data, "\n",
                       "Configurations:"
 ))
-print(fromJSON(inputs$config))
+print(inputs$config)
                         
 output_dir <- "output/"
 
