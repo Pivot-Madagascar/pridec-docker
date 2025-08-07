@@ -9,7 +9,7 @@ import json
 DHIS2_URL = os.getenv("DHIS2_PRIDEC_URL")
 API_TOKEN = os.getenv("DHIS2_TOKEN")
 DISEASE_CODE = os.getenv("DISEASE_CODE")
-dryRun = os.environ.get("DRYRUN", "true").lower() == "true"
+dryRun = os.getenv("DRYRUN", "true").lower() == "true"
 
 if dryRun:
     print("🚀 Running in DRY RUN mode — no changes will be made.")
