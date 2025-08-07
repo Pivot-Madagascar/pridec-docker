@@ -6,6 +6,7 @@ A docker container to run the PRIDE-C Forecast Workflow
 
 - [docker compose](https://docs.docker.com/compose/install/)
 - 6 GB storage space for docker image
+- RAM requirements depend on the number of orgUnits, the models used in a forecast, and your own docker configurations. It ranges from 1 GB for 20 orgUnits using the `test_config.json` configuration to the smallest models to 2.5 GB for 200 orgUnits fitting all five models. You can also set the limit manually within the individual `Dockerfile`s or in `compose-auto.yaml` or `compose.yaml` files following instructions [here](https://docs.docker.com/engine/containers/resource_constraints/).
 
 ## Installation
 
@@ -13,7 +14,7 @@ A docker container to run the PRIDE-C Forecast Workflow
 
 Download via `curl`
 ```
-curl -L -O https://github.com/Pivot-Madagascar/pridec-docker/archive/refs/head/main.tar.gz | tar xz #can also use git clone as below
+curl -L -O https://github.com/Pivot-Madagascar/pridec-docker/archive/refs/head/main.tar.gz | tar xz 
 cd pridec-docker
 ```
 
