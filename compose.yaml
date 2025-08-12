@@ -20,6 +20,19 @@ services:
       DHIS2_TOKEN: ""
       DRYRUN: "true"
       GEE_SERVICE_ACCOUNT: ""
+
+  import-pivot-data:
+    build:
+      context: ./import-pivot-data
+      dockerfile: Dockerfile
+    network_mode: "host"
+    environment:
+      DHIS2_PRIDEC_URL: ""
+      DHIS2_TOKEN: ""
+      DRYRUN: "true"
+      PIVOT_URL: ""
+      PIVOT_TOKEN: ""
+
   fetch:
     build:
       context: ./fetch
@@ -46,7 +59,6 @@ services:
     build: 
       context: ./forecast
       dockerfile: Dockerfile
-    #this is needed for tsting thing using localhost
     network_mode: "host"
     volumes:
      - type: bind
@@ -68,7 +80,6 @@ services:
     build:
       context: ./post
       dockerfile: Dockerfile
-    #this is needed for tsting thing using localhost
     network_mode: "host"
     volumes:
       - type: bind
