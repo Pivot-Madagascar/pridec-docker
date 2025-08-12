@@ -11,11 +11,29 @@ DHIS2_PRIDEC_URL="http://localhost:8082/"
 DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 ```
 
+## 2025-08-12
+
+Working on service that imports data from Pivot instance. I'll develop it in a seperate folder and the move it over once it is all working. This is based on some existing code I have that is a mix of R and python, but I will migrate it all to Python.
+
+Also through doing this I think using the tag for the post is a little confusing, so I will just change it to python entrypoint where the name of the script needs to be provided. especially since they are really doing two seperate things. Realistically everything that works with the API (fetch, post, import-pivot-data, analytics) could be run through one service and then the script that is run is changed? Eh, leave them seperate for now, the python images are so small it doesn't make a huge difference I don't think.
+
+Added the data import step as a service.
+
+**TO DO:**
+- add option for saving intermediate model outputs (or just always do it just in case)
+- update data checking/cleaning to be dependent on data source (this is kind of specific to us, but fine for now)
+- update `pridec-pivot-update` workflow for new import services
+
 ## 2025-08-11
 
 Working on adding the GEE importation workflow as a service to this. I will also add the Pivot Health data importation as a service, so that everything is here in one place.
 
 I also added a way to update analytics via the `post` service so that can be run after everything is finished.
+
+**TO DO:**
+- add pivot specific data update workflow to docker (we just won't expose it)
+- add option for saving intermediate model outputs (or just always do it just in case)
+- update data checking/cleaning to be dependent on data source (this is kind of specific to us, but fine for now)
 
 ## 2025-08-08
 
