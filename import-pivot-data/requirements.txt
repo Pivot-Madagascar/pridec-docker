@@ -1,0 +1,5 @@
+dotenv
+setuptools
+Requests==2.32.4
+python_dateutil==2.9.0.post0
+pandas==2.3.1
