@@ -4,26 +4,29 @@ load_dotenv()
 
 import requests
 from requests.auth import HTTPBasicAuth
+import json
 
 DHIS2_URL = os.getenv("DHIS2_PRIDEC_URL")
 API_TOKEN = os.getenv("DHIS2_TOKEN")
 DISEASE_CODE = os.getenv("DISEASE_CODE")
 dryRun = os.getenv("DRYRUN", "true").lower() == "true"
 
+print("Posting forecast to instance")
+
 if dryRun:
-    print("🚀 Running in DRY RUN mode — will not update Analytics Tables.")
-    quit()
+    print("🚀 Running in DRY RUN mode - no changes will be made.")
 else:
-    print("✅ Running in normal mode. Analytics Tables will be run.")
+    print("✅ Running in normal mode. Data will be imported into instance.")
 
+#this is direct from pridec-gee package
+def post_dataValues(base_url, payload, user=None, pwd=None, token=None, dryRun=False):
 
-#from pridec-gee package
-def launch_analytics(base_url, user=None, pwd=None, token=None, dryRun=False):
     """
-    Launches Analytics Tables on a dhis2 instance
+    Posts dataElement values to a dhis2 instance
 
     Args:
         base_url (str)           url of dhis2 isntance
+        payload (dict)           JSON payload to send in POST
         user (str, optional)     ousername for dhis2 instance
         pwd (str, optional)      password for dhis2 instance
         token (str, optional)    personal access token for dhis2 instance.
@@ -37,7 +40,15 @@ def launch_analytics(base_url, user=None, pwd=None, token=None, dryRun=False):
     if not token and not (user and pwd):
         raise ValueError("Authentication required: provide either a token or both user and pwd")
 
-    endpoint = "api/33/resourceTables/analytics"
+    endpoint = (
+        "api/dataValueSets"
+        f"?dryRun={'true' if dryRun else 'false'}"
+        "&dataElementIdScheme=code"
+        "&orgUnitIdScheme=uid"
+        "&categoryOptionComboIdScheme=code"
+        "&idScheme=code"
+        "&importStrategy=CREATE_AND_UPDATE"
+    )
 
 
     url = f"{base_url.rstrip('/')}/{endpoint}"
@@ -47,24 +58,24 @@ def launch_analytics(base_url, user=None, pwd=None, token=None, dryRun=False):
     auth = None if token else HTTPBasicAuth(user, pwd)
     
     #send request
-    response = requests.post(url, headers=headers, auth=auth)
+    response = requests.post(url, headers=headers, auth=auth, json=payload)
 
     # resp.json().get("httpStatus")
-    # resp.json().get("status")
+    # resp_text = response.json().get("status")
     # resp.json().get("message")
-    # resp_text = response.json().get("response") #for debugging
+    # resp_text = response.json().get("response")
 
     return response
 
-# ----------- Rebuild Analytics Tables ----------------------#
+print(f"Posting forecast for {DISEASE_CODE} to {DHIS2_URL}")
 
+with open('output/forecast.json', 'r') as file:
+    json_payload = json.load(file)
 
-
-resp = launch_analytics(base_url=DHIS2_URL, token=API_TOKEN)
+resp = post_dataValues(base_url = DHIS2_URL, payload = json_payload, token = API_TOKEN, dryRun = dryRun)
 if resp.ok:
-    analytics_endpoint = resp.json().get("response")['relativeNotifierEndpoint']
-    print(f"✅ Successfully launched export of analytics table.")
-    print(f"View status at {DHIS2_URL}{analytics_endpoint}")
+    print(f"✅ Successfully POSTed {DISEASE_CODE}")
 else:
-    print(f"❌ Failed to export analytics table.")
+    print(f"❌ Failed to POST {DISEASE_CODE} with status code {resp.status_code}")
     print("Response:", resp.text)
+

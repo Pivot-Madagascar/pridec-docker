@@ -5,9 +5,8 @@ WORKDIR /app
 COPY requirements.txt .
 
 
-COPY scripts/ ./scripts/
-COPY entrypoint.sh .
-RUN chmod +x /app/entrypoint.sh
+COPY analytics.py .
+COPY post.py .
 
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
@@ -15,7 +14,8 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 # You must use `docker run -e DRYRUN=false post` to override
 # ENV DRYRUN=true
 
-#run with --analytics flag to launch analytics table
-# docker compose run --env DRYRUN=false --rm post --analytics
+#run by specifying which script to use
+# docker compose run --env DRYRUN=false --rm post analytics.py
+# docker compose run --env DRYRUN=true --rm post post.py
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+ENTRYPOINT ["python"]
