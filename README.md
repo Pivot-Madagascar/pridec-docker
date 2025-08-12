@@ -80,11 +80,17 @@ DHIS2_PRIDEC_URL="your-url"
 DHIS2_TOKEN="your-token"
 PARENT_OU="VtP4BdCeXIo" #id of parent orgUnit. Ifanadiana: "VtP4BdCeXIo"
 DISEASE_CODE="pridec_historic_yourDataElement" #corresponds to DHIS2 dataElement code of disease to predict
+GEE_PROJECT = "YOUR_GEE_PROJECT_NAME"
+GEE_SERVICE_ACCOUNT="YOUR_SERVICE_ACCOUNT@YOUR_CLOUD_PROJECT.iam.gserviceaccount.com"
 ```
 
 5. Run the full workflow from the project directory. Some example code is below:
 
 ```
+#import data from google early engine into your DHIS2 instance (this only needs to be done once per month)
+pridec run --env-from-file .env --env DRYRUN="true" --rm import-gee
+
+
 pridec run --env-from-file .env --rm fetch
 #allows you to keept same URL and TOKEN and just change DISEASE_CODE
 pridec run --env-from-file .env --env DISEASE_CODE="pridec_historic_CSBMalaria" --rm fetch
@@ -96,6 +102,10 @@ pridec run --rm forecast --config "input/config_malaria.json"
 
 #PAY ATTENTION HERE AS THIS WILL CHANGE YOUR INSTANCE. update DRYRUN as needed
 pridec run --env-from-file .env --env DRYRUN=true --rm post
+
+#to run analytics table
+pridec run --env-from-file .env --env DRYRUN=true --rm post --analytics
+
 
 pridec down --remove-orphans
 ```

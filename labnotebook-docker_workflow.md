@@ -11,6 +11,22 @@ DHIS2_PRIDEC_URL="http://localhost:8082/"
 DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 ```
 
+## 2025-08-11
+
+Working on adding the GEE importation workflow as a service to this. I will also add the Pivot Health data importation as a service, so that everything is here in one place.
+
+I also added a way to update analytics via the `post` service so that can be run after everything is finished.
+
+## 2025-08-08
+
+Trying to use the `pridec-pivot-update` in production today. I first tested on CSBMalaria and got some super crazy predictions for one orgUnit. My guess is its due to the ARIMAX model being difficult, so I changed the weight from 0.57 to 0. that did solve the problem tbf, so I removed ARIMAX for all of the predictions for now. this also makes it much much faster.
+
+It also could be helpful to be able to provide a flag that saves the intermediate model objects for trouble-shooting/investigating this type of thing.
+
+**TO DO:**
+- add option for saving intermediate model outputs (or just always do it just in case)
+- update data checking/cleaning to be dependent on data source (this is kind of specific to us, but fine for now)
+
 ## 2025-08-07
 
 workign on debuggin the issue with the geojson. The issue was that the polygons on the instance are very old and not valid by newer spatial norms, this was fixed via `sf::st_make_valid()`.

@@ -14,13 +14,13 @@ execute:
   output: false
 execute-dir: project
 params:
-  config_json: "input/config.json"
+  config_json: "output/config.json"
 ---
 
 ```{r}
 #| eval: false
 #for testing
-params <- list("config_json" = "input/config.json")
+params <- list("config_json" = "output/config.json")
 
 #to render via a test
 # quarto render validation_report_template.qmd -M title:"PRIDE-C Forecast Report" --output forecast_report.html  -P config_json:"input/config.json"
@@ -138,6 +138,7 @@ skimr::skim(select(pred_var_df, -date))
 ```{r}
 #| output: true
 
+# TODO: add check to only plot numeric/continuous
 pred_var_df |>
   dplyr::mutate(Comparison = ifelse(date >= (max(date) - lubridate::years(1)), 
                                     "Prior Year", "Prior 3 Years")) |>

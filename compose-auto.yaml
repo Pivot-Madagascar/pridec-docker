@@ -3,7 +3,27 @@ name: pridec
 # NOTE: because forecsat relies on fetch, these should always be run via `docker compose run` to
 # launch a specific service and not the whole workflow at once
 
+# THIS IS NO LONGER BEING USED IN THE AUTO install.sh script
+
 services:
+
+  import-gee:
+    build:
+      context: ./import-gee
+      dockerfile: Dockerfile
+    network_mode: "host"
+    volumes:
+     - type: bind
+       source: ${HOST_PWD}/.gee-private-key.json
+       target: /app/.gee-private-key.json
+       bind:
+          create_host_path: false
+    environment:
+      DHIS2_PRIDEC_URL: ""
+      DHIS2_TOKEN: ""
+      DRYRUN: "true"
+      GEE_SERVICE_ACCOUNT: ""
+
   fetch:
     build:
       context: ./fetch

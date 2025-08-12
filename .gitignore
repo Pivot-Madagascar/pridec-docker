@@ -19,6 +19,10 @@ venv/
 */.env
 */.venv/
 */venv/
+client_secret.json
+.gee-private-key.json
+*/.gee-private-key.json
+.private-key.json
 
 #quarto temporary files
 */tmp_template_files/
