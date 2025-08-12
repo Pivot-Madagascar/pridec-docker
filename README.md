@@ -82,6 +82,9 @@ PARENT_OU="VtP4BdCeXIo" #id of parent orgUnit. Ifanadiana: "VtP4BdCeXIo"
 DISEASE_CODE="pridec_historic_yourDataElement" #corresponds to DHIS2 dataElement code of disease to predict
 GEE_PROJECT = "YOUR_GEE_PROJECT_NAME"
 GEE_SERVICE_ACCOUNT="YOUR_SERVICE_ACCOUNT@YOUR_CLOUD_PROJECT.iam.gserviceaccount.com"
+#the below is only needed for Pivot-specific workflows to update DHIS2 data
+PIVOT_URL="pivot-production-url"
+PIVOT_TOKEN="your-token-for-pivot-instance"
 ```
 
 5. Run the full workflow from the project directory. Some example code is below:
@@ -90,6 +93,12 @@ GEE_SERVICE_ACCOUNT="YOUR_SERVICE_ACCOUNT@YOUR_CLOUD_PROJECT.iam.gserviceaccount
 #import data from google early engine into your DHIS2 instance (this only needs to be done once per month)
 pridec run --env-from-file .env --env DRYRUN="true" --rm import-gee
 
+#import data from Pivot instance (this is specific to Ifanadiana), run once per month
+pridec run --env-from-file .env --env DRYRUN=true --rm import-pivot-data COMcases.py
+pridec run --env-from-file .env --env DRYRUN=true --rm import-pivot-data CSBcases.py
+
+#run analytics table before fetching
+pridec run --env-from-file .env --env DRYRUN=true --rm post analytics.py
 
 pridec run --env-from-file .env --rm fetch
 #allows you to keept same URL and TOKEN and just change DISEASE_CODE
@@ -101,10 +110,10 @@ pridec run --rm forecast --config "input/config_malaria.json"
 #YOU SHOULD INSPECT output/forecast_report.html NOW
 
 #PAY ATTENTION HERE AS THIS WILL CHANGE YOUR INSTANCE. update DRYRUN as needed
-pridec run --env-from-file .env --env DRYRUN=true --rm post
+pridec run --env-from-file .env --env DRYRUN=true --rm post post.py
 
 #to run analytics table
-pridec run --env-from-file .env --env DRYRUN=true --rm post --analytics
+pridec run --env-from-file .env --env DRYRUN=true --rm post analytics.py
 
 
 pridec down --remove-orphans
@@ -114,19 +123,43 @@ pridec down --remove-orphans
 
 If it is manually installed, these steps need to be run from the `pridec-docker` project directory.
 
-This needs to be run in order (fetch > forecast > post).
+This needs to be run in order (import > fetch > forecast > post).
 
 The directories `input` and `output` must already exist in the `pridec-docker` directory. You will receive an error if that is not the case.
 
 The `.env` file must be updated for your use case, or the ENV_VARIABLES provided directly to `docker compose run`.
 
+### 1. `import-gee` service to import GEE climate varables into DHIS2 instance [once per month]
 
-### 1. Run `fetch` service
-
-This uses the ENV_VARIABLES stored in the `.env` file. It needs to be updated when using a different DHIS2 instance or dataSource following `.env.example`
+This requires having a `.gee-private-key.json` in the root directory as well as a `GEE_SERVICE_ACCOUNT` in `.env`. There is one climate variable that is specific to Ifanadiana (`pridec_climate_floodedRice`) and that will eventually need updating to make more generalizable.
 
 ```
-docker compose --verbose run --rm fetch
+docker compose run --env-from-file .env --env DRYRUN=false --rm import-gee
+```
+
+In order for this data to be available via `analytics` calls, the Analytics Tables must be rebuilt:
+
+```
+docker compose run --env-from-file .env --env DRYRUN=true --rm post analytics.py
+```
+
+### 2.  `import-pivot-data` service to import Madagascar specific data (Pivot-only) [once per month]
+
+This is an optional service to only be run on the Pivot PRIDE-C instance. It creates the `pridec_historical_` variables that are needed for predictions. This is needed because there is some cleaning and formatting we do with the raw `dataElements` to have high quality variables to predict.
+
+```
+docker compose run --env-from-file .env --env DRYRUN=true --rm import-pivot-data COMcases.py
+docker compose run --env-from-file .env --env DRYRUN=true --rm import-pivot-data CSBcases.py
+#analytics tables should be rebuilt after this
+docker compose run --env-from-file .env --env DRYRUN=true --rm post analytics.py
+```
+
+### 3. `fetch` service to download climate, disease, and geospatial data
+
+This uses the ENV_VARIABLES stored in the `.env` file. It needs to be updated when using a different DHIS2 instance or dataSource following `.env.example`. This step is run for every `dataElement` that you wish to predict.
+
+```
+docker compose run --rm fetch
 ```
 
 Example providing ENV_VARIABLES directly:
@@ -135,25 +168,27 @@ Example providing ENV_VARIABLES directly:
 docker compose run --env DISEASE_CODE="pridec_historic_CSBMalaria" --rm fetch
 ```
 
-### 2. Run `forecast` service
+### 4. `forecast` service to create predictions.
 
 For `forecast`, input must contain a `config.json` file and `external_data.csv` file. They can have other names, but must be in the `input` directory to work with compose. If their name is different, it needs to be supplied via an argument to `docker run`, as in the below example
 
 ```
-docker compose --verbose run --rm forecast --config "input/config.json"
+docker compose run --rm forecast --config "input/config.json"
 ```
 
-You should now inspect the model validation report in `output/forecast_report.html`. If everything seems okay, proceed to step 3 to import the data into the PRIDE-C instance.
+You should now inspect the model validation report in `output/forecast_report.html`. If everything seems okay, proceed to step 3 to import the forecast into the PRIDE-C instance.
 
-### 3. Run `post` service
+### 5. Run `post` service
 
-By default, this is always a dry run (makes no changes to an instance). This is to serve as a kind of double-check to make production data is only changed purposefully.
+By default, this is always a dry run (makes no changes to an instance). This is to serve as a kind of double-check to ensure production data is only changed purposefully.
 
 ```
-docker compose --verbose run --env DRYRUN=true --rm post
+docker compose run --env DRYRUN=true --rm post post.py
+docker compose run --env DRYRUN=true --rm post analytics.py #launch export of analytics table
 ```
 
-### 4. Clean up unused containers (optional)
+
+### 6. Clean up unused containers (optional)
 
 ```
 docker compose down --remove-orphans
@@ -167,6 +202,7 @@ To uninstall the automatic installation, first remove the symlinked application:
 rm -f $HOME/bin/pridec
 which pridec
 ```
+
 This should return `pridec not found` or nothing.
 
 Stop all containers and rm images associated with `pridec`:
@@ -184,7 +220,7 @@ Delete the `pridec-docker` directory that you had initially downloaded.
 
 ## Helpful commands for testing and debugging
 
-**Never use `docker compose up` because it will run both services at once, and the `fetch` service must be run before the `forecast` service.** Eventually I will write  a shell script that does this for all our data sources and will handle this automatically.
+**Never use `docker compose up` because it will run all services at once, rather than sequentially.** 
 
 ```
 docker compose run --rm --entrypoint "/bin/bash" <service-name> #interactive shell
