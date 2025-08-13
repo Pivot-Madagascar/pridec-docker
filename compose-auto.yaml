@@ -3,7 +3,7 @@ name: pridec
 # NOTE: because forecsat relies on fetch, these should always be run via `docker compose run` to
 # launch a specific service and not the whole workflow at once
 
-# THIS IS NO LONGER BEING USED IN THE AUTO install.sh script
+#this compose file is used in the auto install that makes pridec app available anywhere
 
 services:
 
@@ -23,6 +23,19 @@ services:
       DHIS2_TOKEN: ""
       DRYRUN: "true"
       GEE_SERVICE_ACCOUNT: ""
+
+  import-pivot-data:
+    build:
+      context: ./import-pivot-data
+      dockerfile: Dockerfile
+    network_mode: "host"
+    environment:
+      DHIS2_PRIDEC_URL: ""
+      DHIS2_TOKEN: ""
+      DRYRUN: "true"
+      PIVOT_URL: ""
+      PIVOT_TOKEN: ""
+
 
   fetch:
     build:
