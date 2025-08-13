@@ -7,6 +7,7 @@ COPY requirements.txt .
 
 COPY analytics.py .
 COPY post.py .
+COPY dataStoreKey.py .
 
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
