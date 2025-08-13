@@ -19,9 +19,9 @@ dryRun = os.getenv("DRYRUN", "true").lower() == "true"
 print("Importing CSB Case Data.")
 
 if dryRun:
-    print("🚀 Running in DRY RUN mode — no changes will be made.")
+    print("🏁 Running in DRY RUN mode — no changes will be made.")
 else:
-    print("✅ Running in normal mode. Data will be imported into instance.")
+    print("🚀 Running in normal mode. Data will be imported into instance.")
 
 period_list = create_period(n_months = 8)
 
