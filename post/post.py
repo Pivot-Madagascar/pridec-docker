@@ -14,9 +14,9 @@ dryRun = os.getenv("DRYRUN", "true").lower() == "true"
 print("Posting forecast to instance")
 
 if dryRun:
-    print("🚀 Running in DRY RUN mode - no changes will be made.")
+    print("🏁 Running in DRY RUN mode - no changes will be made.")
 else:
-    print("✅ Running in normal mode. Data will be imported into instance.")
+    print("🚀 Running in normal mode. Data will be imported into instance.")
 
 #this is direct from pridec-gee package
 def post_dataValues(base_url, payload, user=None, pwd=None, token=None, dryRun=False):

@@ -13,10 +13,10 @@ DISEASE_CODE = os.getenv("DISEASE_CODE")
 dryRun = os.getenv("DRYRUN", "true").lower() == "true"
 
 if dryRun:
-    print("🚀 Running in DRY RUN mode — will not update Analytics Tables.")
+    print("🏁Running in DRY RUN mode — will not update Analytics Tables.")
     quit()
 else:
-    print("✅ Running in normal mode. Analytics Tables will be run.")
+    print("🚀 Running in normal mode. Analytics Tables will be run.")
 
 
 #from pridec-gee package
