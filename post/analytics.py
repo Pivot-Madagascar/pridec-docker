@@ -66,7 +66,7 @@ resp = launch_analytics(base_url=DHIS2_URL, token=API_TOKEN)
 if resp.ok:
     analytics_endpoint = resp.json().get("response")['relativeNotifierEndpoint']
     print(f"✅ Successfully launched export of analytics table.")
-    print(f"View status at {url}")
+    print(f"View status at {DHIS2_URL.rstrip('/')}{analytics_endpoint}")
 else:
     print(f"❌ Failed to export analytics table.")
     print("Response:", resp.text)
