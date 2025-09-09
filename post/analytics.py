@@ -60,8 +60,6 @@ def launch_analytics(base_url, user=None, pwd=None, token=None, dryRun=False):
 
 # ----------- Rebuild Analytics Tables ----------------------#
 
-
-
 resp = launch_analytics(base_url=DHIS2_URL, token=API_TOKEN)
 if resp.ok:
     analytics_endpoint = resp.json().get("response")['relativeNotifierEndpoint']
