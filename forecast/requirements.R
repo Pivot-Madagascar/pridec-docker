@@ -1,9 +1,12 @@
+options(timeout = 3600)
+
 #install remotes 2.5.0 first
 install.packages("remotes")
 
 # Define package versions for reproducibility
 packages <- c(
-  "jsonlite@1.8.7",
+  # "jsonlite@1.8.7",
+  "jsonlite",
   "optparse@1.7.5",
   "cli@3.6.5",
   "skimr@2.1.5",
@@ -28,7 +31,7 @@ for (pkg in packages) {
 }
 
 #install packages from elsewhere if needed
-remotes::install_github("Pivot-Madagascar/PRIDEC-package", dependencies = TRUE)
 remotes::install_bioc("graph")
 remotes::install_bioc("Rgraphviz")
-remotes::install_version("INLA", version = "25.06.13", repos = c(getOption("repos"), INLA = "https://inla.r-inla-download.org/R/testing"), dep = TRUE)
+remotes::install_version("INLA", version = "25.06.07", repos = c(getOption("repos"), INLA = "https://inla.r-inla-download.org/R/stable"), dep = TRUE)
+remotes::install_github("Pivot-Madagascar/PRIDEC-package", dependencies = TRUE)
