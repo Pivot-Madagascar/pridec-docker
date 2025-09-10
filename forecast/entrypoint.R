@@ -171,7 +171,7 @@ sf::st_write(inputs$graph_poly, paste0(output_dir, "polygon.gpkg"), append = FAL
 write(toJSON(inputs$config), paste0(output_dir, "config.json"))
 
 
-create_forecast_report(output_dir = output_dir, quiet = TRUE)
+create_forecast_report(output_dir = output_dir, quiet = FALSE)
 
 
 
