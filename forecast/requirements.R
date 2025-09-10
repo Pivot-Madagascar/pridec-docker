@@ -5,8 +5,7 @@ install.packages("remotes")
 
 # Define package versions for reproducibility
 packages <- c(
-  # "jsonlite@1.8.7",
-  "jsonlite",
+  "jsonlite@1.8.7",
   "optparse@1.7.5",
   "cli@3.6.5",
   "skimr@2.1.5",
