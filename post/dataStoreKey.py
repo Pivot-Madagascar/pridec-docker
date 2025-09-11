@@ -26,8 +26,10 @@ url = f"{DHIS2_URL.rstrip('/')}/{endpoint}"
 # Authentication setup
 headers = {'Authorization': f'ApiToken {API_TOKEN}'}
 
+rand_str = ''.join(random.choices(string.ascii_letters + string.digits, k=6))
+
 this_key = {
-    "pridec_update": datetime.now().strftime("%Y-%m-%dT%H:%M:%S%z")
+    "pridec_update": f"{rand_str}_updated_{datetime.now().strftime('%Y-%m-%d')}"
 }
 
 json_key = json.dumps(this_key)
