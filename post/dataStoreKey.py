@@ -6,6 +6,8 @@ import requests
 import json
 from requests.auth import HTTPBasicAuth
 from datetime import datetime
+import string
+import random
 
 print("Updating dataStore/pridec/pridec_update")
 
