@@ -1,0 +1,10 @@
+dotenv
+setuptools
+Requests
+python-dateutil
+pandas
+logging
+argparse
+ee
+pridec_gee @ git+https://github.com/Pivot-Madagascar/pridec_gee@package-dev
+pivot_dhis_tools @ git+https://github.com/Pivot-Madagascar/pivot_dhis_tools@main

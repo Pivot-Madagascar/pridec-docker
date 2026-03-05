@@ -1,30 +1,26 @@
-# source .venv/bin/activate
-
-import requests
+from config import DHIS_TOKEN, DHIS_URL, PIVOT_URL, PIVOT_TOKEN, dryRun, setup_logging
 from requests.auth import HTTPBasicAuth
-import json
-import os
 import pandas as pd
+from datetime import date
+from dateutil.relativedelta import relativedelta
+import logging
+#update to pivot_dhis_tools package
+from pivot_dhis_tools import get_dataElements, create_period_range, check_dhis_value, post_dataElements
 
-from dotenv import load_dotenv
-load_dotenv(override=True)
-from utils import GET_disease, check_dhis_value, post_dataValues, create_period
+setup_logging()
 
-DHIS2_URL = os.getenv("DHIS2_PRIDEC_URL")
-DHIS2_TOKEN = os.getenv("DHIS2_TOKEN")
-PIVOT_URL = os.environ.get("PIVOT_URL")
-PIVOT_TOKEN = os.environ.get("PIVOT_TOKEN")
-dryRun = os.getenv("DRYRUN", "true").lower() == "true"
+logger = logging.getLogger("import_pivot_COM")
 
-print("Importing COM Case Data")
+logger.info("Importing COM Case Data")
 
 if dryRun:
-    print("DRY RUN — no changes will be made")
+    logger.info("DRY RUN — no changes will be made")
 else:
-    print("NORMAL RUN - data will be imported into instance")
+    logger.info("NORMAL RUN - data will be imported into instance")
 
-period_list = create_period(n_months = 8)
+period_list = create_period_range(start = (date.today()-relativedelta(months=8)))
 
+#fokontany for which we have enough data
 com_ids = [
     "nkoqILeLIGJ", "NGjuCieFofW", "NGk42ableWs", "NgNK7cFJDLR", "ngOUK2x3rO8", "nGswNcrtBCW", "NGuHJF8vef8", "NGxXvp7qi48",
     "nh1SDW0DuQP", "NH6km4XsRdx", "NhBFAojLAnq", "NhcIarFZ0gg", "nHeDldiT3lB", "NhgHicA7zmx", "NHGlRwg0Qwu", "nhp8hOvQUT3",
@@ -46,12 +42,12 @@ com_org_query = f"ou:{';'.join(com_ids)}"
 # This is used to identify missing data vs. zeroes
 # lq38tLcfEi7 - RMA_COM_PCIMEc Nombre d'enfants reçu au site 
 
-com_get = GET_disease(pivot_url = PIVOT_URL,
-                      pivot_token = PIVOT_TOKEN,
-                      dx_query =  "dx:lq38tLcfEi7",
-                      pe_query = period_list,
-                      ou_query = com_org_query,
-                      includeNumDen=False)
+com_get = get_dataElements(dhis_url = PIVOT_URL,
+                    token = PIVOT_TOKEN,
+                    dx_query =  "dx:lq38tLcfEi7",
+                    pe_query = period_list,
+                    ou_query = com_org_query,
+                    includeNumDen=False)
 com_all = (
     com_get
     .rename(columns={
@@ -70,14 +66,14 @@ full_grid = (
 #-------------COM Malaria --------------------------------
 # vduU8d1GZbW : RMA_COM_PCIMEc Nombre de cas de fièvre testés avec TDR positif 
 
-print("Getting pridec_historic_COMMalaria")
+logger.info("Getting pridec_historic_COMMalaria")
 
-mal_get = GET_disease(pivot_url = PIVOT_URL,
-                      pivot_token = PIVOT_TOKEN,
-                      dx_query =  "dx:vduU8d1GZbW",
-                      pe_query = period_list,
-                      ou_query = com_org_query,
-                      includeNumDen=False)
+mal_get = get_dataElements(dhis_url = PIVOT_URL,
+                    token = PIVOT_TOKEN,
+                    dx_query =  "dx:vduU8d1GZbW",
+                    pe_query = period_list,
+                    ou_query = com_org_query,
+                    includeNumDen=False)
 
 mal_all = (
     mal_get
@@ -94,33 +90,35 @@ mal_all = (
     .assign(value= lambda x: pd.to_numeric(x['value'], errors = 'coerce', downcast='integer'))
 )
 
-check_dhis_value(mal_all)
+logger.info("pridec_historic_COMMalaria has the following characteristics: %s", check_dhis_value(mal_all))
+# check_dhis_value(mal_all)
 
 COMMalaria_json = {
     "dataValues": mal_all.to_dict(orient="records")
 }
 
-print("Importing pridec_historic_COMMalaria")
+logger.info("Importing pridec_historic_COMMalaria into PRIDE-C instance with dryRun = %s", dryRun)
 
-resp = post_dataValues(base_url = DHIS2_URL, payload = COMMalaria_json, token = DHIS2_TOKEN, dryRun = dryRun)
+resp = post_dataElements(dhis_url = DHIS_URL, payload = COMMalaria_json, token = DHIS_TOKEN, dryRun = dryRun)
 if resp.ok:
-    print(f"SUCCESS: Imported pridec_historic_COMMalaria")
+    logger.info(f"Imported pridec_historic_COMMalaria")
+    logger.debug("Response: %s", resp.text)
 else:
-    print(f"❌ Failed to import pridec_historic_COMMalaria with status code {resp.status_code}")
-    print("Response:", resp.text)
+    logger.error(f"Failed to import pridec_historic_COMMalaria with status code %s", resp.status_code)
+    logger.error("Response: %s", resp.text)
 
 ## ----------------COM IRA ---------------------
 #' hJ5pa6wO4nJ : RMA_COM_PCIMEc Nombre d’enfants présentant de pneumonie 
 #' CmDXCmmywrj : RMA_COM_PCIMEc Nombre d’enfants présentant de  toux ou rhume
 
-print("Getting pridec_historic_COMRespinf")
+logger.info("Getting pridec_historic_COMRespinf")
 
-ira_get = GET_disease(pivot_url = PIVOT_URL,
-                      pivot_token = PIVOT_TOKEN,
-                      dx_query =  "dx:hJ5pa6wO4nJ;CmDXCmmywrj",
-                      pe_query = period_list,
-                      ou_query = com_org_query,
-                      includeNumDen=False)
+ira_get = get_dataElements(dhis_url = PIVOT_URL,
+                    token = PIVOT_TOKEN,
+                    dx_query =  "dx:hJ5pa6wO4nJ;CmDXCmmywrj",
+                    pe_query = period_list,
+                    ou_query = com_org_query,
+                    includeNumDen=False)
 
 ira_all = (
     ira_get
@@ -139,34 +137,36 @@ ira_all = (
     .assign(value= lambda x: pd.to_numeric(x['value'], errors = 'coerce', downcast='integer'))
 )
 
-check_dhis_value(ira_all)
+logger.info("pridec_historic_COMRespinf has the following characteristics: %s", check_dhis_value(ira_all))
 
 COMRespinf_json = {
     "dataValues": ira_all.to_dict(orient="records")
 }
 
-print("Importing pridec_historic_COMRespinf")
+logger.info("Importing pridec_historic_COMRespinf into PRIDE-C instance with dryRun = %s", dryRun)
 
-resp = post_dataValues(base_url = DHIS2_URL, payload = COMRespinf_json, token = DHIS2_TOKEN, dryRun = dryRun)
+resp = post_dataElements(dhis_url = DHIS_URL, payload = COMRespinf_json, token = DHIS_TOKEN, dryRun = dryRun)
+
 if resp.ok:
-    print(f"SUCCESS: Imported pridec_historic_COMRespinf")
+    logger.info(f"Imported pridec_historic_COMRespinf")
+    logger.debug("Response: %s", resp.text)
 else:
-    print(f"❌ Failed to import pridec_historic_COMRespinf with status code {resp.status_code}")
-    print("Response:", resp.text)
+    logger.error(f"Failed to import pridec_historic_COMRespinf with status code %s", resp.status_code)
+    logger.error("Response: %s", resp.text)
 
 # -------------------- COM Diarrhea -------------------
 
 #' DjsQEzPDAoN : RMA_COM_PCIMEc Nombre d’enfants présentant de diarrhée avec signes de danger
 #' f4hrhsiz49l : RMA_COM_PCIMEc Nombre d’enfants présentant de diarrhée simple
 
-print("Getting pridec_historic_COMDiarrhea")
+logger.info("Getting pridec_historic_COMDiarrhea")
 
-diar_get = GET_disease(pivot_url = PIVOT_URL,
-                      pivot_token = PIVOT_TOKEN,
-                      dx_query =  "dx:DjsQEzPDAoN;f4hrhsiz49l",
-                      pe_query = period_list,
-                      ou_query = com_org_query,
-                      includeNumDen=False)
+diar_get = get_dataElements(dhis_url = PIVOT_URL,
+                    token = PIVOT_TOKEN,
+                    dx_query =  "dx:DjsQEzPDAoN;f4hrhsiz49l",
+                    pe_query = period_list,
+                    ou_query = com_org_query,
+                    includeNumDen=False)
 
 diar_all = (
     diar_get
@@ -185,17 +185,19 @@ diar_all = (
     .assign(value= lambda x: pd.to_numeric(x['value'], errors = 'coerce', downcast='integer'))
 )
 
-check_dhis_value(diar_all)
+logger.info("pridec_historic_COMDiarrhea has the following characteristics: %s", check_dhis_value(diar_all))
 
 COMDiarrhea_json = {
     "dataValues": diar_all.to_dict(orient="records")
 }
 
-print("Importing pridec_historic_COMDiarrhea")
+logger.info("Importing pridec_historic_COMDiarrhea into PRIDE-C Instance with dryRun = %s", dryRun)
 
-resp = post_dataValues(base_url = DHIS2_URL, payload = COMDiarrhea_json, token = DHIS2_TOKEN, dryRun = dryRun)
+resp = post_dataElements(dhis_url = DHIS_URL, payload = COMDiarrhea_json, token = DHIS_TOKEN, dryRun = dryRun)
+
 if resp.ok:
-    print(f"SUCCESS: Imported pridec_historic_COMDiarrhea")
+    logger.info(f"Imported pridec_historic_COMDiarrhea")
+    logger.debug("Response: %s", resp.text)
 else:
-    print(f"❌ Failed to import pridec_historic_COMDiarrhea with status code {resp.status_code}")
-    print("Response:", resp.text)
+    logger.error(f"Failed to import pridec_historic_COMDiarrhea with status code %s", resp.status_code)
+    logger.error("Response: %s", resp.text)

@@ -11,6 +11,58 @@ DHIS2_PRIDEC_URL="http://localhost:8082/"
 DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 ```
 
+## 2026-03-05
+
+The python scripts are mostly done for the `etl` module. They have been tested and most come from the `pivot_dhis_tools` or `pride_gee` package.
+
+## 2026-03-04
+
+Working on a simple re-org for now with a bash CLI dispatcher. Can always update later when I have the time to deal with python module hierarchies.
+
+I spent way too long messing with how env variables are provided. I am having issues with updating them via the CLI. But I think I will just move everything over and then deal with that later. I think the issue is the config.py file? But I have the LOG_LEVEL inthere and it seems to be working fine. The fix was the order things were called in. Configs need to be called before anythign else apparently
+
+- ~~import_pivot_COMcases~~
+- ~~import_pivot_CSBcases~~
+- ~~OR import_pivot to do all~~ [later]
+- ~~import_gee~~
+- ~~analytics~~
+- ~~fetch_input_climate ~~: written in `pivot_dhis_tools`, need to move over here.
+- ~~fetch_input_disease~~
+- ~~fetch_input_geojson~~
+- OR fetch_inputs to get all (mayeb provide an argument do select some?)
+- forecast [seperate image]
+- ~~post forecasts~~
+
+**TO DO**:
+- finish scripts above
+- write docker file for ETL bit
+- remove other images
+- write bash CLI dispatcher
+
+## 2026-03-03
+
+I was working on combining all the API stuff into a nice "package' but it ended up getting way too complicated to connect everything. So I think I will just use a bash-based CLI dispatcher to run the appropriate scripts and I can use folders to organize them a bit. Any 'arguments' will just be provided via the `.env` file or the environment via the `-e` in docker. Otherwise I am building out for too much flexibility and it is taking too long. I will still use the `config.py` to store all the environmental variables though. And then different "tasks" will be provided via an argument that will be dispatched via bash. I can look at how it works in teh pivot update to see how logs and things will be managed. The import_pivot_COM that is there is a good example.
+
+## 2026-03-02
+
+The `forecast` code is working fine. It is now structured to be almost entirely contained in the PRIDE-C package, plus one small file in the docker service.
+
+The API python requests will be in a service. Ok, because I don't actually need multiple thigns runnign simutaneously, I think I could just do one image that takes in deifferent calls and then has a python dispatcher file that calls the appropriate python script. The scripts I would need are:
+
+- import_pivot_COMcases
+- import_pivot_CSBcases
+- OR import_pivot to do all
+- import_gee
+- analytics
+- fetch_input_climate
+- fetch_input_disease
+- fetch_input_geojson
+- OR fetch_inputs to get all (mayeb provide an argument do select some?)
+- forecast [seperate image]
+- post forecasts
+
+There are functions in the utils files that could be moved to the pivot_dhis_tools package to call on
+
 ## 2027-02-27
 
 Testing the new code from the PRIDE-C package in teh docker image to be sure it works okay.

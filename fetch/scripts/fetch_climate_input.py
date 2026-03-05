@@ -48,7 +48,7 @@ data_elements = resp.json()["dataElements"]
 if not data_elements:
     raise ValueError("No dataElements found with code prefix 'pridec_climate'")
 
-print(f"📦 Found {len(data_elements)} dataElements with code starting 'pridec_climate'")
+print(f"Found {len(data_elements)} dataElements with code starting 'pridec_climate'")
 
 #---- Fetch from instance and save --------------#
 
@@ -66,7 +66,7 @@ for element in data_elements:
         f"&includeNumDen=false"
     )
 
-    print(f"🔍 Fetching data for {de_code}...")
+    print(f"Fetching data for {de_code}...")
 
     resp = requests.get(analytics_url, headers=headers)
     resp.raise_for_status()
@@ -90,4 +90,4 @@ for element in data_elements:
 with open("input/climate_data.json", "w") as f:
     json.dump({"dataValues": flattened}, f, indent=2)
 
-print("✅ Saved all climate analytics to input/climate_data.json")
+print("SUCCESS: Saved all climate analytics to input/climate_data.json")
