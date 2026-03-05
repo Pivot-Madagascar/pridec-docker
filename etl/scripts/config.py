@@ -24,6 +24,7 @@ GEE_PROJECT = os.environ.get('GEE_PROJECT')
 GEE_SERVICE_ACCOUNT = os.environ.get('GEE_SERVICE_ACCOUNT')
 
 
+
 # LOGGING SETUP
 def setup_logging():
     import logging
@@ -34,3 +35,10 @@ def setup_logging():
                         level=getattr(logging, LOG_LEVEL, logging.INFO),
                         datefmt="%Y-%m-%dT%H:%M:%S",
                         force=True)
+
+#throw errors for missing environmental variables
+def check_envvars(required_vars: dict):
+    for name, value in required_vars.items():
+        if value is None or value == "":
+            raise EnvironmentError(f"Required environment variable '{name}' is missing. Verify your `.env` file.")
+    return

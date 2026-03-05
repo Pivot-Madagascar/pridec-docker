@@ -15,6 +15,26 @@ DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 
 The python scripts are mostly done for the `etl` module. They have been tested and most come from the `pivot_dhis_tools` or `pride_gee` package.
 
+I'm also adding some housekeeping scripts for internal use. Actually i will do this later, but at lesat the one to delete would be very useful.
+
+So to test out the etl microservice (ensure DHIS_URL is set to a d2 local instance)
+
+```
+docker compose build etl --no-cache #to install
+docker compose run --rm etl --help
+docker compose run --env-from-file .env --env DRYRUN="true" --rm etl fetch_geojson
+```
+
+**TO DO**:
+- ~~finish individual scripts~~
+- ~~write docker file for ETL bit~~
+- remove other images
+- ~~write bash CLI dispatcher~~
+- ~~add check to config to make sure all the variables exist~~: doing this by function
+- update documentation by specifying types in functions themselves to get better error messages (this is to do in the packages)
+- add default --rm flag to the pridec running so that there aren't orphaned containers [needs to be done in install.sh]
+
+
 ## 2026-03-04
 
 Working on a simple re-org for now with a bash CLI dispatcher. Can always update later when I have the time to deal with python module hierarchies.

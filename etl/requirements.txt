@@ -3,8 +3,10 @@ setuptools
 Requests
 python-dateutil
 pandas
+numpy
 logging
 argparse
 ee
-pridec_gee @ git+https://github.com/Pivot-Madagascar/pridec_gee@package-dev
-pivot_dhis_tools @ git+https://github.com/Pivot-Madagascar/pivot_dhis_tools@main
+earthengine-api
+git+https://github.com/Pivot-Madagascar/pridec_gee@package-dev#egg=pridec_gee
+git+https://github.com/Pivot-Madagascar/pivot_dhis_tools@main#egg=pivot_dhis_tools

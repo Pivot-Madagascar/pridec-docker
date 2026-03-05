@@ -1,4 +1,4 @@
-from config import DHIS_TOKEN, DHIS_URL, PARENT_OU, OU_LEVEL, dryRun, DISEASE_CODE, setup_logging
+from config import DHIS_TOKEN, DHIS_URL, PARENT_OU, OU_LEVEL, DISEASE_CODE, setup_logging, check_envvars
 from pivot_dhis_tools import pridec_fetch_disease
 import os
 import json
@@ -8,6 +8,15 @@ import logging
 setup_logging()
 
 logger = logging.getLogger("import_pivot_COM")
+
+check_envvars(required_vars = {
+            'DHIS_TOKEN': DHIS_TOKEN,
+            'DHIS_URL': DHIS_URL,
+            'PARENT_OU': PARENT_OU,
+            'OU_LEVEL': OU_LEVEL,
+            'DISEASE_CODE': DISEASE_CODE
+        }
+)
 
 logger.info("Fetching disease data %s from %s", DISEASE_CODE, DHIS_URL)
 

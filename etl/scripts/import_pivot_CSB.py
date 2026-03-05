@@ -1,4 +1,4 @@
-from config import DHIS_TOKEN, DHIS_URL, PIVOT_URL, PIVOT_TOKEN, dryRun, setup_logging
+from config import DHIS_TOKEN, DHIS_URL, PIVOT_URL, PIVOT_TOKEN, dryRun, setup_logging, check_envvars
 from requests.auth import HTTPBasicAuth
 import pandas as pd
 from datetime import date
@@ -11,6 +11,14 @@ from pivot_dhis_tools import get_dataElements, create_period_range, check_dhis_v
 
 setup_logging()
 logger = logging.getLogger("import_pivot_CSB")
+
+check_envvars(required_vars = {
+            'DHIS_TOKEN': DHIS_TOKEN,
+            'DHIS_URL': DHIS_URL,
+            'PIVOT_TOKEN': PIVOT_TOKEN,
+            'PIVOT_URL': PIVOT_URL,
+        }
+)
 
 logger.info("Importing CSB Case Data from %s into %s", PIVOT_URL, DHIS_URL)
 

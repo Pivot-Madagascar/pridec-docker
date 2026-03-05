@@ -1,4 +1,4 @@
-from config import DHIS_TOKEN, DHIS_URL, OU_LEVEL, PARENT_OU, setup_logging
+from config import DHIS_TOKEN, DHIS_URL, OU_LEVEL, PARENT_OU, setup_logging, check_envvars
 from requests.auth import HTTPBasicAuth
 import logging
 import json
@@ -8,6 +8,15 @@ from pridec_gee import get_dhis_geojson
 setup_logging()
 
 logger = logging.getLogger("fetch_pridec_geojson")
+
+
+check_envvars(required_vars = {
+            'DHIS_TOKEN': DHIS_TOKEN,
+            'DHIS_URL': DHIS_URL,
+            'PARENT_OU': PARENT_OU,
+            'OU_LEVEL': OU_LEVEL,
+        }
+)
 
 logger.info("Fetching Geojson for orgUnit level %s under parent %s", OU_LEVEL, PARENT_OU)
 
