@@ -1,3 +1,5 @@
+## This file is no longer used and they are installed directly in the dockerfile to reduce the package installation during updates
+
 options(timeout = 3600)
 
 #install remotes 2.5.0 first
@@ -33,4 +35,5 @@ for (pkg in packages) {
 remotes::install_bioc("graph")
 remotes::install_bioc("Rgraphviz")
 remotes::install_version("INLA", version = "25.06.07", repos = c(getOption("repos"), INLA = "https://inla.r-inla-download.org/R/stable"), dep = TRUE)
+INLA::inla.binary.install()
 remotes::install_github("Pivot-Madagascar/PRIDEC-package", dependencies = TRUE)

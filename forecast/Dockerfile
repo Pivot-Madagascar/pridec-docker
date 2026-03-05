@@ -13,13 +13,9 @@ RUN sudo apt install jq -y
 # install R packages line by line to help with cache
 RUN R -e "install.packages('remotes')"
 
-# RUN R -e "remotes::install_bioc('graph')"
-# RUN R -e "remotes::install_bioc('Rgraphviz')"
-# RUN R -e "remotes::install_version('INLA', version = '25.06.07', repos = c(getOption('repos'), INLA = 'https://inla.r-inla-download.org/R/stable'), dep = TRUE)"
-# RUN R -e "remotes::install_github('Pivot-Madagascar/PRIDEC-package', dependencies = TRUE)"
-
+#graph, Rgraphviz, INLA, PRIDEC
 COPY install-pridec-packages.R .
-RUN Rscript ./install-pridec-packages.R
+RUN Rscript ./install-pridec-packages.R 
 
 
 RUN Rscript -e "remotes::install_version('optparse', version = '1.7.5', repos = 'http://cran.us.r-project.org')"
@@ -30,9 +26,6 @@ RUN Rscript -e "remotes::install_version('here', version = '1.0.1', repos = 'htt
 RUN Rscript -e "remotes::install_version('jsonlite', version = '2.0.0', repos = 'http://cran.us.r-project.org')"
 RUN Rscript -e "remotes::install_version('quarto', version = '1.5.1', repos = 'http://cran.us.r-project.org')"
 
-
-COPY scripts/ ./scripts/
-COPY templates/ ./templates/
 COPY entrypoint.R .
 
 ENTRYPOINT ["Rscript", "/app/entrypoint.R"]
