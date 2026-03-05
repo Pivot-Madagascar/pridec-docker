@@ -11,6 +11,70 @@ DHIS2_PRIDEC_URL="http://localhost:8082/"
 DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 ```
 
+## 2027-02-27
+
+Testing the new code from the PRIDE-C package in teh docker image to be sure it works okay.
+
+**TO DO:**
+- update pridec_gee code
+- combine everything python based into one microservice/image
+
+## 2026-02-26
+
+Updating teh forecast microservice to take functions directly from PRIDE-C package. Very little of the actual code is now stored in this docker image.
+
+**TO DO:**
+- combine fetch, import and post services into one docker microservice with different entrypoints so as to not duplicate docker images. All can use python 3.12.
+- move pivot-specific api commands into `pivot_dhis_tools` python package and just call it for import pivot data. Same for fetch and post scripts.
+
+## 2026-02-18
+
+I've moved much of the forecasting code into functions in the PRIDE-C package, this can then be updated in the docker forecast microservice.
+
+**TO DO**:
+ - INLA is returning odd `mbind: Operation not permitted` error. Not sure where it is coming from. Probably from messed up installation? I can redo the `inla.binary.install()` to fix this. This is an error on the docker image.
+
+## 2026-02-10
+
+I think best is to start with the seperate package structures and then make the changes in those. We have three packages that everything fits into:
+
+1. PRIDE-C R Package: this contains everything needed for data validation and forecasting. It will also contain some functions for getting data from DHIS2 for those data scientists that want to work only in R
+2. pridec-gee Python package: this is a package that contains all of the functions for getting data from GEE for PRIDE-C, or any other project that needs climate. IT can be fed the orgUnits and dates/frequency we want data for and then returns it in a way that is formatted to be sent to a dhis2 instance, although the POSTing will have to be done seperately
+3. pivot-dhis2-utils Python package: this is an internal package that contains some utility functions that we use for working with DHIS2 data because currently those functions are spread all over. Some of this could also be used by others, but we are not developing it with that in mind. This includes moving/updating PIVOT data, getting data from Pivot DHIS2, DELETING historical data when needed, etc. A lot of this functionality is in the old R package and just needs to be rewritten into python real quick.
+
+I will slowly start moving this over from this docker repo as we adjust our workflow.
+
+## 2026-02-09
+
+As I go through the PRIDE-C update with "new eyes", here is a list of things to update:
+
+**GEE**
+- drop emojis, looks like it is vibe coded. Maybe just keep X for an error. Much of this is in GEE package. add line spaces to messages
+- add something to signal time when teh flood data import starts because it takes so long. Also option to run in background?
+- add ability to only import certain environmental variables based on arguments provided. This is especially useful because the flood data takes ages
+- add some kind of status check for the GEE step, to see where the flood data is at
+- add month option to import for when we need to import super old
+- something is going on with climate data not updating and showing up as missing in the forecasts (not sure why)
+- mndwi is having an error starting July 2025 and starts flipping to totally different numbers
+
+**PRIDEC**
+- INLA is returning odd `mbind: Operation not permitted` error. Not sure where it is coming from.
+- forecast report doesn't open in Firefox, only chrome
+- move several of the forecasting steps (like data validation) to the PRIDE-C package so it can be updated most easily
+- add something to debug when the data seems off. Could just be something that points to the data to inspect from teh forecast_html?, like with code to read it in in R or python?
+- print more information messages on errors
+
+**pivot-dhis2-utils**
+- seperate out Pivot-specific things into a `pivot-dhis2-utils` python package. I think we can do a similar thing with any of the python scripts for PRIDE-C, and then we just need to load that package with the plumber app so that it is updated each time
+- when running Analytics table, ping back when it is finished (look in `"level": "LOOP"`)
+- update fetch in forecast step to only get those we need
+- save POST responses somewhere so that debugging is easier (like a log)
+- import community cases for all fokontany and do the filtering of predictions on the back-side [import-pivot-data/COMcases.py]
+
+
+As we move the application to plumber, some of this will be easier to implement on that side
+
+
 ## 2025-08-12
 
 Working on service that imports data from Pivot instance. I'll develop it in a seperate folder and the move it over once it is all working. This is based on some existing code I have that is a mix of R and python, but I will migrate it all to Python.

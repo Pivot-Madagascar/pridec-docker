@@ -33,7 +33,5 @@ build.log
 */build.log
 
 #output of docker workflow
-forecast/output/
-forecast/input/
-output/
-input/
+*/output/
+*/input/
