@@ -19,9 +19,9 @@ dryRun = os.getenv("DRYRUN", "true").lower() == "true"
 print("Importing COM Case Data")
 
 if dryRun:
-    print("🏁 Running in DRY RUN mode — no changes will be made.")
+    print("DRY RUN — no changes will be made")
 else:
-    print("🚀 Running in normal mode. Data will be imported into instance.")
+    print("NORMAL RUN - data will be imported into instance")
 
 period_list = create_period(n_months = 8)
 
@@ -104,7 +104,7 @@ print("Importing pridec_historic_COMMalaria")
 
 resp = post_dataValues(base_url = DHIS2_URL, payload = COMMalaria_json, token = DHIS2_TOKEN, dryRun = dryRun)
 if resp.ok:
-    print(f"✅ Successfully imported pridec_historic_COMMalaria")
+    print(f"SUCCESS: Imported pridec_historic_COMMalaria")
 else:
     print(f"❌ Failed to import pridec_historic_COMMalaria with status code {resp.status_code}")
     print("Response:", resp.text)
@@ -149,7 +149,7 @@ print("Importing pridec_historic_COMRespinf")
 
 resp = post_dataValues(base_url = DHIS2_URL, payload = COMRespinf_json, token = DHIS2_TOKEN, dryRun = dryRun)
 if resp.ok:
-    print(f"✅ Successfully imported pridec_historic_COMRespinf")
+    print(f"SUCCESS: Imported pridec_historic_COMRespinf")
 else:
     print(f"❌ Failed to import pridec_historic_COMRespinf with status code {resp.status_code}")
     print("Response:", resp.text)
@@ -195,7 +195,7 @@ print("Importing pridec_historic_COMDiarrhea")
 
 resp = post_dataValues(base_url = DHIS2_URL, payload = COMDiarrhea_json, token = DHIS2_TOKEN, dryRun = dryRun)
 if resp.ok:
-    print(f"✅ Successfully imported pridec_historic_COMDiarrhea")
+    print(f"SUCCESS: Imported pridec_historic_COMDiarrhea")
 else:
     print(f"❌ Failed to import pridec_historic_COMDiarrhea with status code {resp.status_code}")
     print("Response:", resp.text)

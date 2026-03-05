@@ -33,5 +33,7 @@ build.log
 */build.log
 
 #output of docker workflow
+output/
+input/
 */output/
 */input/
