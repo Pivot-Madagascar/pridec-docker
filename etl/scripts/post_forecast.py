@@ -9,6 +9,7 @@ setup_logging()
 
 logger = logging.getLogger("post_forecasts")
 
+
 check_envvars(required_vars = {
             'DHIS_TOKEN': DHIS_TOKEN,
             'DHIS_URL': DHIS_URL})
@@ -24,3 +25,4 @@ except FileNotFoundError as e:
 
 post_dataElements(dhis_url = DHIS_URL, payload = json_payload,
                    token= DHIS_TOKEN, dryRun=True)
+
