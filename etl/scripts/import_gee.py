@@ -1,6 +1,7 @@
-from config import DHIS_TOKEN, DHIS_URL, PARENT_OU, GEE_SERVICE_ACCOUNT, dryRun, setup_logging
+from config import DHIS_TOKEN, DHIS_URL, PARENT_OU, GEE_SERVICE_ACCOUNT, dryRun, setup_logging, check_envvars
 import json
 import ee
+import os
 
 import logging
 
@@ -12,7 +13,18 @@ from importlib.resources import files
 from pridec_gee import import_pridec_climate
 from pridec_gee import calc_date_range
 
+check_envvars(required_vars = {
+            'DHIS_TOKEN': DHIS_TOKEN,
+            'DHIS_URL': DHIS_URL,
+            'PARENT_OU': PARENT_OU,
+            'GEE_SERVICE_ACCOUNT': GEE_SERVICE_ACCOUNT
+        }
+)
+
 # configs and env vars
+if not os.path.isfile('.gee-private-key.json'):
+    raise FileNotFoundError("'.gee-private-key.json' not found.")
+
 credentials = ee.ServiceAccountCredentials(GEE_SERVICE_ACCOUNT, ".gee-private-key.json")
 ee.Initialize(credentials)
 

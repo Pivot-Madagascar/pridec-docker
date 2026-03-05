@@ -4,6 +4,31 @@ name: pridec
 # launch a specific service and not the whole workflow at once
 
 services:
+  etl:
+    build:
+      context: ./etl
+      dockerfile: Dockerfile
+    network_mode: "host"
+    volumes:
+     - type: bind
+       source: ./input
+       target: /app/input
+       bind:
+          create_host_path: false
+       read_only: false
+     - type: bind
+       source: ./output
+       target: /app/output
+       bind:
+          create_host_path: false
+       read_only: false
+     - type: bind
+       source: ./.gee-private-key.json
+       target: /app/.gee-private-key.json
+       bind:
+          create_host_path: false
+       read_only: true
+
   import-gee:
     build:
       context: ./import-gee

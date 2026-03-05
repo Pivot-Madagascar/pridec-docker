@@ -1,4 +1,4 @@
-from config import DHIS_TOKEN, DHIS_URL, PIVOT_URL, PIVOT_TOKEN, dryRun, setup_logging
+from config import DHIS_TOKEN, DHIS_URL, PIVOT_URL, PIVOT_TOKEN, dryRun, setup_logging, check_envvars
 from requests.auth import HTTPBasicAuth
 import pandas as pd
 from datetime import date
@@ -11,7 +11,16 @@ setup_logging()
 
 logger = logging.getLogger("import_pivot_COM")
 
-logger.info("Importing COM Case Data")
+check_envvars(required_vars = {
+            'DHIS_TOKEN': DHIS_TOKEN,
+            'DHIS_URL': DHIS_URL,
+            'PIVOT_TOKEN': PIVOT_TOKEN,
+            'PIVOT_URL': PIVOT_URL,
+        }
+)
+
+
+logger.info("Importing COM Case Data from %s into %s", PIVOT_URL, DHIS_URL)
 
 if dryRun:
     logger.info("DRY RUN — no changes will be made")

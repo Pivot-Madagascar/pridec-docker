@@ -19,6 +19,7 @@ venv/
 */.env
 */.venv/
 */venv/
+**__pychache__/
 client_secret.json
 .gee-private-key.json
 */.gee-private-key.json
