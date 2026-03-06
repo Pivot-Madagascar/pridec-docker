@@ -11,6 +11,18 @@ DHIS2_PRIDEC_URL="http://localhost:8082/"
 DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 ```
 
+## 2026-03-06
+
+I am going to finalize the docker image, then download the current PRIDE-C SQL dump and load it locally to do a full test.
+
+**TO DO**:
+- remove other images
+- add csb vigilance
+- add update dataStore
+- update documentation by specifying types in functions themselves to get better error messages (this is to do in the packages)
+- add default --rm flag to the pridec running so that there aren't orphaned containers [needs to be done in install.sh]
+- update README with new workflor and ensure installation still works
+
 ## 2026-03-05
 
 The python scripts are mostly done for the `etl` module. They have been tested and most come from the `pivot_dhis_tools` or `pride_gee` package.
@@ -25,6 +37,8 @@ docker compose run --rm etl --help
 docker compose run --env-from-file .env --env DRYRUN="true" --rm etl fetch_geojson
 ```
 
+I have tested every argument and they all work. The other images can be removed and then this used to update PRIDE-C for this month.
+
 **TO DO**:
 - ~~finish individual scripts~~
 - ~~write docker file for ETL bit~~
@@ -33,6 +47,7 @@ docker compose run --env-from-file .env --env DRYRUN="true" --rm etl fetch_geojs
 - ~~add check to config to make sure all the variables exist~~: doing this by function
 - update documentation by specifying types in functions themselves to get better error messages (this is to do in the packages)
 - add default --rm flag to the pridec running so that there aren't orphaned containers [needs to be done in install.sh]
+- update README with new workflor and ensure installation still works
 
 
 ## 2026-03-04
