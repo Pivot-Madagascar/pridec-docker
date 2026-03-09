@@ -7,7 +7,7 @@ import logging
 
 setup_logging()
 
-logger = logging.getLogger("import_pivot_COM")
+logger = logging.getLogger("fetch_disease")
 
 check_envvars(required_vars = {
             'DHIS_TOKEN': DHIS_TOKEN,

@@ -24,5 +24,5 @@ except FileNotFoundError as e:
         raise SystemExit(1) from e
 
 post_dataElements(dhis_url = DHIS_URL, payload = json_payload,
-                   token= DHIS_TOKEN, dryRun=True)
+                   token= DHIS_TOKEN, dryRun=dryRun)
 

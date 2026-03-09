@@ -9,5 +9,4 @@ logger = logging.getLogger("analytics")
 logger.info("Launching analytics table at %s", DHIS_URL)
 
 launch_analytics(dhis_url=DHIS_URL,
-                 token=DHIS_TOKEN,
-                 verbose=True)
+                 token=DHIS_TOKEN)
