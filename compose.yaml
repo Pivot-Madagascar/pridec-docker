@@ -29,57 +29,6 @@ services:
           create_host_path: false
        read_only: true
 
-  import-gee:
-    build:
-      context: ./import-gee
-      dockerfile: Dockerfile
-    network_mode: "host"
-    volumes:
-     - type: bind
-       source: ./.gee-private-key.json
-       target: /app/.gee-private-key.json
-       bind:
-          create_host_path: false
-    environment:
-      DHIS2_PRIDEC_URL: ""
-      DHIS2_TOKEN: ""
-      DRYRUN: "true"
-      GEE_SERVICE_ACCOUNT: ""
-
-  import-pivot-data:
-    build:
-      context: ./import-pivot-data
-      dockerfile: Dockerfile
-    network_mode: "host"
-    environment:
-      DHIS2_PRIDEC_URL: ""
-      DHIS2_TOKEN: ""
-      DRYRUN: "true"
-      PIVOT_URL: ""
-      PIVOT_TOKEN: ""
-
-  fetch:
-    build:
-      context: ./fetch
-      dockerfile: Dockerfile
-    #this is needed for tsting thing using localhost
-    network_mode: "host"
-    volumes:
-     - type: bind
-       source: ./input
-       target: /app/input
-       bind:
-          create_host_path: false
-       read_only: false
-    #specify new DISEASE_CODE env variable via `DISEASE_CODE=new_value docker compose run --rm fetch`
-    #env_file:
-    #- .env
-    environment:
-      DHIS2_PRIDEC_URL: "${DHIS2_PRIDEC_URL}" 
-      DHIS2_TOKEN: "${DHIS2_TOKEN}"
-      PARENT_OU: "VtP4BdCeXIo"
-      DISEASE_CODE: "${DISEASE_CODE}"
-
   forecast:
     build: 
       context: ./forecast
@@ -99,23 +48,5 @@ services:
           create_host_path: false
        read_only: false
     #commands can be overridden when using docker compose run (not up)
-    command: --config "input/test_config.json"
-
-  post:
-    build:
-      context: ./post
-      dockerfile: Dockerfile
-    network_mode: "host"
-    volumes:
-      - type: bind
-        source: ./output
-        target: /app/output
-        bind:
-          create_host_path: false
-        read_only: true
-    environment:
-      DHIS2_PRIDEC_URL: "${DHIS2_PRIDEC_URL}"
-      DHIS2_TOKEN: "${DHIS2_TOKEN}"
-      DISEASE_CODE: "${DISEASE_CODE}"
-      DRYRUN: "true"
+    command: --config "input/config.json"
 

@@ -76,6 +76,17 @@ disease_data <- jsonlite::fromJSON(args$disease_data)
 climate_data <- jsonlite::fromJSON(args$climate_data)
 orgUnit_poly <- sf::st_read(args$orgUnit_poly, quiet = TRUE)
 
+valid_check <- PRIDEC::validate_inputs(config = config,
+                                  external_data = external_data,
+                                  disease_data = disease_data,
+                                  climate_data = climate_data,
+                                  orgUnit_poly = orgUnit_poly)
+
+if(!valid_check){
+  stop("Invalid inputs. Halting forecast.")
+}
+
+
 input_list <- PRIDEC::validate_inputs(config = config,
                                   external_data = external_data,
                                   disease_data = disease_data,
@@ -87,7 +98,7 @@ cli::cli_alert_info(c("Using the following arguments:\n",
                       "External data:", args$external_data, "\n",
                       "Configurations:"
 ))
-print(input_list$config)
+print(input_list["config"])
 
 # Run Forecast #################################
                         
