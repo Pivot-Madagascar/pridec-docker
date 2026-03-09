@@ -15,13 +15,39 @@ DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 
 I am going to finalize the docker image, then download the current PRIDE-C SQL dump and load it locally to do a full test.
 
+Things for full test (ensure pridec-202603 d2 container is up):
+```
+docker compose build etl --no-cache #to install
+docker compose run --rm etl --help
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl import_pivot_com
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl import_pivot_csb
+docker compose run --env-from-file .env --env DRYRUN="true" --rm etl import_gee
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl fetch_climate
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl fetch_disease
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl fetch_geojson
+#would forecast here
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl post_forecast
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl calc_CSB_alerts
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl update_key
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl build_analytics
+```
+Everything worked!
+
+Testing the forecast
+```
+docker compose build forecast --no-cache #to install
+docker compose run --rm forecast
+```
+
+Okay so an issue is that the CSB's are just points and not their actual catchment. So I think to think of a way to do this. Probably easiest is to provide the data via the pivot_dhis_tools package and then source that when the OU_LEVEL is something in particular. This will be very Pivot specific but I think is okay for now.
+
 **TO DO**:
-- remove other images
-- add csb vigilance
-- add update dataStore
-- update documentation by specifying types in functions themselves to get better error messages (this is to do in the packages)
+- ~~remove other images~~
+- ~~add csb vigilance~~
+- ~~add update dataStore~~
 - add default --rm flag to the pridec running so that there aren't orphaned containers [needs to be done in install.sh]
-- update README with new workflor and ensure installation still works
+- update README with new workflow and ensure installation still works
+- set up import_gee to only import certain variables based on the arguments, just to speed things up when needed or testing
 
 ## 2026-03-05
 
@@ -35,6 +61,7 @@ So to test out the etl microservice (ensure DHIS_URL is set to a d2 local instan
 docker compose build etl --no-cache #to install
 docker compose run --rm etl --help
 docker compose run --env-from-file .env --env DRYRUN="true" --rm etl fetch_geojson
+
 ```
 
 I have tested every argument and they all work. The other images can be removed and then this used to update PRIDE-C for this month.
