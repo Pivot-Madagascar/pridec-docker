@@ -2,7 +2,6 @@
 set -e
 
 COMMAND="$1"
-<<<<<<< HEAD
 shift || true  
 
 # Function to print usage/help
@@ -19,6 +18,8 @@ print_usage() {
     echo "  fetch_geojson           - Download geojson polygons from PRIDE-C instance to input folder"
     echo "  post_forecast           - Post forecast to PRIDE-C instance"
     echo "  build_analytics         - Build the analytics table on PRIDE-C instance. This can take 10-15 minutes."
+    echo "  calc_CSB_alerts         - Calculate the number of CSB on alert for this month and post to PRIDE-C instance"
+    echo "  update_key       - Update the datastore key used to trigger PRIDE-C cache reset every month. Run at the end of all updates"
     echo ""
     echo "Example:"
     echo "  docker compose --env-from-file .env --env DRYRUN='true' etl fetch_climate"
@@ -61,6 +62,14 @@ build_analytics)
 
 post_forecast)
     python scripts/post_forecast.py "$@"
+    ;;
+
+calc_CSB_alerts)
+    python scripts/calc_CSB_alerts.py "$@"
+    ;;
+
+update_key)
+    python scripts/update_pridec_key.py "$@"
     ;;
 
 *)
