@@ -7,7 +7,7 @@ import logging
 
 setup_logging()
 
-logger = logging.getLogger("import_pivot_COM")
+logger = logging.getLogger("fetch_climate")
 
 logger.info("Fetching PRIDEC Climate data from %s", DHIS_URL)
 
