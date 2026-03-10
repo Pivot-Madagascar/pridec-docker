@@ -11,6 +11,24 @@ DHIS2_PRIDEC_URL="http://localhost:8082/"
 DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 ```
 
+## 2026-03-09
+
+Doing the first production run of the new workflow. I'm doing this by hand so I can fix bugs as I go.
+
+CSB - ~~all three finished~~
+ADJ - ~~Mal~~, ~~Diar, Resp~~
+COM - ~~Mal  Diar, Resp~~
+
+An issue was with the Analytics table cache afterwards. Data is in DHIS2, but not available via analytics. So I think the whole table needs to be cleared via Maintenance before a new one is made. I have updated the `pivot_dhis_tools` `launch_analytics` function to do this now.
+
+
+**TO DO:**
+- add default --rm flag to the pridec running so that there aren't orphaned containers [needs to be done in install.sh]
+- update README with new workflow and ensure installation still works [just need to check the auto install]
+- set up import_gee to only import certain variables based on the arguments, just to speed things up when needed or testing [added as issue]
+- update forecasting report to do missing data on lagged data. Currently it does it on raw data so climate data is always missing [for PRIDE-C R package]
+- FULL RESET of data on PRIDE-C instance because there is somethign weird going on with teh sen2 indicators
+
 ## 2026-03-06
 
 I am going to finalize the docker image, then download the current PRIDE-C SQL dump and load it locally to do a full test.
@@ -25,7 +43,7 @@ docker compose run --env-from-file .env --env DRYRUN="true" --rm etl import_gee
 docker compose run --env-from-file .env --env DRYRUN="false" --rm etl fetch_climate
 docker compose run --env-from-file .env --env DRYRUN="false" --rm etl fetch_disease
 docker compose run --env-from-file .env --env DRYRUN="false" --rm etl fetch_geojson
-#would forecast here
+docker compose run --rm forecast
 docker compose run --env-from-file .env --env DRYRUN="false" --rm etl post_forecast
 docker compose run --env-from-file .env --env DRYRUN="false" --rm etl calc_CSB_alerts
 docker compose run --env-from-file .env --env DRYRUN="false" --rm etl update_key
@@ -39,7 +57,7 @@ docker compose build forecast --no-cache #to install
 docker compose run --rm forecast
 ```
 
-Okay so an issue is that the CSB's are just points and not their actual catchment. So I think to think of a way to do this. Probably easiest is to provide the data via the pivot_dhis_tools package and then source that when the OU_LEVEL is something in particular. This will be very Pivot specific but I think is okay for now.
+Okay so an issue is that the CSB's are just points and not their actual catchment. So I think to think of a way to do this. Probably easiest is to provide the data via the pivot_dhis_tools package and then source that when the OU_LEVEL is something in particular. This will be very Pivot specific but I think is okay for now. I ended up just adding a catch for this in teh pridec_gee package
 
 **TO DO**:
 - ~~remove other images~~

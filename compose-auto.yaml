@@ -7,41 +7,10 @@ name: pridec
 
 services:
 
-  import-gee:
+  etl:
     build:
-      context: ./import-gee
+      context: ./etl
       dockerfile: Dockerfile
-    network_mode: "host"
-    volumes:
-     - type: bind
-       source: ${HOST_PWD}/.gee-private-key.json
-       target: /app/.gee-private-key.json
-       bind:
-          create_host_path: false
-    environment:
-      DHIS2_PRIDEC_URL: ""
-      DHIS2_TOKEN: ""
-      DRYRUN: "true"
-      GEE_SERVICE_ACCOUNT: ""
-
-  import-pivot-data:
-    build:
-      context: ./import-pivot-data
-      dockerfile: Dockerfile
-    network_mode: "host"
-    environment:
-      DHIS2_PRIDEC_URL: ""
-      DHIS2_TOKEN: ""
-      DRYRUN: "true"
-      PIVOT_URL: ""
-      PIVOT_TOKEN: ""
-
-
-  fetch:
-    build:
-      context: ./fetch
-      dockerfile: Dockerfile
-    #this is needed for tsting thing using localhost
     network_mode: "host"
     volumes:
      - type: bind
@@ -50,12 +19,18 @@ services:
        bind:
           create_host_path: false
        read_only: false
-    #specify new DISEASE_CODE env variable via ` docker compose run --env DISEASE_CODE=new_value --rm fetch`
-    environment:
-      DHIS2_PRIDEC_URL: ""
-      DHIS2_TOKEN: ""
-      PARENT_OU: "VtP4BdCeXIo"
-      DISEASE_CODE: ""
+     - type: bind
+       source: ${HOST_PWD}/output
+       target: /app/output
+       bind:
+          create_host_path: false
+       read_only: false
+     - type: bind
+       source: ${HOST_PWD}/.gee-private-key.json
+       target: /app/.gee-private-key.json
+       bind:
+          create_host_path: false
+       read_only: true
 
   forecast:
     build: 
@@ -78,22 +53,3 @@ services:
        read_only: false
     #commands can be overridden when using docker compose run (not up)
     command: --config "input/config.json"
-
-  post:
-    build:
-      context: ./post
-      dockerfile: Dockerfile
-    #this is needed for testing using d2 instances on the localhost
-    network_mode: "host"
-    volumes:
-      - type: bind
-        source: ${HOST_PWD}/output
-        target: /app/output
-        bind:
-          create_host_path: false
-        read_only: true
-    environment:
-      DHIS2_PRIDEC_URL: ""
-      DHIS2_TOKEN: ""
-      DISEASE_CODE: ""
-      DRYRUN: "true"

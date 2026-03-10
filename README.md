@@ -91,18 +91,20 @@ PIVOT_TOKEN="your-token-for-pivot-instance"
 
 ```
 #import data from google early engine into your DHIS2 instance (this only needs to be done once per month)
-pridec run --env-from-file .env --env DRYRUN="true" --rm import-gee
+pridec run --env-from-file .env --env DRYRUN="true" --rm etl import_gee
 
 #import data from Pivot instance (this is specific to Ifanadiana), run once per month
-pridec run --env-from-file .env --env DRYRUN=true --rm import-pivot-data COMcases.py
-pridec run --env-from-file .env --env DRYRUN=true --rm import-pivot-data CSBcases.py
+pridec run --env-from-file .env --env DRYRUN=true --rm etl import_pivot_com
+pridec run --env-from-file .env --env DRYRUN=true --rm etl import_pivot_csb
 
 #run analytics table before fetching
-pridec run --env-from-file .env --env DRYRUN=true --rm post analytics.py
+pridec run --env-from-file .env --env DRYRUN=true --rm etl build_analytics
 
-pridec run --env-from-file .env --rm fetch
+pridec run --env-from-file .env --env DRYRUN=true --rm etl fetch_climate
+pridec run --env-from-file .env --env DRYRUN=true --rm etl fetch_disease
+pridec run --env-from-file .env --env DRYRUN=true --rm etl fetch_geojson
 #allows you to keept same URL and TOKEN and just change DISEASE_CODE
-pridec run --env-from-file .env --env DISEASE_CODE="pridec_historic_CSBMalaria" --rm fetch
+pridec run --env-from-file .env --env DRYRUN="true" --env DISEASE_CODE="pridec_historic_CSBMalaria" --rm etl fetch_disease
 
 #config file can be changed for each disease
 pridec run --rm forecast --config "input/config_malaria.json"
@@ -110,10 +112,13 @@ pridec run --rm forecast --config "input/config_malaria.json"
 #YOU SHOULD INSPECT output/forecast_report.html NOW
 
 #PAY ATTENTION HERE AS THIS WILL CHANGE YOUR INSTANCE. update DRYRUN as needed
-pridec run --env-from-file .env --env DRYRUN=true --rm post post.py
+pridec run --env-from-file .env --env DRYRUN=true" --rm etl post_forecast
 
 #to run analytics table
-pridec run --env-from-file .env --env DRYRUN=true --rm post analytics.py
+pridec run --env-from-file .env --env DRYRUN=true --rm etl build_analytics
+#update key and CSB on alert
+pridec run --env-from-file .env --env DRYRUN="false" --rm etl calc_CSB_alerts
+pridec run --env-from-file .env --env DRYRUN="false" --rm etl update_key
 
 
 pridec down --remove-orphans
@@ -129,46 +134,54 @@ The directories `input` and `output` must already exist in the `pridec-docker` d
 
 The `.env` file must be updated for your use case, or the ENV_VARIABLES provided directly to `docker compose run`.
 
-### 1. `import-gee` service to import GEE climate varables into DHIS2 instance [once per month]
+Most tasks are run through the `etl` image, which manages all of the sending and formatting of data from GEE, the Pivot DHIS2 instance, and the PRIDE-C DHIS2 instance. The forecasting step relies on `R`, which is a larger docker image and contained in its own docker image, `forecast`.
 
-This requires having a `.gee-private-key.json` in the root directory as well as a `GEE_SERVICE_ACCOUNT` in `.env`. There is one climate variable that is specific to Ifanadiana (`pridec_climate_floodedRice`) and that will eventually need updating to make more generalizable.
+### 1. Import health and climate data into PRIDE-C instance
+
+#### 1.1 `import_gee` service to import GEE climate varables into DHIS2 instance [once per month]
+
+This requires having a `.gee-private-key.json` in the root directory as well as a `GEE_SERVICE_ACCOUNT` in `.env`. There is one climate variable that is specific to Ifanadiana (`pridec_climate_floodedRice`), but could be applied to other regions if they provide a polygon of ricefields.
 
 ```
-docker compose run --env-from-file .env --env DRYRUN=false --rm import-gee
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl import_gee
 ```
 
 In order for this data to be available via `analytics` calls, the Analytics Tables must be rebuilt:
 
 ```
-docker compose run --env-from-file .env --env DRYRUN=true --rm post analytics.py
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl build_analytics
 ```
 
-### 2.  `import-pivot-data` service to import Madagascar specific data (Pivot-only) [once per month]
+#### 1.2  `import_pivot` service to import Madagascar specific data (Pivot-only) [once per month]
 
-This is an optional service to only be run on the Pivot PRIDE-C instance. It creates the `pridec_historical_` variables that are needed for predictions. This is needed because there is some cleaning and formatting we do with the raw `dataElements` to have high quality variables to predict.
+This is an optional service to only be run on the Pivot PRIDE-C instance used by Pivot. It creates the `pridec_historical_` variables that are needed for predictions. This is needed because there is some cleaning and formatting we do with the raw `dataElements` to have high quality variables to predict.
 
 ```
-docker compose run --env-from-file .env --env DRYRUN=true --rm import-pivot-data COMcases.py
-docker compose run --env-from-file .env --env DRYRUN=true --rm import-pivot-data CSBcases.py
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl import_pivot_com
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl import_pivot_csb
 #analytics tables should be rebuilt after this
-docker compose run --env-from-file .env --env DRYRUN=true --rm post analytics.py
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl build_analytics
 ```
 
-### 3. `fetch` service to download climate, disease, and geospatial data
+### 2. Forecast individual `dataElements` via `forecast`
+
+The forecast step should be run for each dataElement being predicted. Its steps are:
+
+1. Fetching the necessary climate, disease, and geospatial data from teh PRIDE-C instance
+2. Using the data in the `forecast` workflow
+3. `POST`ing the forecasts to the PRIDE-C instance
+
+#### 2.1. `fetch` service to download climate, disease, and geospatial data
 
 This uses the ENV_VARIABLES stored in the `.env` file. It needs to be updated when using a different DHIS2 instance or dataSource following `.env.example`. This step is run for every `dataElement` that you wish to predict.
 
 ```
-docker compose run --rm fetch
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl fetch_climate
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl fetch_disease
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl fetch_geojson
 ```
 
-Example providing ENV_VARIABLES directly:
-
-```
-docker compose run --env DISEASE_CODE="pridec_historic_CSBMalaria" --rm fetch
-```
-
-### 4. `forecast` service to create predictions.
+#### 2.2. `forecast` service to create predictions.
 
 For `forecast`, input must contain a `config.json` file and `external_data.csv` file. They can have other names, but must be in the `input` directory to work with compose. If their name is different, it needs to be supplied via an argument to `docker run`, as in the below example
 
@@ -176,19 +189,52 @@ For `forecast`, input must contain a `config.json` file and `external_data.csv` 
 docker compose run --rm forecast --config "input/config.json"
 ```
 
-You should now inspect the model validation report in `output/forecast_report.html`. If everything seems okay, proceed to step 3 to import the forecast into the PRIDE-C instance.
+You should now inspect the model validation report in `output/forecast_report.html`. If everything seems okay, proceed to step `2c` to import the forecast into the PRIDE-C instance.
 
-### 5. Run `post` service
+#### 2.3. `POST` the forecast to the PRIDE-C instance
 
-By default, this is always a dry run (makes no changes to an instance). This is to serve as a kind of double-check to ensure production data is only changed purposefully.
+Once the forecast has been validated, it can be posted to the instance.
 
 ```
-docker compose run --env DRYRUN=true --rm post post.py
-docker compose run --env DRYRUN=true --rm post analytics.py #launch export of analytics table
+docker compose run --env-from-file .env --rm etl post_forecast
 ```
 
+### 3. PRIDE-C System Updates
+
+Once all the forecasts have been posted, there are several steps to update the rest of the PRIDE-C system. They are all run via one line commands to the `etl` image.
+
+1. Calculate and post the number of health centers on alert
+2. Build the analytics tables
+3. Update the PRIDE-C dataStore key
+
+#### 3.1. Calcuate the CSB on alert
+
+Thie estimates the number of health centers expected to see more cases than the three year average for that season for each disease. It queries the `analytics` endpoint and so requries the analytics tables to be built first.
+
+```
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl build_analytics
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl calc_CSB_alerts
+```
+
+#### 3.2. Build the analytics tables
+
+Because the PRIDE-C app accessed data via a call to analytics, the tables must be built for the updated data to be available:
+
+```
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl build_analytics
+```
+
+#### 3.3. Update the PRIDE-C dataStore key
+
+This key is used by the application cache to trigger an update of data in a user's cache after the monthly update:
+
+```
+docker compose run --env-from-file .env --env DRYRUN="false" --rm etl update_key
+```
 
 ### 6. Clean up unused containers (optional)
+
+If an image is run withou the `--rm` flag, it can create orphaned containers. Clean those up by running:
 
 ```
 docker compose down --remove-orphans
