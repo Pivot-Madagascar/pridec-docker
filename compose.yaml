@@ -1,7 +1,7 @@
 name: pridec
 
-# NOTE: because forecsat relies on fetch, these should always be run via `docker compose run` to
-# launch a specific service and not the whole workflow at once
+# NOTE: these services are not meant to run in parellel. These should always be run via `docker compose run` to
+# launch a specific service and not the whole workflow at once. Yes this could be updated using an API.
 
 services:
   etl:

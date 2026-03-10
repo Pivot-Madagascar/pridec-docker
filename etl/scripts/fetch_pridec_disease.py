@@ -23,7 +23,7 @@ logger.info("Fetching disease data %s from %s", DISEASE_CODE, DHIS_URL)
 if not os.path.isdir('input'):
     raise NotADirectoryError("Directory 'input' not found.")
 
-data_out = pridec_fetch_disease(dhis_url = DHIS_URL, ou_level = 5, 
+data_out = pridec_fetch_disease(dhis_url = DHIS_URL, ou_level = OU_LEVEL, 
                      ou_parent =  PARENT_OU,
                      disease_code = DISEASE_CODE,
                      token=DHIS_TOKEN, past_years = 6)
