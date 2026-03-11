@@ -8,6 +8,7 @@ services:
     build:
       context: ./etl
       dockerfile: Dockerfile
+    image: mvevans89/pridec_etl:latest
     network_mode: "host"
     volumes:
      - type: bind
@@ -33,6 +34,7 @@ services:
     build: 
       context: ./forecast
       dockerfile: Dockerfile
+    image: mvevans89/pridec_forecast:latest
     network_mode: "host"
     volumes:
      - type: bind
