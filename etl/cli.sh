@@ -6,7 +6,7 @@ shift || true
 
 # Function to print usage/help
 print_usage() {
-    echo "Usage: docker run etl <command> [args]"
+    echo "Usage: docker run <image-name> <command> [args]"
     echo ""
     echo "Available commands:"
     echo "  --help, -h              - View usage documentation"

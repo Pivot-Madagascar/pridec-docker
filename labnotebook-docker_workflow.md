@@ -11,6 +11,21 @@ DHIS2_PRIDEC_URL="http://localhost:8082/"
 DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 ```
 
+## 2026-03-24
+
+I checked the Sen2 indicators and they seem fine. I think something just went wrong during an import during my maternity leave. My recommendation is to fully delete the historical climate and then re-import them.
+
+I am adding a `README.md` file to each service of docker compose. This will hopefully then go to the dockerhub as a README.md. I can also create a github action so that when I push to main, it will push to the docker hub. For now, I have to do this manually which is kind of a pain.
+
+Also, Paul had recommended a seperate image for each compose sub-service, and I think that does make the most sense to link it easiest with the Docker Hub. It does change the automated install and updates a bit though, so this is something for next month post-update. It will also require setting the binds within the Dockerfiles.
+
+**TO DO:**
+- update forecasting report to do missing data on lagged data. Currently it does it on raw data so climate data is always missing [for PRIDE-C R package]
+- FULL RESET of data on PRIDE-C instance because there is something weird going on with teh sen2 indicators
+- add README.md documentation for each image
+- use Github Actions for automated docker hub linkage
+
+
 ## 2026-03-09
 
 Doing the first production run of the new workflow. I'm doing this by hand so I can fix bugs as I go.
@@ -23,8 +38,8 @@ An issue was with the Analytics table cache afterwards. Data is in DHIS2, but no
 
 
 **TO DO:**
-- add default --rm flag to the pridec running so that there aren't orphaned containers [needs to be done in install.sh]
-- update README with new workflow and ensure installation still works [just need to check the auto install]
+- ~~add default --rm flag to the pridec running so that there aren't orphaned containers [needs to be done in install.sh] [not possible]~~
+- ~~update README with new workflow and ensure installation still works [just need to check the auto install]~~
 - set up import_gee to only import certain variables based on the arguments, just to speed things up when needed or testing [added as issue]
 - update forecasting report to do missing data on lagged data. Currently it does it on raw data so climate data is always missing [for PRIDE-C R package]
 - FULL RESET of data on PRIDE-C instance because there is somethign weird going on with teh sen2 indicators
