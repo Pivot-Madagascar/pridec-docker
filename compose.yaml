@@ -49,6 +49,4 @@ services:
        bind:
           create_host_path: false
        read_only: false
-    #commands can be overridden when using docker compose run (not up)
-    command: --config "input/config.json"
 

@@ -6,9 +6,17 @@ This docker image is used to run the PRIDE-C Forecast step.
 
 ## Install
 
+From Docker Hub:
+
 ```
 docker pull mvevans89/pridec_forecast
-docker build -t pridec_forecast .
+docker build -t forecast .
+```
+
+From this repository locally, using the Dockerfile and compose YAML:
+
+```
+docker compose build forecast
 ```
 
 ## Usage 
@@ -72,10 +80,7 @@ Forecast outputs will be saved in the `output` directory. This includes the fore
 The forecast can be run using the following command:
 
 ```
-docker run --rm \
---mount type=bind,src=./input,dst=/app/input \
---mount type=bind,src=./output,dst=/app/output \
-pridec_forecast
+docker compose run --rm forecast
 ```
 
 There are internal checks for the validity of input data and model processes. The output of these will be printed to the console. If the input data is not valid, it will need to updated and the command re-run.

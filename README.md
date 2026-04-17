@@ -5,7 +5,7 @@ A docker container to run the PRIDE-C Forecast Workflow
 ## Requirements
 
 - [docker compose](https://docs.docker.com/compose/install/)
-- 6 GB storage space for docker image
+- 3.5 GB storage space for docker image
 - RAM requirements depend on the number of orgUnits, the models used in a forecast, and your own docker configurations. It ranges from 1 GB for 20 orgUnits using the `test_config.json` configuration to the smallest models to 2.5 GB for 200 orgUnits fitting all five models. You can also set the limit manually within the individual `Dockerfile`s or in `compose-auto.yaml` or `compose.yaml` files following instructions [here](https://docs.docker.com/engine/containers/resource_constraints/).
 
 ## Installation
@@ -24,11 +24,11 @@ git clone https://github.com/Pivot-Madagascar/pridec-docker.git
 cd pridec-docker
 ```
 
-### Install via `install.sh` (recommended, Mac/Linux only)
+### Automatic install via `install.sh` (recommended, Mac/Linux only)
 
 This shell script will install the PRIDE-C Docker app and make it available via the command `pridec`. This will allow you to access the pridec services from anywhere using `pridec` instead of `docker compose`.
 
-change the `COMPOSE_DIR` variable in `pridec` to the path to `pridec-docker`. your `pridec` file should look like this:
+Create a file called `pridec` in the pridec-docker directory. It should contain the following (only `COMPOSE_DIR` needs to be updated):
 
 ```
 #!/bin/bash
@@ -53,7 +53,7 @@ pridec config
 which pridec
 ```
 
-### Use `docker compose build` directly (manual install)
+### Manual install via `docker compose build`
 
 You can also use the application directly via `docker compose`. This will take about 15 minutes the first time it is run.
 
@@ -62,7 +62,7 @@ docker compose build
 docker compose build --no-cache #takes 15 minutes. ensures it is clean
 ```
 
-To use `pridec`, it must be run from within the `pridec-docker` directory. This is best used for one off runs, and not full automated workflows where multiple dataElements are predicted. This follows the Manual Install usage below.
+To access the PRIDE-C services for a manual install, you will need to use the `docker compose run` call to access the `etl` and `forecast` services.
 
 ## Usage (auto install)
 
@@ -73,27 +73,14 @@ The primary steps are:
 1. Create a project directory for the dataElement you wish to predict
 2. Create `input` and `output` subdirectories
 3. Copy your `config.json` and `external_data.csv` into the `input` directory. See example files [here](https://github.com/Pivot-Madagascar/pridec-pivot-update/tree/main/forecast_assets).
-4. Create a `.env` file with the following variables at project directory:
-
-```
-DHIS2_PRIDEC_URL="your-url" 
-DHIS2_TOKEN="your-token"
-PARENT_OU="VtP4BdCeXIo" #id of parent orgUnit. Ifanadiana: "VtP4BdCeXIo"
-DISEASE_CODE="pridec_historic_yourDataElement" #corresponds to DHIS2 dataElement code of disease to predict
-GEE_PROJECT = "YOUR_GEE_PROJECT_NAME"
-GEE_SERVICE_ACCOUNT="YOUR_SERVICE_ACCOUNT@YOUR_CLOUD_PROJECT.iam.gserviceaccount.com"
-#the below is only needed for Pivot-specific workflows to update DHIS2 data
-PIVOT_URL="pivot-production-url"
-PIVOT_TOKEN="your-token-for-pivot-instance"
-```
-
+4. Create a `.env` file following `.env.example` in the `pridec-docker` directory
 5. Run the full workflow from the project directory. Some example code is below:
 
 ```
-#import data from google early engine into your DHIS2 instance (this only needs to be done once per month)
+#import data from GEE into your DHIS2 instance (this only needs to be done once per month)
 pridec run --env-from-file .env --env DRYRUN="true" --rm etl import_gee
 
-#import data from Pivot instance (this is specific to Ifanadiana), run once per month
+#import data from Pivot instance (this is specific to Ifanadiana and Pivot), run once per month
 pridec run --env-from-file .env --env DRYRUN=true --rm etl import_pivot_com
 pridec run --env-from-file .env --env DRYRUN=true --rm etl import_pivot_csb
 
@@ -103,7 +90,7 @@ pridec run --env-from-file .env --env DRYRUN=true --rm etl build_analytics
 pridec run --env-from-file .env --env DRYRUN=true --rm etl fetch_climate
 pridec run --env-from-file .env --env DRYRUN=true --rm etl fetch_disease
 pridec run --env-from-file .env --env DRYRUN=true --rm etl fetch_geojson
-#allows you to keept same URL and TOKEN and just change DISEASE_CODE
+#allows you to keep the same URL and TOKEN and just change DISEASE_CODE
 pridec run --env-from-file .env --env DRYRUN="true" --env DISEASE_CODE="pridec_historic_CSBMalaria" --rm etl fetch_disease
 
 #config file can be changed for each disease
@@ -112,14 +99,14 @@ pridec run --rm forecast --config "input/config_malaria.json"
 #YOU SHOULD INSPECT output/forecast_report.html NOW
 
 #PAY ATTENTION HERE AS THIS WILL CHANGE YOUR INSTANCE. update DRYRUN as needed
-pridec run --env-from-file .env --env DRYRUN=true" --rm etl post_forecast
+pridec run --env-from-file .env --env DRYRUN=true --rm etl post_forecast
 
 #to run analytics table
 pridec run --env-from-file .env --env DRYRUN=true --rm etl build_analytics
 #update key and CSB on alert
 pridec run --env-from-file .env --env DRYRUN="false" --rm etl calc_CSB_alerts
 pridec run --env-from-file .env --env DRYRUN="false" --rm etl update_key
-
+pridec run --env-from-file .env --env DRYRUN=true --rm etl build_analytics
 
 pridec down --remove-orphans
 ```
@@ -186,7 +173,7 @@ docker compose run --env-from-file .env --env DRYRUN="false" --rm etl fetch_geoj
 For `forecast`, input must contain a `config.json` file and `external_data.csv` file. They can have other names, but must be in the `input` directory to work with compose. If their name is different, it needs to be supplied via an argument to `docker run`, as in the below example
 
 ```
-docker compose run --rm forecast --config "input/config.json"
+docker compose run --rm forecast --config "input/config.json" --external_data "input/external_data_fkt.csv"
 ```
 
 You should now inspect the model validation report in `output/forecast_report.html`. If everything seems okay, proceed to step `2c` to import the forecast into the PRIDE-C instance.
@@ -213,6 +200,7 @@ Thie estimates the number of health centers expected to see more cases than the 
 
 ```
 docker compose run --env-from-file .env --env DRYRUN="false" --rm etl build_analytics
+#wait until this has completed before calculating the health centers on alert
 docker compose run --env-from-file .env --env DRYRUN="false" --rm etl calc_CSB_alerts
 ```
 
