@@ -98,11 +98,11 @@ cli::cli_alert_info(c("Using the following arguments:\n",
                       "External data:", args$external_data, "\n",
                       "Configurations:"
 ))
-print(input_list["config"])
+print(input_list$config)
 
 # Run Forecast #################################
                         
-output_dir <- "output/"
+output_dir <- "output"
 
 forecast_status <- PRIDEC::run_pridec_forecast(inputs = input_list, output_dir = output_dir)
 

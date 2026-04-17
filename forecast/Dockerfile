@@ -1,30 +1,31 @@
-FROM rocker/geospatial:4.5.1
+FROM docker.io/library/ubuntu:noble
 
-LABEL maintainer="pridec@pivotworks.org"
-LABEL description="PRIDE-C Disease Forecasting Pipeline"
+ENV R_VERSION="4.5.2"
+ENV R_HOME="/usr/local/lib/R"
+ENV TZ="Etc/UTC"
 
-RUN sudo apt update
+COPY scripts/install_R_source.sh /rocker_scripts/install_R_source.sh
+RUN bash /rocker_scripts/install_R_source.sh
+
+ENV CRAN="https://p3m.dev/cran/__linux__/noble/2026-03-10"
+ENV LANG=en_US.UTF-8
+
+COPY scripts/setup_R.sh /rocker_scripts/setup_R.sh
+RUN bash /rocker_scripts/setup_R.sh
+
+#copy all scripts first to help with making executable
+COPY scripts/ /rocker_scripts/
+#update permissions on all .sh so they are executable
+RUN chmod -R +x /rocker_scripts/
+
+RUN /rocker_scripts/install_base_packages.sh
+RUN /rocker_scripts/install_pandoc.sh
+RUN /rocker_scripts/install_quarto.sh
+RUN /rocker_scripts/install_geospatial.sh
+
+RUN /rocker_scripts/install_pridec.sh
 
 WORKDIR /app
-
-#quarto comes with rocker image, shouldn't need to install seperately
-RUN sudo apt install jq -y
-
-# install R packages line by line to help with cache
-RUN R -e "install.packages('remotes')"
-
-#graph, Rgraphviz, INLA, PRIDEC
-COPY install-pridec-packages.R .
-RUN Rscript ./install-pridec-packages.R 
-
-
-RUN Rscript -e "remotes::install_version('optparse', version = '1.7.5', repos = 'http://cran.us.r-project.org')"
-RUN Rscript -e "remotes::install_version('cli', version = '3.6.5', repos = 'http://cran.us.r-project.org')"
-RUN Rscript -e "remotes::install_version('skimr', version = '2.1.5', repos = 'http://cran.us.r-project.org')"
-RUN Rscript -e "remotes::install_version('paletteer', version = '1.6.0', repos = 'http://cran.us.r-project.org')"
-RUN Rscript -e "remotes::install_version('here', version = '1.0.1', repos = 'http://cran.us.r-project.org')"
-RUN Rscript -e "remotes::install_version('jsonlite', version = '2.0.0', repos = 'http://cran.us.r-project.org')"
-RUN Rscript -e "remotes::install_version('quarto', version = '1.5.1', repos = 'http://cran.us.r-project.org')"
 
 COPY entrypoint.R .
 
