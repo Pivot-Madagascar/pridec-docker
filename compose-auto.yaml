@@ -1,9 +1,10 @@
 name: pridec
 
-# NOTE: because forecsat relies on fetch, these should always be run via `docker compose run` to
+# NOTE: because forecast relies on fetch, these should always be run via `docker compose run` to
 # launch a specific service and not the whole workflow at once
 
-#this compose file is used in the auto install that makes pridec app available anywhere
+# this compose file is used in the auto install that makes pridec app available anywhere
+# should match compose.yaml in all ways except that volumes are relative to ${HOST_PWD}
 
 services:
 
@@ -11,6 +12,7 @@ services:
     build:
       context: ./etl
       dockerfile: Dockerfile
+    #this is needed for testing using d2 instances on the localhost
     network_mode: "host"
     volumes:
      - type: bind
@@ -51,5 +53,3 @@ services:
        bind:
           create_host_path: false
        read_only: false
-    #commands can be overridden when using docker compose run (not up)
-    command: --config "input/config.json"

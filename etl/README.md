@@ -1,14 +1,32 @@
 # PRIDE-C ETL Docker Image
 
-This docker image is used to run the ETL functions of the PRIDE-C workflow. This includes processes like importing and exporting data from DHIS2, running environmental data treatment in Google Earth Engine, and DHIS2 admin tasks relevant to PRIDE-C.
+This docker image is used to run the ETL functions of the PRIDE-C workflow. This includes processes like importing and exporting data from DHIS2, running environmental data treatment in Google Earth Engine, and DHIS2 admin tasks relevant to PRIDE-C. It is built using docker compose so that some configurations are already saved in the image.
+
+## Building Images
+
+To build from a local repo use the following.
+
+```
+docker compose build etl
+```
+
+Add the `--no-cache` argument for production.
 
 ## Requirements
 
 ## Install
 
+From Docker Hub
+
 ```
 docker pull mvevans89/pridec_etl
-docker build -t pridec_etl .
+docker compose build -t etl .
+```
+
+From local direcotry:
+
+```
+docker compose build etl
 ```
 
 ## Usage 
@@ -49,7 +67,7 @@ Individual environmental variables can also be provided to the docker image via 
 The available commands can be queried by running:
 
 ```
-docker run pridec_etl --help
+docker compose run etl --help
 ```
 
 It is recommended to run commands with the `--rm` flag to prevent orphaned containers.
@@ -63,13 +81,13 @@ It is recommended to run commands with the `--rm` flag to prevent orphaned conta
 This requires having a `.gee-private-key.json` in the root directory as well as a `GEE_SERVICE_ACCOUNT` in `.env`. There is one climate variable that is specific to Ifanadiana (`pridec_climate_floodedRice`), but could be applied to other regions if they provide a polygon of ricefields.
 
 ```
-docker run --env-from-file .env --rm pridec_etl import_gee
+docker compose run --env-from-file .env --rm etl import_gee
 ```
 
 In order for this data to be available via `analytics` calls, the Analytics Tables must be rebuilt:
 
 ```
-docker run --env-from-file .env --rm pridec_etl  build_analytics
+docker compose run --env-from-file .env --rm etl build_analytics
 ```
 
 #### 1.2  `import_pivot` service to import Madagascar specific data (Pivot-only) [once per month]
@@ -77,10 +95,10 @@ docker run --env-from-file .env --rm pridec_etl  build_analytics
 This is an optional service to only be run on the Pivot PRIDE-C instance used by Pivot. It creates the `pridec_historical_` variables that are needed for predictions. This is needed because there is some cleaning and formatting we do with the raw `dataElements` to have high quality variables to predict.
 
 ```
-docker run --env-from-file .env --rm pridec_etl import_pivot_com
-docker run --env-from-file .env --rm pridec_etl import_pivot_csb
+docker compose run --env-from-file .env --rm etl import_pivot_com
+docker compose run --env-from-file .env --rm etl import_pivot_csb
 #analytics tables should be rebuilt after this
-docker run --env-from-file .env --rm pridec_etl build_analytics
+docker compose run --env-from-file .env --rm etl build_analytics
 ```
 
 ### 2. Forecast individual `dataElements` via `forecast`
@@ -96,19 +114,19 @@ The forecast step should be run for each dataElement being predicted. Its steps 
 This uses the ENV_VARIABLES stored in the `.env` file. It needs to be updated when using a different DHIS2 instance or dataSource following `.env.example`. This step is run for every `dataElement` that you wish to predict.
 
 ```
-docker run --env-from-file .env --rm pridec_etl fetch_climate
-docker run --env-from-file .env --rm pridec_etl fetch_disease
-docker run --env-from-file .env --rm pridec_etl fetch_geojson
+docker compose run --env-from-file .env --rm etl fetch_climate
+docker compose run --env-from-file .env --rm etl fetch_disease
+docker compose run --env-from-file .env --rm etl fetch_geojson
 ```
 
 #### 2.2. `forecast` service to create predictions (uses seperate docker image)
 
 Running the forecast requires a seperate docker image [pridec_forecast][here](https://hub.docker.com/r/mvevans89/pridec_forecast).
 
-For `forecast`, input must contain a `config.json` file and `external_data.csv` file. They can have other names, but must be in the `input` directory to work with compose. If their name is different, it needs to be supplied via an argument to `docker run`, as in the below example
+For `forecast`, input must contain a `config.json` file and `external_data.csv` file. They can have other names, but must be in the `input` directory to work with compose. If their name is different, it needs to be supplied via an argument to `docker compose run`, as in the below example
 
 ```
-docker  run --rm pridec_forecast --config "input/config.json"
+docker compose run --rm pridec_forecast --config "input/config.json"
 ```
 
 You should now inspect the model validation report in `output/forecast_report.html`. If everything seems okay, proceed to step `2c` to import the forecast into the PRIDE-C instance.
@@ -118,7 +136,7 @@ You should now inspect the model validation report in `output/forecast_report.ht
 Once the forecast has been validated, it can be posted to the instance.
 
 ```
-docker run --env-from-file .env --rm pridec_etl post_forecast
+docker compose run --env-from-file .env --rm etl post_forecast
 ```
 
 ### 3. PRIDE-C System Updates
@@ -134,8 +152,8 @@ Once all the forecasts have been posted, there are several steps to update the r
 Thie estimates the number of health centers expected to see more cases than the three year average for that season for each disease. It queries the `analytics` endpoint and so requries the analytics tables to be built first.
 
 ```
-docker run --env-from-file .env --rm pridec_etl build_analytics
-docker run --env-from-file .env --rm pridec_etl calc_CSB_alerts
+docker compose run --env-from-file .env --rm etl build_analytics
+docker compose run --env-from-file .env --rm etl calc_CSB_alerts
 ```
 
 #### 3.2. Build the analytics tables
@@ -143,7 +161,7 @@ docker run --env-from-file .env --rm pridec_etl calc_CSB_alerts
 Because the PRIDE-C app accessed data via a call to analytics, the tables must be built for the updated data to be available:
 
 ```
-docker run --env-from-file .env --rm pridec_etl build_analytics
+docker compose run --env-from-file .env --rm etl build_analytics
 ```
 
 #### 3.3. Update the PRIDE-C dataStore key
@@ -151,7 +169,7 @@ docker run --env-from-file .env --rm pridec_etl build_analytics
 This key is used by the application cache to trigger an update of data in a user's cache after the monthly update:
 
 ```
-docker run --env-from-file .env --rm pridec_etl update_key
+docker compose run --env-from-file .env --rm etl update_key
 ```
 
 
