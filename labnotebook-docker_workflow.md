@@ -11,13 +11,20 @@ DHIS2_PRIDEC_URL="http://localhost:8082/"
 DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 ```
 
+Building and pushing to Docker Hub (both images at once)
+
+```
+docker compose build && docker compose push
+```
+
+
 ## 2026-04-17
 
 Fixed the issues with the PRIDE-C package. Working on a lighter geospatial image.
 
 Also fixed the `mbind: Operation not permitted` error which was due to specific capabilities in the docker. It is is solved by adding the `SYS_NICE` capability (https://man7.org/linux/man-pages/man7/capabilities.7.html) to help cores manage how they are being used.
 
-I think for ease of use, I will keep using `docker compose` because there are so many things to specify that don't really change and it makes the one-liner commands much easier. What I can do though is put a compose file in each "sub-service" so that it is clear that they don't need to all be run at once.
+I think for ease of use, I will keep using `docker compose` because there are so many things to specify that don't really change and it makes the one-liner commands much easier. What I can do though is put a compose file in each "sub-service" so that it is clear that they don't need to all be run at once. We may need to split the docker compose into each image, so that it gets attached to the images when they are uploaded to Docker Hub, but I'm not 100% sure
 
 ## 2026-04-14
 
