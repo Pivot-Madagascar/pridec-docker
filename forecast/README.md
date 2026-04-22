@@ -2,28 +2,30 @@
 
 This docker image is used to run the PRIDE-C Forecast step.
 
-## Requirements
+# Usage
 
-## Install
+## Building Service
 
-From Docker Hub:
-
-```
-docker pull mvevans89/pridec_forecast
-docker build -t forecast .
-```
-
-From this repository locally, using the Dockerfile and compose YAML:
+The service should be built using `docker compose` v2. This will pull the image from the docker Hub, rather than building it locally.
 
 ```
+curl -o compose.yaml https://raw.githubusercontent.com/Pivot-Madagascar/pridec-docker/refs/heads/main/compose.yaml
 docker compose build forecast
 ```
 
-## Usage 
+You can also build the service locally from the github repo, downloaded via `git`. To build the service locally run:
 
-### Directory Structure
+```
+git clone https://github.com/Pivot-Madagascar/pridec-docker.git
+cd pridec-docker
+docker compose build forecast
+```
 
-The image requires the following directory structure:
+Note that the directory structure below must be added to the `pridec-docker` folder to run if it is built this way.
+
+## Directory Structure
+
+The image requires the following directory structure within the project directory:
 
 ```
 ──  input/

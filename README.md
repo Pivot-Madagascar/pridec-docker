@@ -28,7 +28,7 @@ cd pridec-docker
 
 This shell script will install the PRIDE-C Docker app and make it available via the command `pridec`. This will allow you to access the pridec services from anywhere using `pridec` instead of `docker compose`.
 
-Create a file called `pridec` in the pridec-docker directory. It should contain the following (only `COMPOSE_DIR` needs to be updated):
+Edit the file called `pridec` in the pridec-docker directory. It should contain the following (only `COMPOSE_DIR` needs to be updated):
 
 ```
 #!/bin/bash
@@ -38,7 +38,7 @@ HOST_PWD="$(pwd)"
 HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_DIR/compose-auto.yaml" "$@"
 ```
 
-Run the install script. This will take 15-20 minutes depending on your internet connection.:
+Run the install script. This will take 15-20 minutes depending on your internet connection.
 
 ```
 
@@ -58,8 +58,8 @@ which pridec
 You can also use the application directly via `docker compose`. This will take about 15 minutes the first time it is run.
 
 ```
-docker compose build
-docker compose build --no-cache #takes 15 minutes. ensures it is clean
+docker compose build -f compose-prod.yaml
+docker compose build -f compose-prod.yaml --no-cache #takes 15 minutes. ensures it is clean
 ```
 
 To access the PRIDE-C services for a manual install, you will need to use the `docker compose run` call to access the `etl` and `forecast` services.
@@ -76,9 +76,11 @@ The primary steps are:
 4. Create a `.env` file following `.env.example` in the `pridec-docker` directory
 5. Run the full workflow from the project directory. Some example code is below:
 
+Calling `pridec` will launch a one-off container, loading the .env file and exiting afterwards. It is equivalent to `docker compose -f "compose.yaml" run --env-from-file .env --rm` and can take arguments to each service. Run `pridec -h` for more details.
+
 ```
 #import data from GEE into your DHIS2 instance (this only needs to be done once per month)
-pridec run --env-from-file .env --env DRYRUN="true" --rm etl import_gee
+pridec --env DRYRUN="true" etl import_gee
 
 #import data from Pivot instance (this is specific to Ifanadiana and Pivot), run once per month
 pridec run --env-from-file .env --env DRYRUN=true --rm etl import_pivot_com
@@ -90,11 +92,14 @@ pridec run --env-from-file .env --env DRYRUN=true --rm etl build_analytics
 pridec run --env-from-file .env --env DRYRUN=true --rm etl fetch_climate
 pridec run --env-from-file .env --env DRYRUN=true --rm etl fetch_disease
 pridec run --env-from-file .env --env DRYRUN=true --rm etl fetch_geojson
-#allows you to keep the same URL and TOKEN and just change DISEASE_CODE
-pridec run --env-from-file .env --env DRYRUN="true" --env DISEASE_CODE="pridec_historic_CSBMalaria" --rm etl fetch_disease
 
-#config file can be changed for each disease
-pridec run --rm forecast --config "input/config_malaria.json"
+#allows you to keep the same URL and TOKEN and just change specific envvars
+pridec run --env-from-file .env --env DRYRUN=true --env OU_LEVEL='5' --rm etl fetch_climate
+pridec run --env-from-file .env --env DRYRUN=true --env OU_LEVEL='5' --rm etl fetch_geojson
+pridec run --env-from-file .env --env DRYRUN="false" --env DISEASE_CODE="pridec_historic_CSBMalaria" --env OU_LEVEL='5' --rm etl fetch_disease
+
+#config file can be changed for each disease. default is config.json
+pridec run --rm forecast --config "input/config_malaria.json" --external_data "input/external_data_csb.csv"
 
 #YOU SHOULD INSPECT output/forecast_report.html NOW
 
