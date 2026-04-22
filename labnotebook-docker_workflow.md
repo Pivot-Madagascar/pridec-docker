@@ -14,15 +14,22 @@ DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 Building and pushing to Docker Hub (both images at once)
 
 ```
-docker compose -f compose-build.yaml build && docker compose push
+docker compose -f compose-build.yaml build --no-cache && docker compose push
 ```
 
 ## 2026-04-22
 
 Checking everything works brand new.
 
-I am trying to streamline the pridec function, but there is a bit of confusion between docker compose arguments and arguments for the forecast entrypoint. I need some way to differentiate them
+I am trying to streamline the pridec function, but there is a bit of confusion between docker compose arguments and arguments for the forecast entrypoint. I need some way to differentiate them. I figured it out. Basically now all teh arguments are provided after the service and/or command, but the only arguments that can give to docker compose are environmental variables. The rest are built in. If someone really wants to change them they can update the compose.yaml file
 
+I am not going to worry about making github actions for these images. IT hink it makes the most sense to manually post them.
+
+I've built the geolight base image so make the build faster. It should work exactly teh same and I am just updating where I pull from in the Dockerfile for `forecast`. It includes the PRIDE-C packages for now
+
+
+**TO DO:**
+- ~~build a geolight base image to save build time for forecast image (basically everything but the R script and pridec packages)~~
 
 ## 2026-04-21
 
