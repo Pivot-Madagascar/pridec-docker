@@ -83,35 +83,35 @@ Calling `pridec` will launch a one-off container, loading the .env file and exit
 pridec --env DRYRUN="true" etl import_gee
 
 #import data from Pivot instance (this is specific to Ifanadiana and Pivot), run once per month
-pridec run --env-from-file .env --env DRYRUN=true --rm etl import_pivot_com
-pridec run --env-from-file .env --env DRYRUN=true --rm etl import_pivot_csb
+pridec --env-from-file .env --env DRYRUN=true --rm etl import_pivot_com
+pridec --env-from-file .env --env DRYRUN=true --rm etl import_pivot_csb
 
 #run analytics table before fetching
-pridec run --env-from-file .env --env DRYRUN=true --rm etl build_analytics
+pridec --env-from-file .env --env DRYRUN=true --rm etl build_analytics
 
-pridec run --env-from-file .env --env DRYRUN=true --rm etl fetch_climate
-pridec run --env-from-file .env --env DRYRUN=true --rm etl fetch_disease
-pridec run --env-from-file .env --env DRYRUN=true --rm etl fetch_geojson
+pridec --env-from-file .env --env DRYRUN=true --rm etl fetch_climate
+pridec --env-from-file .env --env DRYRUN=true --rm etl fetch_disease
+pridec --env-from-file .env --env DRYRUN=true --rm etl fetch_geojson
 
 #allows you to keep the same URL and TOKEN and just change specific envvars
-pridec run --env-from-file .env --env DRYRUN=true --env OU_LEVEL='5' --rm etl fetch_climate
-pridec run --env-from-file .env --env DRYRUN=true --env OU_LEVEL='5' --rm etl fetch_geojson
-pridec run --env-from-file .env --env DRYRUN="false" --env DISEASE_CODE="pridec_historic_CSBMalaria" --env OU_LEVEL='5' --rm etl fetch_disease
+pridec --env-from-file .env --env DRYRUN=true --env OU_LEVEL='5' --rm etl fetch_climate
+pridec --env-from-file .env --env DRYRUN=true --env OU_LEVEL='5' --rm etl fetch_geojson
+pridec --env-from-file .env --env DRYRUN="false" --env DISEASE_CODE="pridec_historic_CSBMalaria" --env OU_LEVEL='5' --rm etl fetch_disease
 
 #config file can be changed for each disease. default is config.json
-pridec run --rm forecast --config "input/config_malaria.json" --external_data "input/external_data_csb.csv"
+pridec --rm forecast --config "input/config_malaria.json" --external_data "input/external_data_csb.csv"
 
 #YOU SHOULD INSPECT output/forecast_report.html NOW
 
 #PAY ATTENTION HERE AS THIS WILL CHANGE YOUR INSTANCE. update DRYRUN as needed
-pridec run --env-from-file .env --env DRYRUN=true --rm etl post_forecast
+pridec --env-from-file .env --env DRYRUN=true --rm etl post_forecast
 
 #to run analytics table
-pridec run --env-from-file .env --env DRYRUN=true --rm etl build_analytics
+pridec --env-from-file .env --env DRYRUN=true --rm etl build_analytics
 #update key and CSB on alert
-pridec run --env-from-file .env --env DRYRUN="false" --rm etl calc_CSB_alerts
-pridec run --env-from-file .env --env DRYRUN="false" --rm etl update_key
-pridec run --env-from-file .env --env DRYRUN=true --rm etl build_analytics
+pridec --env-from-file .env --env DRYRUN="false" --rm etl calc_CSB_alerts
+pridec --env-from-file .env --env DRYRUN="false" --rm etl update_key
+pridec --env-from-file .env --env DRYRUN=true --rm etl build_analytics
 
 pridec down --remove-orphans
 ```

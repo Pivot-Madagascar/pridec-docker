@@ -22,5 +22,6 @@ case ":$PATH:" in
     ;;
 esac
 
-echo "SUCCESS: PRIDE-C app is now available via pridec run <service-name>"
-echo "Available services: etl, forecast"
+echo "SUCCESS: PRIDE-C app is now available via pridec <service-name>"
+echo "To uninstall: rm -f $HOME/bin/pridec"
+echo "Available services: etl, forecast, down. Run pridec --help for more info."

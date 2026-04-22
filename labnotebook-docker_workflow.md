@@ -17,24 +17,30 @@ Building and pushing to Docker Hub (both images at once)
 docker compose -f compose-build.yaml build && docker compose push
 ```
 
+## 2026-04-22
+
+Checking everything works brand new.
+
+I am trying to streamline the pridec function, but there is a bit of confusion between docker compose arguments and arguments for the forecast entrypoint. I need some way to differentiate them
+
 
 ## 2026-04-21
 
-Making some changes to how we use compose. There are now three compose files:
+Making some changes to how we use compose. There are now two compose files:
 
-`compose-build`: this builds the image locally. Needs to be done to update docker hub. Does not include volume mounts, so can only be used for building
-`compose`: this pulls the image from the Docker Hub or locally if it already exists. I have updated it to merge with `compose-auto` so that is can also use a provided argument of HOST_PWD. This means it is also used with the pridec call and allows for an installation without downloading all of the repo
+- `compose-build`: this builds the image locally. Needs to be done to update docker hub. Does not include volume mounts, so can only be used for building
+- `compose`: this pulls the image from the Docker Hub or locally if it already exists. I have updated it to merge with `compose-auto` so that is can also use a provided argument of HOST_PWD. This means it is also used with the pridec call and allows for an installation without downloading all of the repo
 
-The file needs to be specified anytime we use docker compose run, so I am changing compose-prod to compose.yaml, so it is the default. I have also updated the pridec "function" to use the correct compose file. I've also set the compose to create the directories on the host machine if they don't exist.
+The file needs to be specified anytime we use docker compose run, so  compose.yaml is the default. I have also updated the pridec "function" to use the correct compose file. I've also set the compose to create the directories on the host machine if they don't exist.
 
 I also updated the `pridec` function to give more informative messages and the install.sh file to pull an image rather than building one.
 
 It also now automatically takes the .env file from the current directory unless it is set seperately.
 
+If you use an older version of docker compose, you may get a warning about no build being available. This is noise and can be ignored.
+
 **TO DO:**
 - build a geolight base image to save build time for forecast image (basically everything but the R script and pridec packages)
-
-
 
 ## 2026-04-17
 

@@ -99,9 +99,9 @@ docker compose run --rm etl build_analytics
 This is an optional service to only be run on the Pivot PRIDE-C instance used by Pivot. It creates the `pridec_historical_` variables that are needed for predictions. This is needed because there is some cleaning and formatting we do with the raw `dataElements` to have high quality variables to predict.
 
 ```
-docker compose run --env-from-file .env --rm etl import_pivot_com
-docker compose run --env-from-file .env --rm etl import_pivot_csb
-#analytics tables should be rebuilt after this
+docker compose run --rm etl import_pivot_com
+docker compose run --rm etl import_pivot_csb
+#analytics tables should be rebuilt after this, example using --env-from-file
 docker compose run --env-from-file .env --rm etl build_analytics
 ```
 
@@ -118,9 +118,9 @@ The forecast step should be run for each dataElement being predicted. Its steps 
 This uses the ENV_VARIABLES stored in the `.env` file. It needs to be updated when using a different DHIS2 instance or dataSource following `.env.example`. This step is run for every `dataElement` that you wish to predict.
 
 ```
-docker compose run --env-from-file .env --rm etl fetch_climate
-docker compose run --env-from-file .env --rm etl fetch_disease
-docker compose run --env-from-file .env --rm etl fetch_geojson
+docker compose run --rm etl fetch_climate
+docker compose run --rm etl fetch_disease
+docker compose run --rm etl fetch_geojson
 ```
 
 ### 2.2. `forecast` service to create predictions (uses seperate docker image)
@@ -130,7 +130,7 @@ Running the forecast requires a seperate docker image [pridec_forecast][here](ht
 For `forecast`, input must contain a `config.json` file and `external_data.csv` file. They can have other names, but must be in the `input` directory to work with compose. If their name is different, it needs to be supplied via an argument to `docker compose run`, as in the below example
 
 ```
-docker compose run --rm pridec_forecast --config "input/config.json"
+docker compose run --rm forecast --config "input/config.json"
 ```
 
 You should now inspect the model validation report in `output/forecast_report.html`. If everything seems okay, proceed to step `2c` to import the forecast into the PRIDE-C instance.
@@ -140,7 +140,7 @@ You should now inspect the model validation report in `output/forecast_report.ht
 Once the forecast has been validated, it can be posted to the instance.
 
 ```
-docker compose run --env-from-file .env --rm etl post_forecast
+docker compose run --rm etl post_forecast
 ```
 
 ## 3. PRIDE-C System Updates
@@ -156,8 +156,8 @@ Once all the forecasts have been posted, there are several steps to update the r
 Thie estimates the number of health centers expected to see more cases than the three year average for that season for each disease. It queries the `analytics` endpoint and so requries the analytics tables to be built first.
 
 ```
-docker compose run --env-from-file .env --rm etl build_analytics
-docker compose run --env-from-file .env --rm etl calc_CSB_alerts
+docker compose run --rm etl build_analytics
+docker compose run --env DRYRUN='True' --rm etl calc_CSB_alerts
 ```
 
 ### 3.2. Build the analytics tables
@@ -165,7 +165,7 @@ docker compose run --env-from-file .env --rm etl calc_CSB_alerts
 Because the PRIDE-C app accessed data via a call to analytics, the tables must be built for the updated data to be available:
 
 ```
-docker compose run --env-from-file .env --rm etl build_analytics
+docker compose run --rm etl build_analytics
 ```
 
 ### 3.3. Update the PRIDE-C dataStore key
@@ -173,7 +173,7 @@ docker compose run --env-from-file .env --rm etl build_analytics
 This key is used by the application cache to trigger an update of data in a user's cache after the monthly update:
 
 ```
-docker compose run --env-from-file .env --rm etl update_key
+docker compose run --rm etl update_key
 ```
 
 

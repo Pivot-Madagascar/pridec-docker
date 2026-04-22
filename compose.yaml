@@ -12,7 +12,8 @@ services:
     image: mvevans89/pridec_etl:latest
     network_mode: "host"
     env_file:
-    - .env
+    - path: ${HOST_PWD:-.}/.env
+      required: false
     volumes:
      - type: bind
        source: ${HOST_PWD:-.}/input
@@ -37,7 +38,8 @@ services:
     image: mvevans89/pridec_forecast:latest
     network_mode: "host"
     env_file:
-    - .env
+    - path: ${HOST_PWD:-.}/.env
+      required: false
     cap_add:
       - SYS_NICE  
     volumes:
