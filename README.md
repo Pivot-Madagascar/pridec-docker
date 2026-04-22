@@ -28,17 +28,9 @@ cd pridec-docker
 
 This shell script will install the PRIDE-C Docker app and make it available via the command `pridec`. This will allow you to access the pridec services from anywhere using `pridec` instead of `docker compose`.
 
-Edit the file called `pridec` in the pridec-docker directory. It should contain the following (only `COMPOSE_DIR` needs to be updated):
+Edit the variable called `COMPOSE_FILE` in the file called `pridec` in the pridec-docker directory. It should be the full path to the compose.yaml file in this repo.
 
-```
-#!/bin/bash
-
-COMPOSE_DIR="/path/to/pridec-docker" #update to be path to installed repo
-HOST_PWD="$(pwd)"
-HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_DIR/compose-auto.yaml" "$@"
-```
-
-Run the install script. This will take 15-20 minutes depending on your internet connection.
+Run the install script. This will take 15-20 minutes depending on your internet connection and if the images are already local or not.
 
 ```
 
@@ -55,7 +47,7 @@ which pridec
 
 ### Manual install via `docker compose build`
 
-You can also use the application directly via `docker compose`. This will take about 15 minutes the first time it is run.
+You can also build the application directly via `docker compose`. This will take about 15 minutes the first time it is run.
 
 ```
 docker compose build -f compose-prod.yaml
@@ -63,6 +55,31 @@ docker compose build -f compose-prod.yaml --no-cache #takes 15 minutes. ensures 
 ```
 
 To access the PRIDE-C services for a manual install, you will need to use the `docker compose run` call to access the `etl` and `forecast` services.
+
+## Required files
+
+Your project direcoty should have at the least the following structure:
+
+```
+project/
+├── input/
+├── output/
+├── .env
+├── .gee-private-key.json
+```
+
+Additional folders and files can be present.
+
+The `.env` file should follows the template in `.env.example`.
+
+It also requires a GEE private key `.gee-private-key.json`. Instructions for creating this key can be found [here](https://developers.google.com/earth-engine/guides/service_account). Even if you are not using GEE, you should create an empty file using `touch .gee-private-key.json`.
+
+It is best to create the directories `input` and `output` yourself, so that read/write permission are transferred to your user. If they are made via docker, you will need to update the permissions:
+
+```
+sudo chmod -R +rw input/
+sudo chmod -R +rw output/
+```
 
 ## Usage (auto install)
 
@@ -80,40 +97,40 @@ Calling `pridec` will launch a one-off container, loading the .env file and exit
 
 ```
 #import data from GEE into your DHIS2 instance (this only needs to be done once per month)
-pridec --env DRYRUN="true" etl import_gee
+pridec etl import_gee -e DRYRUN="true"
 
 #import data from Pivot instance (this is specific to Ifanadiana and Pivot), run once per month
-pridec --env-from-file .env --env DRYRUN=true --rm etl import_pivot_com
-pridec --env-from-file .env --env DRYRUN=true --rm etl import_pivot_csb
+pridec etl import_pivot_com -e DRYRUN=true
+pridec etl import_pivot_csb -e DRYRUN=true
 
 #run analytics table before fetching
-pridec --env-from-file .env --env DRYRUN=true --rm etl build_analytics
+pridec etl build_analytics 
 
-pridec --env-from-file .env --env DRYRUN=true --rm etl fetch_climate
-pridec --env-from-file .env --env DRYRUN=true --rm etl fetch_disease
-pridec --env-from-file .env --env DRYRUN=true --rm etl fetch_geojson
+pridec etl fetch_climate
+pridec etl fetch_disease
+pridec etl fetch_geojson
 
 #allows you to keep the same URL and TOKEN and just change specific envvars
-pridec --env-from-file .env --env DRYRUN=true --env OU_LEVEL='5' --rm etl fetch_climate
-pridec --env-from-file .env --env DRYRUN=true --env OU_LEVEL='5' --rm etl fetch_geojson
-pridec --env-from-file .env --env DRYRUN="false" --env DISEASE_CODE="pridec_historic_CSBMalaria" --env OU_LEVEL='5' --rm etl fetch_disease
+pridec etl fetch_climate -e OU_LEVEL='5'
+pridec etl fetch_geojson -e OU_LEVEL='5'
+pridec etl fetch_disease -e DISEASE_CODE="pridec_historic_CSBMalaria" --e OU_LEVEL='5'
 
 #config file can be changed for each disease. default is config.json
-pridec --rm forecast --config "input/config_malaria.json" --external_data "input/external_data_csb.csv"
+pridec forecast --config "input/config_malaria.json" --external_data "input/external_data_csb.csv"
 
 #YOU SHOULD INSPECT output/forecast_report.html NOW
 
 #PAY ATTENTION HERE AS THIS WILL CHANGE YOUR INSTANCE. update DRYRUN as needed
-pridec --env-from-file .env --env DRYRUN=true --rm etl post_forecast
+pridec etl post_forecast -e DRYRUN=True
 
 #to run analytics table
-pridec --env-from-file .env --env DRYRUN=true --rm etl build_analytics
+pridec etl build_analytics
 #update key and CSB on alert
-pridec --env-from-file .env --env DRYRUN="false" --rm etl calc_CSB_alerts
-pridec --env-from-file .env --env DRYRUN="false" --rm etl update_key
-pridec --env-from-file .env --env DRYRUN=true --rm etl build_analytics
+pridec etl calc_CSB_alerts -e DRYRUN='True'
+pridec etl update_key
+pridec etl build_analytics
 
-pridec down --remove-orphans
+pridec down 
 ```
 
 ## Usage (manual install)
