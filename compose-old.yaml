@@ -1,33 +1,31 @@
 name: pridec
 
-# NOTE: because forecast relies on fetch, these should always be run via `docker compose run` to
-# launch a specific service and not the whole workflow at once
+# NOTE: these services are not meant to run in parellel. These should always be run via `docker compose run` to
+# launch a specific service and not the whole workflow at once. 
 
-# this compose file is used in the auto install that makes pridec app available anywhere
-# should match compose.yaml in all ways except that volumes are relative to ${HOST_PWD}
+# This pulls an already built image.
+
+#This is now done in the standard compose.yaml, but should be checked. MAY BE DEPRECATED
 
 services:
-
   etl:
     image: mvevans89/pridec_etl:latest
     network_mode: "host"
-    env_file:
-    - .env
     volumes:
      - type: bind
-       source: ${HOST_PWD:-.}/input
+       source: ./input
        target: /app/input
        bind:
-          create_host_path: true
+          create_host_path: false
        read_only: false
      - type: bind
-       source: ${HOST_PWD:-.}/output
+       source: ./output
        target: /app/output
        bind:
           create_host_path: true
        read_only: false
      - type: bind
-       source: ${HOST_PWD:-.}/.gee-private-key.json
+       source: ./.gee-private-key.json
        target: /app/.gee-private-key.json
        bind:
           create_host_path: false
@@ -36,20 +34,19 @@ services:
   forecast:
     image: mvevans89/pridec_forecast:latest
     network_mode: "host"
-    env_file:
-    - .env
     cap_add:
       - SYS_NICE  
     volumes:
      - type: bind
-       source: ${HOST_PWD:-.}/input
+       source: ./input
        target: /app/input
        bind:
           create_host_path: true
        read_only: true
      - type: bind
-       source: ${HOST_PWD:-.}/output
+       source: ./output
        target: /app/output
        bind:
           create_host_path: true
        read_only: false
+
