@@ -1,51 +1,12 @@
 #!/bin/sh
 set -e
 
-if [ ! -d "./input" ]; then
-    echo "Input directory does not exist. Creating..."
-    mkdir -p "./input"
-fi
-
-if [ ! -d "./output" ]; then
-    echo "Output directory does not exist. Creating..."
-    mkdir -p "./output"
-fi
-
-
-if [ ! -f ".env" ]; then
-    echo "Error: .env file not found. Creating .env file to be edited." 
-    cat > .env << 'EOF'
-    # generally leave these as is until you are ready to truly update data
-    dryRun='True'
-    LOG_LEVEL='DEBUG'
-
-    DHIS_URL="your-url" 
-    DHIS_TOKEN="your-token"
-
-    #id of parent orgUnit. Ifanadiana: "VtP4BdCeXIo"
-    PARENT_OU="VtP4BdCeXIo" 
-    #hierarchy level of orgUnit you are focused on
-    #for Ifanadiana, 6 = fokontany, 5 = CSB
-    OU_LEVEL='5'
-    DISEASE_CODE="pridec_historic_yourDataElement" #corresponds to DHIS2 dataElement code of disease to predict
-
-    #for importing GEE data
-    GEE_PROJECT = "YOUR_GEE_PROJECT_NAME"
-    GEE_SERVICE_ACCOUNT="YOUR_SERVICE_ACCOUNT@YOUR_CLOUD_PROJECT.iam.gserviceaccount.com"
-
-    #the below is only needed for Pivot-specific workflows to update DHIS2 data
-    PIVOT_URL="pivot-production-url"
-    PIVOT_TOKEN="your-token-for-pivot-instance"
-EOF
-    exit 1
-fi
-
 COMMAND="$1"
 shift || true  
 
 # Function to print usage/help
 print_usage() {
-    echo "Usage: docker run etl <command> [args]"
+    echo "Usage: docker compose run etl <command> [args]"
     echo ""
     echo "Available commands:"
     echo "  --help, -h              - View usage documentation"
@@ -58,10 +19,17 @@ print_usage() {
     echo "  post_forecast           - Post forecast to PRIDE-C instance"
     echo "  build_analytics         - Build the analytics table on PRIDE-C instance. This can take 10-15 minutes."
     echo "  calc_CSB_alerts         - Calculate the number of CSB on alert for this month and post to PRIDE-C instance"
-    echo "  update_key              - Update the datastore key used to trigger PRIDE-C cache reset every month. Run at the end of all updates"
+    echo "  update_key              - Update the datastore key used to trigger PRIDE-C cache reset every month." 
+    echo "                            Run at the end of all updates."
     echo ""
-    echo "Example:"
-    echo "  docker compose --env-from-file .env --env DRYRUN='true' etl fetch_climate"
+    echo "Examples:"
+    echo "  docker compose run etl fetch_geojson"
+    echo "  docker compose run --env-from-file .env --env DRYRUN='true' etl fetch_climate"
+    echo ""
+    echo "Notes:"
+    echo "- Automatically uses .env file in current directory." 
+    echo "  Specify another with the --env-from-file flag."
+    echo "  Individual environmental variables can be specified via --env."
 }
 
 # Show help if no command or -h/--help
