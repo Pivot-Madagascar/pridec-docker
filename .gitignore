@@ -13,10 +13,10 @@
 #vs code things
 .vscode/
 #python files
-.env
+.env*
 .venv/
 venv/
-*/.env
+*/.env*
 */.venv/
 */venv/
 **__pychache__/

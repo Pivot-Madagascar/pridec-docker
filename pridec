@@ -2,11 +2,13 @@
 
 #only works on Unix systems where `pwd` is a valid command
 #path to directory where compose.yaml file is found
-COMPOSE_DIR="/home/mevans/Dropbox/PIVOT/pride-c/appDev/pridec-docker" #update to be path to installed repo
-HOST_PWD="$(pwd)"
+COMPOSE_FILE="/home/mevans/Dropbox/PIVOT/pride-c/appDev/pridec-docker/compose.yaml" #EDIT PATH BEFORE INSTALL
+
+#DO NOT EDIT BELOW HERE -------------------------
 
 #help flag
-if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+print_usage() {
+
   echo ""
   echo "Usage: pridec [SERVICE] [COMMAND] [ARGS...]"
   echo ""
@@ -16,32 +18,81 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo "  pridec --help"
   echo "  pridec etl --help"
   echo "  pridec etl import_gee"
-  echo "  pridec forecast"
+  echo "  pridec etl import_gee"
+  echo "  pridec forecast --help"
   echo ""
   echo "Options:"
   echo "  -h, --help    Show this help message"
   echo ""
+  echo "Args:"
+  echo "  -e            Provide environmental variable to container. Example: -e DRYRUN=true"
+  echo "  Other service specific arguments.... See pridec [SERVICE] --help "
+  echo ""
   echo "Available services:"
-  echo "  etl"
-  echo "  forecast"
-  echo""
+  echo "  etl       - run ETL tasks"
+  echo "  forecast  - run forecast model"
+  echo "  down      - stop all containers and remove orphans"
+  echo ""
   echo "Notes:"
   echo "  - Runs with --rm (container stopped and removed after exit)"
-  echo "  - Environment loaded from .env in current directory. Alternate can be specified via --env-from-file flag"
+  echo "  - Environment loaded from .env in current directory"
   echo "  - ./input and ./output are mounted to the container"
   echo ""
-  exit 0
+}
+
+HOST_PWD="$(pwd)"
+
+SERVICE="${1:-}"
+if [ "$SERVICE" = "forecast" ]; then
+  COMMAND=""
+  [ $# -ge 1 ] && shift
+else
+  COMMAND="${2:-}"
+  [ $# -ge 1 ] && shift
+  [ $# -ge 1 ] && shift
 fi
 
-ENV_FILE=".env"
+ENV_VAR_ARGS=()
+CONTAINER_ARGS=()
 
-for arg in "$@"; do
-  case "$arg" in
-    --env-from-file=*)
-      ENV_FILE="${arg#*=}"
-      set -- $(echo "$@" | sed "s|$arg||")
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -e)
+      ENV_VAR_ARGS+=(-e "$2")
+      shift 2
+      ;;
+    *)
+      CONTAINER_ARGS+=("$1")
+      shift
       ;;
   esac
 done
 
-HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_DIR/compose.yaml" run --no-build --env-from-file "$ENV_FILE" --rm "$@"
+case "$SERVICE" in
+  etl|forecast|down) ;;  # valid, continue
+  *) print_usage; exit 0 ;;
+esac
+
+if [ "$SERVICE" == "down" ]; then
+  echo "Stopping pridec containers and removing orphans"
+  HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_FILE" down --remove-orphans
+  exit 0
+fi
+
+if [ "$SERVICE" = "etl" ] && { [ "$COMMAND" = "--help" ] || [ "$COMMAND" = "-h" ]; }; then
+  HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_FILE" run --rm etl --help
+  exit 0
+fi
+
+ENV_FILE="$HOST_PWD/.env"
+
+
+if [ "$SERVICE" == "etl" ]; then
+  HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_FILE" run --env-from-file "$ENV_FILE" "${ENV_VAR_ARGS[@]}" --rm etl "$COMMAND" "${CONTAINER_ARGS[@]}"
+  exit 0
+fi
+
+if [ "$SERVICE" == "forecast" ]; then
+  HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_FILE" run --env-from-file "$ENV_FILE" "${ENV_VAR_ARGS[@]}" --rm  forecast "${CONTAINER_ARGS[@]}"
+  exit 0
+fi
