@@ -8,11 +8,15 @@ dryRun = os.getenv('DRYRUN', 'true').lower() == 'true'
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
 
 #dhis api info
-DHIS_URL = os.getenv('DHIS_URL').rstrip('/')
+DHIS_URL = os.getenv('DHIS_URL')
+if DHIS_URL is not None:
+    DHIS_URL = DHIS_URL.rstrip('/')
 DHIS_TOKEN = os.getenv('DHIS_TOKEN')
 DHIS_USER = os.getenv('DHIS_USER')
 DHIS_PWD = os.getenv('DHIS_PWD')
 PIVOT_URL = os.environ.get('PIVOT_URL')
+if PIVOT_URL is not None:
+    PIVOT_URL = PIVOT_URL.rstrip('/')
 PIVOT_TOKEN = os.environ.get('PIVOT_TOKEN')
 
 PARENT_OU = os.environ.get('PARENT_OU')
