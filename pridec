@@ -1,9 +1,47 @@
 #!/bin/bash
 
+#only works on Unix systems where `pwd` is a valid command
 #path to directory where compose.yaml file is found
-#COMPOSE_DIR="/home/mevans/Dropbox/PIVOT/pride-c/appDev/pridec-docker" #update to be path to installed repo
-
-#automatically assign based on where pridec file is found (only works on linux)
-COMPOSE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE_DIR="/home/mevans/Dropbox/PIVOT/pride-c/appDev/pridec-docker" #update to be path to installed repo
 HOST_PWD="$(pwd)"
-HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_DIR/compose-auto.yaml" "$@"
+
+#help flag
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+  echo ""
+  echo "Usage: pridec [SERVICE] [COMMAND] [ARGS...]"
+  echo ""
+  echo "Launch a pridec container using docker compose."
+  echo ""
+  echo "Examples:"
+  echo "  pridec --help"
+  echo "  pridec etl --help"
+  echo "  pridec etl import_gee"
+  echo "  pridec forecast"
+  echo ""
+  echo "Options:"
+  echo "  -h, --help    Show this help message"
+  echo ""
+  echo "Available services:"
+  echo "  etl"
+  echo "  forecast"
+  echo""
+  echo "Notes:"
+  echo "  - Runs with --rm (container stopped and removed after exit)"
+  echo "  - Environment loaded from .env in current directory. Alternate can be specified via --env-from-file flag"
+  echo "  - ./input and ./output are mounted to the container"
+  echo ""
+  exit 0
+fi
+
+ENV_FILE=".env"
+
+for arg in "$@"; do
+  case "$arg" in
+    --env-from-file=*)
+      ENV_FILE="${arg#*=}"
+      set -- $(echo "$@" | sed "s|$arg||")
+      ;;
+  esac
+done
+
+HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_DIR/compose.yaml" run --no-build --env-from-file "$ENV_FILE" --rm "$@"
