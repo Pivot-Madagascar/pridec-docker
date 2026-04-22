@@ -14,8 +14,26 @@ DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 Building and pushing to Docker Hub (both images at once)
 
 ```
-docker compose build && docker compose push
+docker compose -f compose-build.yaml build && docker compose push
 ```
+
+
+## 2026-04-21
+
+Making some changes to how we use compose. There are now three compose files:
+
+`compose-build`: this builds the image locally. Needs to be done to update docker hub. Does not include volume mounts, so can only be used for building
+`compose`: this pulls the image from the Docker Hub or locally if it already exists. I have updated it to merge with `compose-auto` so that is can also use a provided argument of HOST_PWD. This means it is also used with the pridec call and allows for an installation without downloading all of the repo
+
+The file needs to be specified anytime we use docker compose run, so I am changing compose-prod to compose.yaml, so it is the default. I have also updated the pridec "function" to use the correct compose file. I've also set the compose to create the directories on the host machine if they don't exist.
+
+I also updated the `pridec` function to give more informative messages and the install.sh file to pull an image rather than building one.
+
+It also now automatically takes the .env file from the current directory unless it is set seperately.
+
+**TO DO:**
+- build a geolight base image to save build time for forecast image (basically everything but the R script and pridec packages)
+
 
 
 ## 2026-04-17
@@ -24,7 +42,11 @@ Fixed the issues with the PRIDE-C package. Working on a lighter geospatial image
 
 Also fixed the `mbind: Operation not permitted` error which was due to specific capabilities in the docker. It is is solved by adding the `SYS_NICE` capability (https://man7.org/linux/man-pages/man7/capabilities.7.html) to help cores manage how they are being used.
 
-I think for ease of use, I will keep using `docker compose` because there are so many things to specify that don't really change and it makes the one-liner commands much easier. What I can do though is put a compose file in each "sub-service" so that it is clear that they don't need to all be run at once. We may need to split the docker compose into each image, so that it gets attached to the images when they are uploaded to Docker Hub, but I'm not 100% sure
+I think for ease of use, I will keep using `docker compose` because there are so many things to specify that don't really change and it makes the one-liner commands much easier. What I can do though is put a compose file in each "sub-service" so that it is clear that they don't need to all be run at once. We may need to split the docker compose into each image, so that it gets attached to the images when they are uploaded to Docker Hub, but I'm not 100% sure.
+
+**TO DO:**
+- create github action to update docker image on PR to main branch. These could then be pulled directly by the ETL application.
+
 
 ## 2026-04-14
 
