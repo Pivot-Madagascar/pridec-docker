@@ -17,6 +17,15 @@ Building and pushing to Docker Hub (both images at once)
 docker compose -f compose-build.yaml build --no-cache && docker compose push
 ```
 
+## 2026-04-24
+
+I have updated the pridec_gee package to take variable names now. This is a breaking change and so it needs to be updated here.
+
+**TO DO:**
+- create issue for pridec_gee update
+- update code to take a subset of variables (config file? env variables?)
+- set version of pride_gee package in build to avoid version issues in future (should be able to cite specific release from github)
+
 ## 2026-04-22
 
 Checking everything works brand new.
