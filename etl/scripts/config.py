@@ -1,7 +1,9 @@
 from dotenv import load_dotenv
 import os
+from pridec_gee import AVAILABLE_VARIABLES
 
 load_dotenv(override=False)
+
 
 #run configurations
 dryRun = os.getenv('DRYRUN', 'true').lower() == 'true'
@@ -26,6 +28,8 @@ DISEASE_CODE = os.environ.get('DISEASE_CODE')
 #gee info
 GEE_PROJECT = os.environ.get('GEE_PROJECT')
 GEE_SERVICE_ACCOUNT = os.environ.get('GEE_SERVICE_ACCOUNT')
+#set to all available variables if blank, return python list
+GEE_VARIABLES =  [v.strip() for v in os.environ.get("GEE_VARIABLES", "").split(",") if v.strip()] or AVAILABLE_VARIABLES
 
 
 

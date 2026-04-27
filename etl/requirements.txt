@@ -8,6 +8,6 @@ logging
 argparse
 ee
 earthengine-api
-git+https://github.com/Pivot-Madagascar/pridec_gee@main#egg=pridec_gee
-git+https://github.com/Pivot-Madagascar/pivot_dhis_tools@main#egg=pivot_dhis_tools
+pridec_gee @ git+https://github.com/Pivot-Madagascar/pridec_gee@v0.2.0
+pivot_dhis_tools @ git+https://github.com/Pivot-Madagascar/pivot_dhis_tools@f45f1fe
 
