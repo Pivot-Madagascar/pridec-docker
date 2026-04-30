@@ -37,7 +37,7 @@ GEE_VARIABLES =  [v.strip() for v in os.environ.get("GEE_VARIABLES", "").split("
 def setup_logging():
     import logging
 
-    from config import LOG_LEVEL
+
 
     logging.basicConfig(format='%(asctime)s | %(levelname)s | %(name)s | %(message)s', 
                         level=getattr(logging, LOG_LEVEL, logging.INFO),
