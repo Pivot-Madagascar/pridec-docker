@@ -1,32 +1,39 @@
-from config import DHIS_TOKEN, DHIS_URL, OU_LEVEL, PARENT_OU, setup_logging, check_envvars
+from .config import DHIS_TOKEN, DHIS_URL, OU_LEVEL, PARENT_OU, setup_logging, check_envvars
 from requests.auth import HTTPBasicAuth
 import logging
 import json
+import os
 
 from pridec_gee import get_dhis_geojson
 
-setup_logging()
+def fetch_geojson():
+    setup_logging()
 
-logger = logging.getLogger("fetch_pridec_geojson")
+    logger = logging.getLogger("fetch_pridec_geojson")
 
+    check_envvars(required_vars = {
+                'DHIS_TOKEN': DHIS_TOKEN,
+                'DHIS_URL': DHIS_URL,
+                'PARENT_OU': PARENT_OU,
+                'OU_LEVEL': OU_LEVEL,
+            }
+    )
 
-check_envvars(required_vars = {
-            'DHIS_TOKEN': DHIS_TOKEN,
-            'DHIS_URL': DHIS_URL,
-            'PARENT_OU': PARENT_OU,
-            'OU_LEVEL': OU_LEVEL,
-        }
-)
+    if not os.path.isdir('input'):
+        raise NotADirectoryError("Directory 'input' not found.")
 
-logger.info("Fetching Geojson for orgUnit level %s under parent %s", OU_LEVEL, PARENT_OU)
+    logger.info("Fetching Geojson for orgUnit level %s under parent %s", OU_LEVEL, PARENT_OU)
 
-org_units = get_dhis_geojson(parent_ou = PARENT_OU,
-                             ou_level = OU_LEVEL,
-                             dhis_url = DHIS_URL,
-                             dhis_token = DHIS_TOKEN)
+    org_units = get_dhis_geojson(parent_ou = PARENT_OU,
+                                 ou_level = OU_LEVEL,
+                                 dhis_url = DHIS_URL,
+                                 dhis_token = DHIS_TOKEN)
 
-with open("input/orgUnit_poly.geojson", "w", encoding="utf‑8") as f:
-    json.dump(org_units, f, ensure_ascii=False)
+    with open("input/orgUnit_poly.geojson", "w", encoding="utf-8") as f:
+        json.dump(org_units, f, ensure_ascii=False)
 
-logger.info("Saved geojson polygons to input/orgUnit_poly.geojson")
+    logger.info("Saved geojson polygons to input/orgUnit_poly.geojson")
+
+if __name__ == "__main__":
+    fetch_geojson()
 
