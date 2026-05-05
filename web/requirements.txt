@@ -1,0 +1,15 @@
+fastapi==0.68.0
+uvicorn==0.15.0
+pydantic==1.10.13
+python-dotenv
+setuptools
+Requests
+python-dateutil
+pandas
+numpy
+logging
+argparse
+ee
+earthengine-api
+pridec_gee @ git+https://github.com/Pivot-Madagascar/pridec_gee@v0.2.0
+pivot_dhis_tools @ git+https://github.com/Pivot-Madagascar/pivot_dhis_tools@f45f1fe
