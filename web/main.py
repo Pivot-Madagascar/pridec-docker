@@ -10,6 +10,11 @@ import json
 from pathlib import Path
 from forecast_runner import run_rscript, JOBS, DATA_DIR
 
+# Set working directory to project root (where .gee-private-key.json lives)
+# so ETL scripts can find it via os.getcwd()
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(PROJECT_ROOT)
+
 # Add the parent directory to the Python path to import the etl package
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 

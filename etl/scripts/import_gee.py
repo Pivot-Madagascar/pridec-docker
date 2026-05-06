@@ -23,7 +23,7 @@ def import_gee():
     )
 
     # configs and env vars
-    gee_key_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.gee-private-key.json')
+    gee_key_path = os.path.join(os.getcwd(), '.gee-private-key.json')
     if not os.path.isfile(gee_key_path):
         raise FileNotFoundError(f"'.gee-private-key.json' not found at {gee_key_path}. Current dir: {os.getcwd()}")
 
