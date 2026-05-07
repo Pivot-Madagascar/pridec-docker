@@ -6,31 +6,25 @@ from datetime import datetime
 
 JOBS = {}  # Global dict to store job statuses in memory
 DATA_DIR = Path('.')  # Base directory for data
+LOGS_DIR = DATA_DIR / "logs"  # Directory for job status logs
 
 def run_rscript(job_id, params):
-    # Create status directory if it doesn't exist
-    status_dir = DATA_DIR / "output" / job_id
-    status_dir.mkdir(parents=True, exist_ok=True)
-    status_file = status_dir / "status.json"
-    
     # Initial status
     status = {
         "status": "running",
         "started": datetime.now().isoformat(),
         "job_id": job_id
     }
-    with open(status_file, 'w') as f:
-        json.dump(status, f)
     JOBS[job_id] = status
-    
+
     # Get HOST_PWD from environment
     host_pwd = os.getenv('HOST_PWD', '.')
     env_file = os.path.join(host_pwd, '.env')
-    
+
     # Volume bindings
     input_vol = f"{host_pwd}/input:/app/input:ro"
     output_vol = f"{host_pwd}/output:/app/output:rw"
-    
+
     # Docker run command
     cmd = [
         'docker', 'run', '--rm',
@@ -46,7 +40,7 @@ def run_rscript(job_id, params):
         '--disease_data', params['disease_data'],
         '--orgUnit_poly', params['orgUnit_poly']
     ]
-    
+
     try:
         result = subprocess.run(cmd, capture_output=True, text=True)
         completed = datetime.now().isoformat()
@@ -69,8 +63,16 @@ def run_rscript(job_id, params):
             "completed": datetime.now().isoformat(),
             "message": str(e)
         })
-    
-    # Update status file and in-memory dict
-    with open(status_file, 'w') as f:
-        json.dump(status, f)
+
+    # Write status file after docker run
+    try:
+        LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        status_file = LOGS_DIR / f"{job_id}.json"
+        with open(status_file, 'w') as f:
+            json.dump(status, f)
+    except Exception as e:
+        # If can't write status file, log error but don't change status
+        print(f"Warning: Could not write status file: {e}")
+
+    # Update in-memory dict
     JOBS[job_id] = status
