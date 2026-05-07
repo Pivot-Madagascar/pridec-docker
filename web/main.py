@@ -8,7 +8,7 @@ import requests
 import uuid
 import json
 from pathlib import Path
-from forecast_runner import run_rscript, JOBS, DATA_DIR
+from forecast_runner import run_rscript, JOBS, DATA_DIR, LOGS_DIR
 
 # Set working directory to project root (where .gee-private-key.json lives)
 # so ETL scripts can find it via os.getcwd()
@@ -160,7 +160,7 @@ async def forecast_status(job_id: str):
         return JOBS[job_id]
 
     # Fallback fichier après redémarrage
-    status_file = DATA_DIR / "output" / job_id / "status.json"
+    status_file = LOGS_DIR / f"{job_id}.json"
     if status_file.exists():
         return json.loads(status_file.read_text())
 
