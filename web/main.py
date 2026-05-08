@@ -8,7 +8,7 @@ import requests
 import uuid
 import json
 from pathlib import Path
-from forecast_runner import run_rscript, JOBS, DATA_DIR, LOGS_DIR
+from .forecast_runner import run_rscript, JOBS, DATA_DIR, LOGS_DIR
 
 # Set working directory to project root (where .gee-private-key.json lives)
 # so ETL scripts can find it via os.getcwd()

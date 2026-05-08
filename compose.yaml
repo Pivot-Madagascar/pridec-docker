@@ -55,3 +55,37 @@ services:
        bind:
           create_host_path: true
        read_only: false
+
+  web:
+    image: pridec_web:latest
+    network_mode: "host"
+    env_file:
+      - path: ${HOST_PWD:-.}/.env
+        required: false
+    environment:
+      HOST_PWD: ${HOST_PWD:-.}
+    volumes:
+      - type: bind
+        source: ${HOST_PWD:-.}/input
+        target: /app/input
+        bind:
+          create_host_path: true
+        read_only: false
+      - type: bind
+        source: ${HOST_PWD:-.}/output
+        target: /app/output
+        bind:
+          create_host_path: true
+        read_only: false
+      - type: bind
+        source: ${HOST_PWD:-.}/.gee-private-key.json
+        target: /app/.gee-private-key.json
+        bind:
+          create_host_path: false
+        read_only: true
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        bind:
+          create_host_path: false
+        read_only: false
