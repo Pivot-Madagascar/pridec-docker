@@ -1,3 +1,27 @@
+import argparse
+
+def print_help():
+    print(f"""
+Task: import_pivot_COM
+
+Usage:
+-   Import disease cases reported at community health sites during prior three months from Pivot DHIS2 instance to PRIDE-C instance
+
+Notes:
+-   This requires `PIVOT_URL` and `PIVOT_TOKEN` in .env
+-   The fokontany imported are limited to those that were supported from YEAR.
+""")
+
+parser = argparse.ArgumentParser(add_help=False)  # disable default help
+parser.add_argument("--help", "-h", action="store_true")
+
+args = parser.parse_args()
+
+if args.help:
+    print_help()
+    exit(0)
+
+
 from config import DHIS_TOKEN, DHIS_URL, PIVOT_URL, PIVOT_TOKEN, dryRun, setup_logging, check_envvars
 from requests.auth import HTTPBasicAuth
 import pandas as pd
