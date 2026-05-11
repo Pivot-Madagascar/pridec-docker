@@ -17,6 +17,36 @@ Building and pushing to Docker Hub (both images at once)
 docker compose -f compose-build.yaml build --no-cache && docker compose push
 ```
 
+## 2026-05-04
+
+Running PRIDE-C update and continuing to have issue with INLA"
+
+```
+Error: INLA model failed with error message:
+ $ operator is invalid for atomic vectors
+In addition: Warning message:
+In parallel::mclapply(1:cs$nconfig, (function(k) { :
+  scheduled cores 2, 4, 7, 10, 9 encountered errors in user code, all values of the jobs will be affected
+Execution halted
+```
+
+Before, I thought this was due to how INLA configs were being passed by that has been fixed in the PRIDE-C package with this commit: https://github.com/Pivot-Madagascar/PRIDEC-package/commit/d97120c7ec8474b85f385d43e34331ad74c36710#diff-286214608d5669437d8e884f9aadccba8f00e9910b751d433519f37057c66cf0
+
+I am trying to solve this in the R Package but I think in the end it may be a version issue or a matrix library issue. Unfortunately this is now done via the geolight package, so I need to update it in that first.
+
+
+**TO DO:**
+- update how the options/arguments are provided to use `--` for parsing so that I can still debug things and run them interactively
+
+## 2026-04-27
+
+Updated the code to use the new pridec_gee package. I fully forgot to make an issue for this, but one kind of already existed. This included updating teh code to use a subset of variables and setting the python package versions
+
+Adding soem informative help messages to the etl python scripts so tehy can be run with the -h or --help flag and provide useful information.
+
+**TO DO:**
+
+
 ## 2026-04-24
 
 I have updated the pridec_gee package to take variable names now. This is a breaking change and so it needs to be updated here.

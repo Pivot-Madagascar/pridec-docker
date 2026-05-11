@@ -1,3 +1,23 @@
+def print_help():
+    print(f"""
+Task: post_forecast
+
+Usage:
+-   POSTs a forecast in the form of output/forecast.json to the PRIDE-C instance
+
+Notes:
+-   None
+""")
+
+parser = argparse.ArgumentParser(add_help=False)  # disable default help
+parser.add_argument("--help", "-h", action="store_true")
+
+args = parser.parse_args()
+
+if args.help:
+    print_help()
+    exit(0)
+
 from config import DHIS_TOKEN, DHIS_URL, dryRun, setup_logging, check_envvars
 from pivot_dhis_tools import post_dataElements
 import os
