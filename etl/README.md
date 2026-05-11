@@ -58,6 +58,8 @@ OU_LEVEL='6' #hierarchical level of orgUnits, numeric
 
 GEE_PROJECT='your-project-name'
 GEE_SERVICE_ACCOUNT='your-account@your-project.iam.gserviceaccount.com'
+#optional, empty will import all variables
+GEE_VARIABLES="pridec_climate_var1,pridec_climate_var2"
 
 #only needed for import_pivot data services
 PIVOT_URL="pivot-prod-url"
@@ -66,23 +68,29 @@ PIVOT_TOKEN="d2pat_your-pivot-token"
 
 Individual environmental variables can also be provided to the docker service via the `--env` flag when running.
 
-## Available commands
+## Available tasks
 
-The available commands can be queried by running:
+The docker image contains several PRIDE-C ETL tasks. The available tasks can be queried by running:
 
 ```
 docker compose run etl --help
 ```
 
-It is recommended to run commands with the `--rm` flag to prevent orphaned containers.
+It is recommended to run tasks with the `--rm` flag to prevent orphaned containers.
 
 # General PRIDE-C workflow
 
 ## 1. Import health and climate data into PRIDE-C instance
 
-### 1.1 `import_gee` service to import GEE climate varables into DHIS2 instance [once per month]
+### 1.1 `import_gee` task to import GEE climate varables into DHIS2 instance [once per month]
 
-This requires having a `.gee-private-key.json` in the root directory as well as a `GEE_SERVICE_ACCOUNT` in `.env`. There is one climate variable that is specific to Ifanadiana (`pridec_climate_floodedRice`), but could be applied to other regions if they provide a polygon of ricefields.
+This requires having a `.gee-private-key.json` in the root directory as well as a `GEE_SERVICE_ACCOUNT` in `.env`. There is one climate variable that is specific to Ifanadiana (`pridec_climate_floodedRice`), but could be applied to other regions if they provide a polygon of ricefields. By default, it imports all ten PRIDE-C climate variables. To import a sub-selection, provide the list of variable names via the `GEE_VARIABLES` environmental variable. Available variables can be listed by querying the task help flag:
+
+```
+docker compose run --rm etl import_gee --help
+```
+
+To launch the task with defaults following the `.env` file in your directory, run:
 
 ```
 docker compose run --rm etl import_gee
@@ -94,9 +102,9 @@ In order for this data to be available via `analytics` calls, the Analytics Tabl
 docker compose run --rm etl build_analytics
 ```
 
-### 1.2  `import_pivot` service to import Madagascar specific data (Pivot-only) [once per month]
+### 1.2  `import_pivot` task to import Madagascar specific data (Pivot-only) [once per month]
 
-This is an optional service to only be run on the Pivot PRIDE-C instance used by Pivot. It creates the `pridec_historical_` variables that are needed for predictions. This is needed because there is some cleaning and formatting we do with the raw `dataElements` to have high quality variables to predict.
+This is an optional task to only be run on the Pivot PRIDE-C instance used by Pivot. It creates the `pridec_historical_` variables that are needed for predictions. This is needed because there is some cleaning and formatting we do with the raw `dataElements` to have high quality variables to predict.
 
 ```
 docker compose run --rm etl import_pivot_com
@@ -113,7 +121,7 @@ The forecast step should be run for each dataElement being predicted. Its steps 
 2. Using the data in the `forecast` workflow (this is available in a seperate docker image [here](https://hub.docker.com/r/mvevans89/pridec_forecast))
 3. `POST`ing the forecasts to the PRIDE-C instance
 
-### 2.1. `fetch` service to download climate, disease, and geospatial data
+### 2.1. `fetch` task to download climate, disease, and geospatial data
 
 This uses the ENV_VARIABLES stored in the `.env` file. It needs to be updated when using a different DHIS2 instance or dataSource following `.env.example`. This step is run for every `dataElement` that you wish to predict.
 
