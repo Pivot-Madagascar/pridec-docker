@@ -187,37 +187,25 @@ async def root():
   </style>
 </head>
 <body>
-  <header>
-    <h1>PRIDE-C ETL</h1>
-    <div class="header-right">
-      <span class="env-badge">Environment: Development</span>
-      <button class="dark-mode-btn" onclick="toggleDarkMode()" id="darkModeBtn">Dark Mode</button>
-    </div>
-  </header>
   <main>
     <div class="card">
       <div class="card-title">
-        <h2>Welcome to PRIDE-C ETL</h2>
-        <p>Data ingestion and forecasting platform for malaria surveillance</p>
+        <h2>Welcome to PRIDE-C ETL Orchestrator</h2>
       </div>
       <div style="display:flex;flex-direction:column;gap:0.75rem;">
-        <a href="/data-fetch" class="btn btn-orange">
+        <a href="/docs" class="btn btn-orange">
           <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
           Fetch Data
         </a>
-        <a href="/forecasting" class="btn btn-blue">
+        <a href="/docs" class="btn btn-blue">
           <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
           Run Forecast
         </a>
       </div>
         <div class="divider"><span>More options</span></div>
         <div class="secondary-grid">
-          <a href="/reports" class="btn btn-gray">Reports</a>
-          <a href="/forecast-post" class="btn btn-gray">Post Forecast</a>
-        </div>
-        <div class="secondary-grid">
           <a href="/docs" class="btn btn-gray">API Docs</a>
-          <a href="/login" class="btn btn-gray" style="color:#2563eb;">Log In</a>
+          <a href="/" class="btn btn-gray" style="color:#2563eb;">Log In</a>
         </div>
     </div>
   </main>
