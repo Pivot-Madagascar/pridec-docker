@@ -190,7 +190,7 @@ async def root():
   <main>
     <div class="card">
       <div class="card-title">
-        <h2>Welcome to PRIDE-C ETL Orchestrator</h2>
+        <h2>Welcome to <br>PRIDE-C ETL Pipeline Orchestrator</h2>
       </div>
       <div style="display:flex;flex-direction:column;gap:0.75rem;">
         <a href="/docs" class="btn btn-orange">
