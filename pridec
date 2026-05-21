@@ -6,6 +6,12 @@ COMPOSE_FILE="/home/mevans/Dropbox/PIVOT/pride-c/appDev/pridec-docker/compose.ya
 
 #DO NOT EDIT BELOW HERE -------------------------
 
+if [[ "$(basename "$COMPOSE_FILE")" != "compose.yaml" ]]; then
+  echo "Error: COMPOSE_FILE must point to the compose.yaml file in the pridec-docker repo. Got: '$COMPOSE_FILE'"
+  echo "Please update the COMPOSE_FILE line in the pridec file"
+  exit 1
+fi
+
 #help flag
 print_usage() {
 
