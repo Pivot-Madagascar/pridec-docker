@@ -2,6 +2,7 @@
 
 #pull image
 echo "Pulling pridec docker image. This will download a 3 GB image."
+docker compose --file compose.yaml pull
 docker compose --file compose.yaml build
 
 
