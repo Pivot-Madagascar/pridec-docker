@@ -1,3 +1,31 @@
+import argparse
+from pridec_gee import AVAILABLE_VARIABLES
+
+def print_help():
+    print(f"""
+Task: import_gee
+
+Usage:
+-   Imports climate variables from GEE into DHIS2 instance
+
+Notes:
+-   The selection of climate variables is provided via an environmental variable
+    `GEE_VARIABLES`, which is a string with variable names separated by commas.
+    Example: `GEE_VARIABLES='pridec_climate_temperatureMean,pridec_climate_mndwi'`
+
+The available variables are:
+{chr(10).join(f'  - {v}' for v in AVAILABLE_VARIABLES)}
+""")
+    
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument("--help", "-h", action="store_true")
+
+args = parser.parse_args()
+
+if args.help:
+    print_help()
+    exit(0)
+
 from config import DHIS_TOKEN, DHIS_URL, PARENT_OU, GEE_SERVICE_ACCOUNT, GEE_VARIABLES, dryRun, setup_logging, check_envvars
 import json
 import ee

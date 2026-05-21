@@ -1,3 +1,26 @@
+import argparse
+
+def print_help():
+    print(f"""
+Task: fetch_pridec_geojson
+
+Usage:
+-   Downloads geojson data of orgUnit polygons from DHIS2 instance and saves into `input` folder. 
+
+Notes:
+-   Geojson will be downloaded for the orgUnit level specified in .env via OU_LEVEL.
+    Fokontany = 6. CSB = 5.
+""")
+
+parser = argparse.ArgumentParser(add_help=False)  # disable default help
+parser.add_argument("--help", "-h", action="store_true")
+
+args = parser.parse_args()
+
+if args.help:
+    print_help()
+    exit(0)
+
 from config import DHIS_TOKEN, DHIS_URL, OU_LEVEL, PARENT_OU, setup_logging, check_envvars
 from requests.auth import HTTPBasicAuth
 import logging
