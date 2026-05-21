@@ -22,10 +22,12 @@ Going back to fix this INLA issue. I will update the geolight package first to b
 
 Also creating test inputs and scripts to make them.
 
+Added check to pridec to be sure it pulls the docker images and that the compose file is valid
+
 
 ## 2026-05-04
 
-Running PRIDE-C update and continuing to have issue with INLA"
+Running PRIDE-C update and continuing to have issue with INLA:
 
 ```
 Error: INLA model failed with error message:
