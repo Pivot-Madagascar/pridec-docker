@@ -16,12 +16,12 @@ Building and pushing to Docker Hub (both images at once)
 ```
 docker compose -f compose-build.yaml build --no-cache && docker compose push
 ```
-
 ## 2026-05-21
 
 Going back to fix this INLA issue. I will update the geolight package first to be more precise about versioning.
 
 Also creating test inputs and scripts to make them.
+
 
 ## 2026-05-04
 
@@ -43,6 +43,7 @@ I am trying to solve this in the R Package but I think in the end it may be a ve
 
 **TO DO:**
 - update how the options/arguments are provided to use `--` for parsing so that I can still debug things and run them interactively [not doing this anymore, can just run manually for dev]
+
 
 ## 2026-04-27
 
