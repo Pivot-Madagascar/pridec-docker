@@ -1,3 +1,24 @@
+def print_help():
+    print(f"""
+Task: calc_CSB_alerts
+
+Usage:
+-   Estimates the number of health facilities expecting more usage than average of prior three years and
+          posts this information to the PRIDE-C instance
+
+Notes:
+-   This currently runs only on the Pivot PRIDE-C instance due to specific configurations.
+""")
+
+parser = argparse.ArgumentParser(add_help=False)  # disable default help
+parser.add_argument("--help", "-h", action="store_true")
+
+args = parser.parse_args()
+
+if args.help:
+    print_help()
+    exit(0)
+
 from config import DHIS_TOKEN, DHIS_URL, dryRun, setup_logging, check_envvars
 from pivot_dhis_tools import post_dataElements, pridec_calc_CSB_alerts
 import os

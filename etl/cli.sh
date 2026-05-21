@@ -6,11 +6,11 @@ shift || true
 
 # Function to print usage/help
 print_usage() {
-    echo "Usage: docker compose run etl <command> [args]"
+    echo "Usage: docker compose run etl <task> [args]"
     echo ""
-    echo "Available commands:"
+    echo "Available tasks:"
     echo "  --help, -h           - View usage documentation."
-    echo "  import_gee           - Import climate data from GEE to PRIDE-C instance."
+    echo "  import_gee           - Import climate data from GEE to PRIDE-C instance. Can supply variables to import as env var GEE_VARIABLES."
     echo "  import_pivot_com     - Import historical COM data from Pivot instance to PRIDE-C instance. Pivot use only."
     echo "  import_pivot_csb     - Import historical CSB data from Pivot instance to PRIDE-C instance. Pivot use only."
     echo "  fetch_climate        - Download climate data from PRIDE-C instance to input folder."
@@ -25,6 +25,7 @@ print_usage() {
     echo "Examples:"
     echo "  docker compose run etl fetch_geojson"
     echo "  docker compose run --env-from-file .env --env DRYRUN='true' etl fetch_climate"
+    echo "  docker compose run --env GEE_VARIABLES='pridec_climate_temperatureMean,pridec_climate_windspeed' --env LOG_LEVEL='INFO' etl import_gee"
     echo ""
     echo "Notes:"
     echo "- Automatically uses .env file in current directory." 
