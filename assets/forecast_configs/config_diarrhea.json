@@ -1,0 +1,30 @@
+{
+    "pred_vars": ["imp_latrine", "rotavirus", "wealth_index", "imp_water", "fete_nationale", 
+    "pridec_climate_precipitation", "pridec_climate_mndwi", "stream_dist", "elevation", 
+    "pridec_climate_temperatureMean",  "build_density"],
+    "model_weights": [
+        {
+            "model" : "inla",
+            "weight": 0.36
+        },
+                {
+            "model" : "glm_nb",
+            "weight": 0.0
+        },
+                {
+            "model" : "ranger",
+            "weight": 0.6
+        },
+                {
+            "model" : "arimax",
+            "weight": 0
+        },
+                {
+            "model" : "naive",
+            "weight": 0.25
+        }
+    ],
+    "quantile_levels" : [0.05, 0.5, 0.95],
+    "month_analysis" : 60,
+    "month_assess" : 3
+}
