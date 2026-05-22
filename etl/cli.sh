@@ -6,7 +6,7 @@ shift || true
 
 # Function to print usage/help
 print_usage() {
-    echo "Usage: docker compose run etl <task> [args]"
+    echo "Usage: docker compose run [docker compose args] etl <task> [task args]"
     echo ""
     echo "Available tasks:"
     echo "  --help, -h           - View usage documentation."
@@ -16,6 +16,9 @@ print_usage() {
     echo "  fetch_climate        - Download climate data from PRIDE-C instance to input folder."
     echo "  fetch_disease        - Download historical disease data from PRIDE-C instance to input folder."
     echo "  fetch_geojson        - Download geojson polygons from PRIDE-C instance to input folder."
+    echo "  validate_inputs      - Validate input files for forecasting in input/ folder. "
+    echo "                         Saves validated inputs as inputs/config_valid.json, inputs/input_data.json, and inputs/graph_poly.geojson."
+    echo "                         See 'docker compose run etl validate_inputs --help' for available arguments."
     echo "  post_forecast        - Post forecast to PRIDE-C instance."
     echo "  build_analytics      - Build the analytics table on PRIDE-C instance. This can take 10-15 minutes."
     echo "  calc_CSB_alerts      - Calculate the number of CSB on alert for this month and post to PRIDE-C instance."
@@ -66,6 +69,10 @@ fetch_geojson)
 
 build_analytics)
     python scripts/build_analytics.py "$@"
+    ;;
+
+validate_inputs)
+    python scripts/validate_inputs.py "$@"
     ;;
 
 post_forecast)
