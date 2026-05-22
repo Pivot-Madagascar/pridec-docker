@@ -15,4 +15,4 @@ RUN pip install --upgrade pip && pip install --no-cache-dir -r web/requirements.
 EXPOSE 8000
 
 # Run the FastAPI app (module is web.main)
-CMD ["uvicorn", "web.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "etlhub.main:app", "--host", "0.0.0.0", "--port", "8000"]
