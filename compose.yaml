@@ -48,7 +48,7 @@ services:
        target: /app/input
        bind:
           create_host_path: true
-       read_only: true
+       read_only: false
      - type: bind
        source: ${HOST_PWD:-.}/output
        target: /app/output
