@@ -1,13 +1,13 @@
 dotenv
-setuptools
-Requests
-python-dateutil
-pandas
-numpy
+python-dateutil>=2.9.0.post0
+requests>=2.32.5
+setuptools>=82.0.0
+pandas>=3.0.1
+numpy>=2.5.2
 logging
 argparse
 ee
 earthengine-api
 pridec_gee @ git+https://github.com/Pivot-Madagascar/pridec_gee@v0.2.0
-pivot_dhis_tools @ git+https://github.com/Pivot-Madagascar/pivot_dhis_tools@f45f1fe
+pivot_dhis_tools @ git+https://github.com/Pivot-Madagascar/pivot_dhis_tools@v0.1.0
 
