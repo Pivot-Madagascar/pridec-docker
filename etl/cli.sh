@@ -17,7 +17,7 @@ print_usage() {
     echo "  fetch_disease        - Download historical disease data from PRIDE-C instance to input folder."
     echo "  fetch_geojson        - Download geojson polygons from PRIDE-C instance to input folder."
     echo "  validate_inputs      - Validate input files for forecasting in input/ folder. "
-    echo "                         Saves validated inputs as inputs/config_valid.json, inputs/input_data.json, and inputs/graph_poly.geojson."
+    echo "                         Saves validated inputs as input/config_valid.json, input/input_valid.json, and input/polygon_valid.geojson."
     echo "                         See 'docker compose run etl validate_inputs --help' for available arguments."
     echo "  post_forecast        - Post forecast to PRIDE-C instance."
     echo "  build_analytics      - Build the analytics table on PRIDE-C instance. This can take 10-15 minutes."
