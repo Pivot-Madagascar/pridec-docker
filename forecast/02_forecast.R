@@ -3,10 +3,10 @@ parser <- optparse::OptionParser()
 parser <- optparse::add_option(parser, c("--config_valid"), default = "input/config_valid.json",
                                type = "character",
                                help = "Path to json file containing validated model configurations for forecast.")
-parser <- optparse::add_option(parser, c("--input_data"), default = "input/input_data.json",
+parser <- optparse::add_option(parser, c("--input_valid"), default = "input/input_valid.json",
                                type = "character",
                                help = "Path to validated input_data for forecasting step. Corresponds to input_data output by validate_inputs function/task.")
-parser <- optparse::add_option(parser, c("--graph_poly"), default = "input/graph_poly.geojson",
+parser <- optparse::add_option(parser, c("--polygon_valid"), default = "input/polygon_valid.geojson",
                                type = "character",
                                help = "Path to validated polygons. Corresponds to graph_poly output by validate_inputs function/task.")
 args <- optparse::parse_args(parser)
@@ -17,8 +17,8 @@ source("source_r/setup.R")
 validate_args_exist(args = args)
 
 config <- jsonlite::fromJSON(args$config_valid)
-input_data <- jsonlite::fromJSON(args$input_data)
-graph_poly <- sf::st_read(args$graph_poly, quiet = TRUE)
+input_data <- jsonlite::fromJSON(args$input_valid)
+graph_poly <- sf::st_read(args$polygon_valid, quiet = TRUE)
 
 #format and save as list
 input_data$period <- as.character(input_data$period)

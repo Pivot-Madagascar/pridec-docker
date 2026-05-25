@@ -48,9 +48,9 @@ if(!valid_check){
                                        return_inputs = TRUE)
     #save to be read in by the forecast task (can update this as needed by FastAPI)
     jsonlite::write_json(results$config, "input/config_valid.json", pretty = TRUE, auto_unbox = TRUE, null = "null")
-    jsonlite::write_json(results$input_data, "input/input_data.json", pretty = TRUE, auto_unbox = TRUE, null = "null")
-    sf::st_write(results$graph_poly, "input/graph_poly.geojson", delete_dsn = TRUE)
+    jsonlite::write_json(results$input_data, "input/input_valid_.json", pretty = TRUE, auto_unbox = TRUE, null = "null")
+    sf::st_write(results$graph_poly, "input/polygon_valid.geojson", delete_dsn = TRUE)
     print("Validated config saved to input/config_valid.json")
-    print("Validated input data saved to input/input_data.json")
-    print("Validated orgUnit polygons saved to input/graph_poly.geojson.")
+    print("Validated input data saved to input/input_valid.json")
+    print("Validated orgUnit polygons saved to input/polygon_valid.geojson.")
 }

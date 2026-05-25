@@ -397,8 +397,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(add_help=False)  # disable default help
     parser.add_argument("--help", "-h", action="store_true")
     parser.add_argument("--config", required=False, default = "input/config.json")
-    # parser.add_argument("--external_data", required=False, default=None)
-    parser.add_argument("--external_data", required=False, default="input/external_data.csv") #to debug
+    parser.add_argument("--external_data", required=False, default = "input/external_data.csv") #to debug
     parser.add_argument("--disease_data", required=False, default = "input/disease_data.json")
     parser.add_argument("--climate_data", required=False, default = "input/climate_data.json")
     parser.add_argument("--orgunit_poly", required=False, default = "input/orgUnit_poly.geojson")
@@ -427,11 +426,11 @@ if __name__ == "__main__":
             json.dump(result.config, f, indent=2)
         logger.info(f"Validated config saved to input/config_valid.json")
 
-        result.input_data.to_json("input/input_data.json", orient="records", indent=2)
-        logger.info("Validated input data saved to input/input_data.json")
+        result.input_data.to_json("input/input_valid.json", orient="records", indent=2)
+        logger.info("Validated input data saved to input/input_valid.json")
 
-        result.graph_poly.to_file("input/graph_poly.geojson", driver="GeoJSON")
-        logger.info("Validated orgUnit polygons saved to input/graph_poly.geojson")
+        result.graph_poly.to_file("input/polygon_valid.geojson", driver="GeoJSON")
+        logger.info("Validated orgUnit polygons saved to input/polygon_valid.geojson")
 
     except ValidationError as e:
         for msg in e.messages:
