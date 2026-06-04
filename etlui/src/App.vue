@@ -1,45 +1,41 @@
 <template>
-  <div class="min-h-screen bg-white dark:bg-gray-950">
+  <div class="app-container">
     <!-- Top Navbar -->
-    <header class="bg-[#131921] text-white px-6 py-4 shadow-lg">
-      <div class="max-w-7xl mx-auto flex items-center justify-between">
-        <router-link to="/" class="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-          <div class="w-10 h-10 bg-gradient-to-br from-[#febd69] to-[#f0c14b] rounded-lg flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-[#131921]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <header class="app-header">
+      <div class="app-header-content">
+        <router-link to="/" class="app-logo">
+          <div class="logo-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" class="icon-md" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4" />
             </svg>
           </div>
           <div>
-            <h1 class="text-xl font-bold tracking-tight">ETL Hub</h1>
-            <p class="text-xs text-gray-400">PRIDE-C Data Platform</p>
+            <h1 class="logo-title">ETL Hub</h1>
+            <p class="logo-subtitle">PRIDE-C Data Platform</p>
           </div>
         </router-link>
 
-        <nav class="hidden md:flex items-center space-x-1">
+        <nav class="app-nav">
           <router-link
             to="/"
-            class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-            :class="$route.path === '/' ? 'bg-[#232F3E] text-[#febd69]' : 'text-gray-300 hover:bg-gray-700 hover:text-white'"
+            class="nav-link"
           >
             Dashboard
           </router-link>
           <router-link
             to="/forecast"
-            class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-            :class="$route.path === '/forecast' ? 'bg-[#232F3E] text-[#febd69]' : 'text-gray-300 hover:bg-gray-700 hover:text-white'"
+            class="nav-link"
           >
             Forecast
           </router-link>
         </nav>
 
-        <div class="flex items-center space-x-3">
-          <span class="hidden lg:inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-[#febd69] text-[#131921]">
-            ETL Hub v1.0
-          </span>
+        <div class="flex-row-center space-x-3">
+          <span class="app-badge">ETL Hub v1.0</span>
           <a
             href="/api/docs"
             target="_blank"
-            class="px-3 py-1.5 text-xs font-medium bg-[#232F3E] border border-gray-600 rounded-md text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+            class="nav-link-secondary"
           >
             API Docs
           </a>
@@ -48,16 +44,111 @@
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main class="main-content">
       <router-view />
     </main>
 
     <!-- Footer -->
-    <footer class="bg-[#131921] text-gray-400 text-center py-6 mt-auto">
-      <p class="text-sm">© 2026 PRIDE-C ETL Hub. All rights reserved.</p>
+    <footer class="app-footer">
+      <p class="footer-text">© 2026 PRIDE-C ETL Hub. All rights reserved.</p>
     </footer>
   </div>
 </template>
+
+<style scoped>
+.app-container {
+  @apply min-h-screen;
+}
+
+.app-header {
+  @apply px-6 py-4 shadow-lg;
+  background-color: #131921;
+  color: white;
+}
+
+.app-header-content {
+  @apply max-w-7xl mx-auto flex items-center justify-between;
+}
+
+.app-logo {
+  @apply flex items-center space-x-3 transition-opacity;
+  text-decoration: none;
+  color: inherit;
+}
+
+.app-logo:hover {
+  @apply opacity-80;
+}
+
+.logo-icon {
+  @apply w-10 h-10 rounded-lg flex items-center justify-center;
+  background: linear-gradient(to bottom right, #febd69, #f0c14b);
+}
+
+.logo-icon .icon-md {
+  @apply h-6 w-6;
+  color: #131921;
+}
+
+.logo-title {
+  @apply text-xl font-bold tracking-tight;
+}
+
+.logo-subtitle {
+  @apply text-xs;
+  color: #9ca3af;
+}
+
+.app-nav {
+  @apply hidden md:flex items-center space-x-1;
+}
+
+.nav-link {
+  @apply px-4 py-2 rounded-md text-sm font-medium transition-colors;
+  text-decoration: none;
+  color: #d1d5db;
+}
+
+.app-nav .nav-link:hover {
+  @apply bg-gray-700 text-white;
+}
+
+.app-nav .nav-link.router-link-active {
+  @apply bg-[#232F3E] text-[#febd69];
+}
+
+.app-badge {
+  @apply hidden lg:inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold;
+  background-color: #febd69;
+  color: #131921;
+}
+
+.nav-link-secondary {
+  @apply px-3 py-1.5 text-xs font-medium rounded-md transition-colors;
+  text-decoration: none;
+  background-color: #232F3E;
+  border: 1px solid #4b5563;
+  color: #d1d5db;
+}
+
+.nav-link-secondary:hover {
+  @apply bg-gray-700 text-white;
+}
+
+.main-content {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8;
+}
+
+.app-footer {
+  @apply text-center py-6 mt-auto;
+  background-color: #131921;
+  color: #9ca3af;
+}
+
+.footer-text {
+  @apply text-sm;
+}
+</style>
 
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
