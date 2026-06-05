@@ -12,6 +12,7 @@ body {
 
 #app {
   min-height: 100vh;
+  background-color: var(--color-gray-900);
 }
 
 /* Utility Classes */
@@ -259,7 +260,7 @@ body {
 }
 
 .card-header-icon {
-  @apply w-10 h-10 bg-gradient-to-br from-purple-600 to-indigo-700 rounded-lg flex items-center justify-center text-white font-bold;
+  @apply w-10 h-10 from-purple-600 to-indigo-700 rounded-lg flex items-center justify-center text-white font-bold;
 }
 
 .card-header-icon svg {
@@ -285,7 +286,7 @@ body {
 
 /* Buttons */
 .btn-primary {
-  @apply w-full md:w-auto px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center;
+  @apply w-full md:w-auto px-6 py-3 from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center;
 }
 
 .btn-primary svg {

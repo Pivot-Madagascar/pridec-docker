@@ -54,14 +54,17 @@ services:
        target: /app/output
        bind:
           create_host_path: true
-       read_only: false
+      read_only: false
 
-   etlui:
-     image: pridec_etlui:latest
-     network_mode: "host"
-     command: ["nginx", "-g", "daemon off;"]
+  etlui:
+    image: pridec_etlui:latest
+    network_mode: "host"
+    env_file:
+      - path: ${HOST_PWD:-.}/.env
+        required: false
+    command: ["nginx", "-g", "daemon off;"]
 
-   web:
+  web:
     image: pridec_web:latest
     network_mode: "host"
     env_file:

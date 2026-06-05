@@ -145,6 +145,8 @@ const runForecast = async () => {
 </script>
 
 <style scoped>
+@reference "tailwindcss";
+
 .message-box {
   @apply mt-4 p-4 rounded-lg;
 }

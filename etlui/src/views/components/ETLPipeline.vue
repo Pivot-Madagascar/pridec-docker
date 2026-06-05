@@ -1,7 +1,7 @@
 <template>
   <section>
     <h2 class="section-header">ETL Pipeline</h2>
-    <div class="grid-cols-3-lg gap-4">
+    <div class="grid grid-cols-3-lg gap-4">
       <button
         @click="$emit('trigger-etl', 'import_gee')"
         :disabled="loading.import_gee"
