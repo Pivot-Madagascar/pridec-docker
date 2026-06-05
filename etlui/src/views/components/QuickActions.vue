@@ -1,7 +1,7 @@
 <template>
   <section>
     <h2 class="section-header">Quick Actions</h2>
-    <div class="grid-cols-2-md gap-4">
+    <div class="grid grid-cols-2-md gap-4">
       <button
         @click="$emit('run-forecast')"
         class="btn-forecast"

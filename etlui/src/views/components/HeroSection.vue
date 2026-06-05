@@ -12,6 +12,8 @@
 </script>
 
 <style scoped>
+@reference "tailwindcss";
+
 .hero-section {
   @apply bg-gradient-to-r from-[#131921] to-[#232F3E] rounded-xl p-8 text-white;
 }

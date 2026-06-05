@@ -33,7 +33,7 @@
         <div class="flex-row-center space-x-3">
           <span class="app-badge">ETL Hub v1.0</span>
           <a
-            href="/api/docs"
+            :href="`${apiBaseUrl}/docs`"
             target="_blank"
             class="nav-link-secondary"
           >
@@ -56,6 +56,8 @@
 </template>
 
 <style scoped>
+@reference "tailwindcss";
+
 .app-container {
   @apply min-h-screen;
 }
@@ -154,4 +156,5 @@
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 </script>
