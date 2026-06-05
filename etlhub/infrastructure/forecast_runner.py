@@ -4,28 +4,23 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-JOBS = {}  # Global dict to store job statuses in memory
-DATA_DIR = Path('.')  # Base directory for data
-LOGS_DIR = DATA_DIR / "logs"  # Directory for job status logs
+from etlhub.infrastructure.job_store import JobStore
 
-def run_rscript(job_id, params):
-    # Initial status
+
+def run_rscript(job_id, params, job_store: JobStore):
     status = {
         "status": "running",
         "started": datetime.now().isoformat(),
         "job_id": job_id
     }
-    JOBS[job_id] = status
+    job_store.set(job_id, status)
 
-    # Get HOST_PWD from environment
     host_pwd = os.getenv('HOST_PWD', '.')
     env_file = os.path.join(host_pwd, '.env')
 
-    # Volume bindings
     input_vol = f"{host_pwd}/input:/app/input:ro"
     output_vol = f"{host_pwd}/output:/app/output:rw"
 
-    # Docker run command
     cmd = [
         'docker', 'run', '--rm',
         '--env-file', env_file,
@@ -64,15 +59,14 @@ def run_rscript(job_id, params):
             "message": str(e)
         })
 
-    # Write status file after docker run
     try:
-        LOGS_DIR.mkdir(parents=True, exist_ok=True)
-        status_file = LOGS_DIR / f"{job_id}.json"
+        settings = __import__('etlhub.core.config', fromlist=['get_settings']).get_settings()
+        logs_dir = Path(settings.logs_dir)
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        status_file = logs_dir / f"{job_id}.json"
         with open(status_file, 'w') as f:
             json.dump(status, f)
     except Exception as e:
-        # If can't write status file, log error but don't change status
         print(f"Warning: Could not write status file: {e}")
 
-    # Update in-memory dict
-    JOBS[job_id] = status
+    job_store.set(job_id, status)
