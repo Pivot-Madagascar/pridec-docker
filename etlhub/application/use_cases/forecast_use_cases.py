@@ -4,7 +4,7 @@ from fastapi import BackgroundTasks
 from etlhub.application.use_cases.etl_use_cases import ETLException
 from etlhub.domain.schemas import ETLResponse, ForecastParams
 from etlhub.infrastructure.job_store import JobStore
-from etlhub.forecast_runner import run_rscript
+from etlhub.infrastructure.forecast_runner import run_rscript
 
 
 def start_forecast(
@@ -22,7 +22,7 @@ def start_forecast(
         "orgUnit_poly": params.orgUnit_poly_path,
     }
 
-    background_tasks.add_task(run_rscript, job_id, forecast_params)
+    background_tasks.add_task(run_rscript, job_id, forecast_params, job_store)
 
     return ETLResponse(
         status="accepted",

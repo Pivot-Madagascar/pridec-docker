@@ -1,12 +1,6 @@
 from pydantic import BaseModel, Field
 
 
-class ETLResponse(BaseModel):
-    status: str = ""
-    message: str = ""
-    job_id: str = ""
-
-
 class ForecastParams(BaseModel):
     config_path: str = Field(default="input/config.json")
     external_data_path: str = Field(default="input/external_data.csv")
