@@ -19,7 +19,9 @@ venv/
 */.env*
 */.venv/
 */venv/
+test-venv/
 **__pychache__/
+*.pyc
 client_secret.json
 .gee-private-key.json
 */.gee-private-key.json
@@ -38,3 +40,6 @@ output/
 input/
 */output/
 */input/
+logs/
+
+*/node_modules
