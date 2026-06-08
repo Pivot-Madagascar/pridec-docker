@@ -1,23 +1,23 @@
 #validates the input data. will print many messages, but will run without error if input is valid
 source("source_r/setup.R")
 
-parser <- optparse::OptionParser()
+parser <- optparse::OptionParser(usage = "Usage: docker compose run forecast validate_inputs [options]")
 parser <- optparse::add_option(parser, c("--external_data"), default = "input/external_data.csv",
                                type = "character", 
-                               help="Path to external data in CSV format. Must include columns `orgUnit` and `period`.")
+                               help="Path to external data in CSV format. Must include columns `orgUnit` and `period`. [Default=%default]")
 parser <- optparse::add_option(parser, c("--climate_data"), default = "input/climate_data.json",
                                type = "character",
-                               help = "Path to json file containing PRIDE-C climate data from DHIS2.")
+                               help = "Path to json file containing PRIDE-C climate data from DHIS2. [Default=%default]")
 parser <- optparse::add_option(parser, c("--disease_data"), default = "input/disease_data.json",
                                type = "character",
-                               help = "Path to json file containing data for the dataElement you want to predict.")
+                               help = "Path to json file containing data for the dataElement you want to predict. [Default=%default]")
 parser <- optparse::add_option(parser, c("--orgUnit_poly"), default = "input/orgUnit_poly.geojson",
                                type = "character",
-                               help = "Path to geojson file containing polygons of the orgUnit catchments to use in INLA model.")
+                               help = "Path to geojson file containing polygons of the orgUnit catchments to use in INLA model. [Default=%default]")
 parser <- optparse::add_option(parser, c("--config"), default = "input/config.json",
                                type = "character",
                                help = "Path to json file containing model configurations for forecast.
-                               See `templates/config_ex.json` for an example.")
+                               See `templates/config_ex.json` for an example. [Default=%default]")
 
 args <- optparse::parse_args(parser)
 

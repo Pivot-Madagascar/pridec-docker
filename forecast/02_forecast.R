@@ -1,5 +1,5 @@
 # runs the PRIDE-C forecasting model with validated inputs
-parser <- optparse::OptionParser(usage = "Usage: docker compose run forecast forecast [task args]",
+parser <- optparse::OptionParser(usage = "Usage: docker compose run forecast forecast [options]",
                                  description = "Runs a PRIDE-C forecast on validated inputs. Input file paths can be provided manually as task arguments.")
 parser <- optparse::add_option(parser, c("--config_valid"), default = "input/config_valid.json",
                                type = "character",
