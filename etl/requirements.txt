@@ -6,6 +6,7 @@ pandas>=3.0.1
 numpy>=2.4.6
 logging
 argparse
+geopandas>=1.1.3
 ee
 earthengine-api
 pridec_gee @ git+https://github.com/Pivot-Madagascar/pridec_gee@v0.2.1
