@@ -1,14 +1,15 @@
 # runs the PRIDE-C forecasting model with validated inputs
-parser <- optparse::OptionParser()
+parser <- optparse::OptionParser(usage = "Usage: docker compose run forecast forecast [task args]",
+                                 description = "Runs a PRIDE-C forecast on validated inputs. Input file paths can be provided manually as task arguments.")
 parser <- optparse::add_option(parser, c("--config_valid"), default = "input/config_valid.json",
                                type = "character",
-                               help = "Path to json file containing validated model configurations for forecast.")
+                               help = "Path to json file containing validated model configurations for forecast. [Default=%default]")
 parser <- optparse::add_option(parser, c("--input_valid"), default = "input/input_valid.json",
                                type = "character",
-                               help = "Path to validated input_data for forecasting step. Corresponds to input_data output by validate_inputs function/task.")
+                               help = "Path to validated input_data for forecasting step. Corresponds to input_data output by validate_inputs function/task. [Default=%default]")
 parser <- optparse::add_option(parser, c("--polygon_valid"), default = "input/polygon_valid.geojson",
                                type = "character",
-                               help = "Path to validated polygons. Corresponds to graph_poly output by validate_inputs function/task.")
+                               help = "Path to validated polygons. Corresponds to graph_poly output by validate_inputs function/task. [Default=%default]")
 args <- optparse::parse_args(parser)
 
 
