@@ -16,7 +16,7 @@ fi
 print_usage() {
 
   echo ""
-  echo "Usage: pridec [SERVICE] [COMMAND] [ARGS...]"
+  echo "Usage: pridec [SERVICE] [TASK] [ARGS...]"
   echo ""
   echo "Launch a pridec container using docker compose."
   echo ""
@@ -49,13 +49,19 @@ print_usage() {
 HOST_PWD="$(pwd)"
 
 SERVICE="${1:-}"
-if [ "$SERVICE" = "forecast" ]; then
-  COMMAND=""
-  [ $# -ge 1 ] && shift
-else
-  COMMAND="${2:-}"
-  [ $# -ge 1 ] && shift
-  [ $# -ge 1 ] && shift
+TASK="${2:-}"
+[ $# -ge 1 ] && shift
+[ $# -ge 1 ] && shift
+
+case "$SERVICE" in
+  etl|forecast|down) ;;  # valid, continue
+  *) print_usage; exit 0 ;;
+esac
+
+if [ "$SERVICE" == "down" ]; then
+  echo "Stopping pridec containers and removing orphans"
+  HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_FILE" down --remove-orphans
+  exit 0
 fi
 
 ENV_VAR_ARGS=()
@@ -74,31 +80,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-case "$SERVICE" in
-  etl|forecast|down) ;;  # valid, continue
-  *) print_usage; exit 0 ;;
-esac
-
-if [ "$SERVICE" == "down" ]; then
-  echo "Stopping pridec containers and removing orphans"
-  HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_FILE" down --remove-orphans
-  exit 0
-fi
-
-if [ "$SERVICE" = "etl" ] && { [ "$COMMAND" = "--help" ] || [ "$COMMAND" = "-h" ]; }; then
-  HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_FILE" run --rm etl --help
-  exit 0
-fi
-
 ENV_FILE="$HOST_PWD/.env"
 
-
-if [ "$SERVICE" == "etl" ]; then
-  HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_FILE" run --env-from-file "$ENV_FILE" "${ENV_VAR_ARGS[@]}" --rm etl "$COMMAND" "${CONTAINER_ARGS[@]}"
-  exit 0
-fi
-
-if [ "$SERVICE" == "forecast" ]; then
-  HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_FILE" run --env-from-file "$ENV_FILE" "${ENV_VAR_ARGS[@]}" --rm  forecast "${CONTAINER_ARGS[@]}"
-  exit 0
-fi
+HOST_PWD="$HOST_PWD" docker compose -f "$COMPOSE_FILE" run --env-from-file "$ENV_FILE" "${ENV_VAR_ARGS[@]}" --rm "$SERVICE" "$TASK" "${CONTAINER_ARGS[@]}"
+exit 0

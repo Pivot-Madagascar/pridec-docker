@@ -19,6 +19,7 @@ venv/
 */.env*
 */.venv/
 */venv/
+**/__pycache__/
 test-venv/
 **__pychache__/
 *.pyc
