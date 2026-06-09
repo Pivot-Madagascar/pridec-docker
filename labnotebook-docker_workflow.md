@@ -16,13 +16,30 @@ Building and pushing to Docker Hub (both images at once)
 ```
 docker compose -f compose-build.yaml build --no-cache && docker compose push
 ```
+
+## 2026-05-25
+
+I have updated the README and pridec auto script to work with the new refactoring. This should close most things going on with issue #11, but I will tag Paul in the PR review so he can offer input.
+
 ## 2026-05-21
 
 Going back to fix this INLA issue. I will update the geolight package first to be more precise about versioning.
 
 Also creating test inputs and scripts to make them.
 
-Added check to pridec to be sure it pulls the docker images and that the compose file is valid
+Added check to pridec to be sure it pulls the docker images and that the compose file is valid.
+
+Now working on issue #11: splitting the forecast into three tasks: VALIDATE (validates inputs), FORECAST, REPORT (creates report)
+
+These are currently in one giant entrypoint.R, so just need to be split into seperate files to run and then a dispatcher used to direct each one to the appropriate place. In the end actually what we are doing is moving the data validation to a Python script in the etl image and then having forecast just do teh forecast and create the report. So there will still just be one task in the forecast image, but maybe I will still call it with an argument just so it matches (and leave the others in case we want to use them still)
+
+I have split them within the forecast service and also created a python version of the validate-inputs step that is run via the etl service. I have checked everything in the forecast service works okay, I just need to check that the inputs created and validate via the etl service work with the forecast forecast service. I checked with the etl service and it seems to work okay.
+
+**TO DO:**
+- update documentation for new workflow in scripts
+- create a new flow chart to show how everything moves now
+- recheck on INLA atomic vecotr issue (not sure where it is coming from honestly)
+- add issues to github following bugs taht Toky found here: https://docs.google.com/document/d/1rBnGlipTN1CPiCRT0SeB2aS9z3zpmSeoUAX2gI9CjHI/edit?usp=sharing
 
 
 ## 2026-05-04
