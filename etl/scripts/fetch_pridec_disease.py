@@ -47,15 +47,21 @@ def fetch_disease():
 
     logger.info("Fetching disease data %s from %s", DISEASE_CODE, DHIS_URL)
 
-    if not os.path.isdir('input'):
-        raise NotADirectoryError("Directory 'input' not found.")
+    input_dir = os.path.join(os.getcwd(), 'input')
+    os.makedirs(input_dir, exist_ok=True)
+
+    try:
+        os.chmod(input_dir, 0o755)
+    except PermissionError:
+        pass
 
     data_out = pridec_fetch_disease(dhis_url = DHIS_URL, ou_level = OU_LEVEL,
                          ou_parent =  PARENT_OU,
                          disease_code = DISEASE_CODE,
                          token=DHIS_TOKEN, past_years = 6)
 
-    with open("input/disease_data.json", "w") as f:
+    output_path = os.path.join(input_dir, "disease_data.json")
+    with open(output_path, "w") as f:
         json.dump({"dataValues": data_out}, f, indent=2)
 
     logger.info("Saved %s to input/disease_data.json", DISEASE_CODE)

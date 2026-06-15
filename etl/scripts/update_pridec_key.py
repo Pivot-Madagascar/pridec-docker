@@ -1,3 +1,5 @@
+import argparse
+
 def print_help():
     print(f"""
 Task: update_pridec_key

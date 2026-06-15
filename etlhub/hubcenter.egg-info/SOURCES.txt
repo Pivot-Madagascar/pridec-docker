@@ -1,0 +1,6 @@
+pyproject.toml
+hubcenter.egg-info/PKG-INFO
+hubcenter.egg-info/SOURCES.txt
+hubcenter.egg-info/dependency_links.txt
+hubcenter.egg-info/requires.txt
+hubcenter.egg-info/top_level.txt

@@ -5,7 +5,7 @@ def get_home_html() -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PRIDE-C ETL</title>
+  <title>Hub Center</title>
   <style>
     :root {
       --amazon-dark: #131921;
@@ -137,7 +137,7 @@ def get_home_html() -> str:
   <main>
     <div class="card">
       <div class="card-title">
-        <h2>Welcome to <br>PRIDE-C ETL Pipeline Orchestrator</h2>
+        <h2>Welcome to <br>Hub Center</h2>
       </div>
       <div style="display:flex;flex-direction:column;gap:0.75rem;">
         <a href="/docs" class="btn btn-orange">

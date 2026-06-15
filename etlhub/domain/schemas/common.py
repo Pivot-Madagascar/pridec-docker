@@ -1,5 +1,5 @@
-"""Shared base types and enums for domain schemas."""
+from pydantic import BaseModel
 
 
-class BaseSchema:
+class BaseSchema(BaseModel):
     pass

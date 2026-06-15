@@ -3,7 +3,7 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
+_PROJECT_ROOT = Path(__file__).parent.parent
 
 _env_file = os.getenv("ENV_FILE", str(_PROJECT_ROOT / ".env"))
 

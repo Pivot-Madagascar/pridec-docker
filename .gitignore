@@ -17,9 +17,9 @@
 .venv/
 venv/
 */.env*
-*/.venv/
 */venv/
 test-venv/
+etlhub_env/
 **__pychache__/
 *.pyc
 client_secret.json

@@ -41,8 +41,13 @@ def fetch_geojson():
             }
     )
 
-    if not os.path.isdir('input'):
-        raise NotADirectoryError("Directory 'input' not found.")
+    input_dir = os.path.join(os.getcwd(), 'input')
+    os.makedirs(input_dir, exist_ok=True)
+
+    try:
+        os.chmod(input_dir, 0o755)
+    except PermissionError:
+        pass
 
     logger.info("Fetching Geojson for orgUnit level %s under parent %s", OU_LEVEL, PARENT_OU)
 
@@ -51,10 +56,11 @@ def fetch_geojson():
                                  dhis_url = DHIS_URL,
                                  dhis_token = DHIS_TOKEN)
 
-    with open("input/orgUnit_poly.geojson", "w", encoding="utf-8") as f:
+    output_path = os.path.join(input_dir, "orgUnit_poly.geojson")
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(org_units, f, ensure_ascii=False)
 
-    logger.info("Saved geojson polygons to input/orgUnit_poly.geojson")
+    logger.info("Saved geojson polygons to %s", output_path)
 
 if __name__ == "__main__":
     fetch_geojson()
