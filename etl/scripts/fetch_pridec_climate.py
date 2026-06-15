@@ -34,10 +34,14 @@ def fetch_climate():
 
     logger.info("Fetching PRIDEC Climate data from %s", DHIS_URL)
 
-    if not os.path.isdir('input'):
-        raise NotADirectoryError("Directory 'input' not found.")
+    input_dir = os.path.join(os.getcwd(), 'input')
+    os.makedirs(input_dir, exist_ok=True)
 
-    #check envvars
+    try:
+        os.chmod(input_dir, 0o755)
+    except PermissionError:
+        pass
+
     check_envvars(required_vars={
         'DHIS_TOKEN': DHIS_TOKEN,
         'DHIS_URL': DHIS_URL,
@@ -49,7 +53,8 @@ def fetch_climate():
                          ou_parent =  PARENT_OU,
                          token=DHIS_TOKEN, past_years = 8)
 
-    with open("input/climate_data.json", "w") as f:
+    output_path = os.path.join(input_dir, "climate_data.json")
+    with open(output_path, "w") as f:
         json.dump({"dataValues": data_out}, f, indent=2)
 
     logger.info("Saved all PRIDE-C climate variables to input/climate_data.json")

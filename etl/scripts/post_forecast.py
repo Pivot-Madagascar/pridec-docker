@@ -1,3 +1,5 @@
+import argparse
+
 def print_help():
     print(f"""
 Task: post_forecast
@@ -34,6 +36,14 @@ def post_forecast():
                 'DHIS_URL': DHIS_URL})
 
     logger.info("Posting forecasts to %s", DHIS_URL)
+
+    output_dir = os.path.join(os.getcwd(), 'output')
+    os.makedirs(output_dir, exist_ok=True)
+
+    try:
+        os.chmod(output_dir, 0o755)
+    except PermissionError:
+        pass
 
     try:
         with open('output/forecast.json', 'r') as file:
