@@ -1,5 +1,5 @@
 from functools import lru_cache
-from hubcenter.infrastructure.job_store import JobStore
+from etlhub.infrastructure.job_store import JobStore
 
 
 @lru_cache

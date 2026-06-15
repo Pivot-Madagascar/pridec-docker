@@ -1,6 +1,6 @@
 from fastapi import APIRouter, BackgroundTasks
 
-from hubcenter.application.use_cases.etl_use_cases import (
+from etlhub.application.use_cases.etl_use_cases import (
     ETLException,
     run_import_gee,
     run_import_pivot_com,
@@ -9,8 +9,8 @@ from hubcenter.application.use_cases.etl_use_cases import (
     run_fetch_disease,
     run_fetch_geojson,
 )
-from hubcenter.domain.schemas import ETLResponse
-from hubcenter.api.dependencies import get_job_store
+from etlhub.domain.schemas import ETLResponse
+from etlhub.api.dependencies import get_job_store
 
 router = APIRouter(tags=["Ingest"])
 
