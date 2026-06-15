@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-from hubcenter.infrastructure.job_store import JobStore
+from etlhub.infrastructure.job_store import JobStore
 
 
 def run_rscript(job_id, params, job_store: JobStore):
@@ -60,7 +60,7 @@ def run_rscript(job_id, params, job_store: JobStore):
         })
 
     try:
-        settings = __import__('hubcenter.core.config', fromlist=['get_settings']).get_settings()
+        settings = __import__('etlhub.core.config', fromlist=['get_settings']).get_settings()
         logs_dir = Path(settings.logs_dir)
         logs_dir.mkdir(parents=True, exist_ok=True)
         status_file = logs_dir / f"{job_id}.json"

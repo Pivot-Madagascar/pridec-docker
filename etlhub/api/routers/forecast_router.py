@@ -1,10 +1,10 @@
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
 
-from hubcenter.application.use_cases.forecast_use_cases import start_forecast
-from hubcenter.domain.schemas import ETLResponse, ForecastParams, JobStatus
-from hubcenter.infrastructure.job_store import JobStore
-from hubcenter.api.dependencies import get_job_store
-from hubcenter.core.config import get_settings
+from etlhub.application.use_cases.forecast_use_cases import start_forecast
+from etlhub.domain.schemas import ETLResponse, ForecastParams, JobStatus
+from etlhub.infrastructure.job_store import JobStore
+from etlhub.api.dependencies import get_job_store
+from etlhub.core.config import get_settings
 
 router = APIRouter(prefix="/forecast", tags=["Forecast"])
 

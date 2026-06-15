@@ -8,10 +8,10 @@ os.chdir(PROJECT_ROOT)
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "etl", "scripts"))
 
-from hubcenter.api.middleware import setup_cors
-from hubcenter.api.routers.etl import ingest_router, analytics_router
-from hubcenter.api.routers.forecast_router import router as forecast_router
-from hubcenter.presentation.html_templates import get_home_html
+from etlhub.api.middleware import setup_cors
+from etlhub.api.routers.etl import ingest_router, analytics_router
+from etlhub.api.routers.forecast_router import router as forecast_router
+from etlhub.presentation.html_templates import get_home_html
 
 app = FastAPI(
     title="Hub Center API",

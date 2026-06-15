@@ -1,10 +1,10 @@
 import uuid
 from fastapi import BackgroundTasks
 
-from hubcenter.application.use_cases.etl_use_cases import ETLException
-from hubcenter.domain.schemas import ETLResponse, ForecastParams
-from hubcenter.infrastructure.job_store import JobStore
-from hubcenter.infrastructure.forecast_runner import run_rscript
+from etlhub.application.use_cases.etl_use_cases import ETLException
+from etlhub.domain.schemas import ETLResponse, ForecastParams
+from etlhub.infrastructure.job_store import JobStore
+from etlhub.infrastructure.forecast_runner import run_rscript
 
 
 def start_forecast(

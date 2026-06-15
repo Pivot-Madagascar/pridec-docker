@@ -1,14 +1,14 @@
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
 
-from hubcenter.application.use_cases.etl_use_cases import (
+from etlhub.application.use_cases.etl_use_cases import (
     ETLException,
     run_build_analytics,
     run_post_forecast,
     run_calc_csb_alerts,
     run_update_key,
 )
-from hubcenter.domain.schemas import ETLResponse
-from hubcenter.api.dependencies import get_job_store
+from etlhub.domain.schemas import ETLResponse
+from etlhub.api.dependencies import get_job_store
 
 router = APIRouter(tags=["Analytics"])
 
