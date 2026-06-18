@@ -21,7 +21,7 @@ if args.help:
     print_help()
     exit(0)
 
-from config import DHIS_TOKEN, DHIS_URL, OU_LEVEL, PARENT_OU, setup_logging, check_envvars
+from etl.scripts.config import DHIS_TOKEN, DHIS_URL, OU_LEVEL, PARENT_OU, setup_logging, check_envvars
 import logging
 import json
 import os
