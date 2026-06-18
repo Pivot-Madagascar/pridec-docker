@@ -21,7 +21,7 @@ if args.help:
     print_help()
     exit(0)
 
-from config import DHIS_TOKEN, DHIS_URL, PARENT_OU, OU_LEVEL, setup_logging, check_envvars
+from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PARENT_OU, OU_LEVEL, setup_logging, check_envvars
 from pivot_dhis_tools import pridec_fetch_climate
 import os
 import json

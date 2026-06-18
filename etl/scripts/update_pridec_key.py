@@ -20,7 +20,7 @@ if args.help:
     print_help()
     exit(0)
 
-from config import DHIS_TOKEN, DHIS_URL, dryRun, setup_logging, check_envvars
+from etl.scripts.config import DHIS_TOKEN, DHIS_URL, dryRun, setup_logging, check_envvars
 from pivot_dhis_tools import pridec_update_key
 import os
 import json

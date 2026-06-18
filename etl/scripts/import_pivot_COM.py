@@ -22,7 +22,7 @@ if args.help:
     exit(0)
 
 
-from config import DHIS_TOKEN, DHIS_URL, PIVOT_URL, PIVOT_TOKEN, dryRun, setup_logging, check_envvars
+from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PIVOT_URL, PIVOT_TOKEN, dryRun, setup_logging, check_envvars
 import pandas as pd
 from datetime import date
 from dateutil.relativedelta import relativedelta

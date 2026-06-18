@@ -21,7 +21,7 @@ if args.help:
     print_help()
     exit(0)
 
-from config import DHIS_TOKEN, DHIS_URL,  setup_logging
+from etl.scripts.config import DHIS_TOKEN, DHIS_URL,  setup_logging
 import logging
 from pivot_dhis_tools import launch_analytics
 

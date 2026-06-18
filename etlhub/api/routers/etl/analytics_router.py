@@ -1,14 +1,16 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
+import uuid
+from fastapi import APIRouter, HTTPException, Depends
 
 from etlhub.application.use_cases.etl_use_cases import (
     ETLException,
-    run_build_analytics,
     run_post_forecast,
-    run_calc_csb_alerts,
     run_update_key,
 )
+from etlhub.infrastructure.tasks import (
+    task_build_analytics,
+    task_calc_csb_alerts,
+)
 from etlhub.domain.schemas import ETLResponse
-from etlhub.api.dependencies import get_job_store
 
 router = APIRouter(tags=["Analytics"])
 
@@ -24,9 +26,10 @@ router = APIRouter(tags=["Analytics"])
     ),
     response_description="Analytics build task accepted and queued in background.",
 )
-async def api_build_analytics(background_tasks: BackgroundTasks):
-    background_tasks.add_task(run_build_analytics)
-    return ETLResponse(status="accepted", message="Build analytics task started in background")
+async def api_build_analytics():
+    job_id = f"build_analytics_{uuid.uuid4().hex[:8]}"
+    task_build_analytics.delay(job_id)
+    return ETLResponse(status="accepted", message="Build analytics task started in background", job_id=job_id)
 
 
 @router.post(
@@ -69,9 +72,10 @@ async def api_post_forecast():
     ),
     response_description="CSB alert calculation task accepted and queued in background.",
 )
-async def api_calc_csb_alerts(background_tasks: BackgroundTasks):
-    background_tasks.add_task(run_calc_csb_alerts)
-    return ETLResponse(status="accepted", message="Calculate CSB alerts task started in background")
+async def api_calc_csb_alerts():
+    job_id = f"calc_csb_alerts_{uuid.uuid4().hex[:8]}"
+    task_calc_csb_alerts.delay(job_id)
+    return ETLResponse(status="accepted", message="Calculate CSB alerts task started in background", job_id=job_id)
 
 
 @router.post(

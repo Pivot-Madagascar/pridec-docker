@@ -1,16 +1,15 @@
-from fastapi import APIRouter, BackgroundTasks
+import uuid
+from fastapi import APIRouter
 
-from etlhub.application.use_cases.etl_use_cases import (
-    ETLException,
-    run_import_gee,
-    run_import_pivot_com,
-    run_import_pivot_csb,
-    run_fetch_climate,
-    run_fetch_disease,
-    run_fetch_geojson,
+from etlhub.infrastructure.tasks import (
+    task_import_gee,
+    task_import_pivot_com,
+    task_import_pivot_csb,
+    task_fetch_climate,
+    task_fetch_disease,
+    task_fetch_geojson,
 )
 from etlhub.domain.schemas import ETLResponse
-from etlhub.api.dependencies import get_job_store
 
 router = APIRouter(tags=["Ingest"])
 
@@ -26,9 +25,10 @@ router = APIRouter(tags=["Ingest"])
     ),
     response_description="Task accepted and queued in background.",
 )
-async def api_import_gee(background_tasks: BackgroundTasks):
-    background_tasks.add_task(run_import_gee)
-    return ETLResponse(status="accepted", message="Import GEE task started in background")
+async def api_import_gee():
+    job_id = f"import_gee_{uuid.uuid4().hex[:8]}"
+    task_import_gee.delay(job_id)
+    return ETLResponse(status="accepted", message="Import GEE task started in background", job_id=job_id)
 
 
 @router.post(
@@ -42,9 +42,10 @@ async def api_import_gee(background_tasks: BackgroundTasks):
     ),
     response_description="Task accepted and queued in background.",
 )
-async def api_import_pivot_com(background_tasks: BackgroundTasks):
-    background_tasks.add_task(run_import_pivot_com)
-    return ETLResponse(status="accepted", message="Import Pivot COM task started in background")
+async def api_import_pivot_com():
+    job_id = f"import_pivot_com_{uuid.uuid4().hex[:8]}"
+    task_import_pivot_com.delay(job_id)
+    return ETLResponse(status="accepted", message="Import Pivot COM task started in background", job_id=job_id)
 
 
 @router.post(
@@ -58,9 +59,10 @@ async def api_import_pivot_com(background_tasks: BackgroundTasks):
     ),
     response_description="Task accepted and queued in background.",
 )
-async def api_import_pivot_csb(background_tasks: BackgroundTasks):
-    background_tasks.add_task(run_import_pivot_csb)
-    return ETLResponse(status="accepted", message="Import Pivot CSB task started in background")
+async def api_import_pivot_csb():
+    job_id = f"import_pivot_csb_{uuid.uuid4().hex[:8]}"
+    task_import_pivot_csb.delay(job_id)
+    return ETLResponse(status="accepted", message="Import Pivot CSB task started in background", job_id=job_id)
 
 
 @router.post(
@@ -74,9 +76,10 @@ async def api_import_pivot_csb(background_tasks: BackgroundTasks):
     ),
     response_description="Climate data fetch accepted and queued in background.",
 )
-async def api_fetch_climate(background_tasks: BackgroundTasks):
-    background_tasks.add_task(run_fetch_climate)
-    return ETLResponse(status="accepted", message="Fetch climate task started in background")
+async def api_fetch_climate():
+    job_id = f"fetch_climate_{uuid.uuid4().hex[:8]}"
+    task_fetch_climate.delay(job_id)
+    return ETLResponse(status="accepted", message="Fetch climate task started in background", job_id=job_id)
 
 
 @router.post(
@@ -90,9 +93,10 @@ async def api_fetch_climate(background_tasks: BackgroundTasks):
     ),
     response_description="Disease data fetch accepted and queued in background.",
 )
-async def api_fetch_disease(background_tasks: BackgroundTasks):
-    background_tasks.add_task(run_fetch_disease)
-    return ETLResponse(status="accepted", message="Fetch disease task started in background")
+async def api_fetch_disease():
+    job_id = f"fetch_disease_{uuid.uuid4().hex[:8]}"
+    task_fetch_disease.delay(job_id)
+    return ETLResponse(status="accepted", message="Fetch disease task started in background", job_id=job_id)
 
 
 @router.post(
@@ -106,6 +110,7 @@ async def api_fetch_disease(background_tasks: BackgroundTasks):
     ),
     response_description="GeoJSON data fetch accepted and queued in background.",
 )
-async def api_fetch_geojson(background_tasks: BackgroundTasks):
-    background_tasks.add_task(run_fetch_geojson)
-    return ETLResponse(status="accepted", message="Fetch geojson task started in background")
+async def api_fetch_geojson():
+    job_id = f"fetch_geojson_{uuid.uuid4().hex[:8]}"
+    task_fetch_geojson.delay(job_id)
+    return ETLResponse(status="accepted", message="Fetch geojson task started in background", job_id=job_id)

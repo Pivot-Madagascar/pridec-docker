@@ -26,7 +26,7 @@ if args.help:
     print_help()
     exit(0)
 
-from config import DHIS_TOKEN, DHIS_URL, PARENT_OU, GEE_SERVICE_ACCOUNT, GEE_VARIABLES, dryRun, setup_logging, check_envvars
+from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PARENT_OU, GEE_SERVICE_ACCOUNT, GEE_VARIABLES, dryRun, setup_logging, check_envvars
 import json
 import ee
 import os
