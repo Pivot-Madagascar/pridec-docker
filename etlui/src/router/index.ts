@@ -16,6 +16,12 @@ const router = createRouter({
       meta: { title: 'Forecast' }
     },
     {
+      path: '/tracking',
+      name: 'Tracking',
+      component: () => import('@/views/TrackerView.vue'),
+      meta: { title: 'Request Tracking' }
+    },
+    {
       path: '/status/:jobId',
       name: 'JobStatus',
       component: () => import('@/views/JobStatus.vue'),
