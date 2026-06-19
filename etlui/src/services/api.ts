@@ -49,4 +49,33 @@ api.interceptors.response.use(
   }
 )
 
+export interface RequestLog {
+  request_id: string
+  method: string
+  url: string
+  status_code: number
+  duration_ms: number
+  client_host: string | null
+  services: ServiceCallLog[]
+  error: string | null
+}
+
+export interface ServiceCallLog {
+  service: string
+  method: string
+  url: string
+  status_code: number | null
+  duration_ms: number | null
+  error: string | null
+}
+
+export const trackingApi = {
+  listRequests(limit = 50) {
+    return api.get('api/tracking/requests', { params: { limit } })
+  },
+  getRequest(requestId: string) {
+    return api.get(`api/tracking/requests/${encodeURIComponent(requestId)}`)
+  }
+}
+
 export default api

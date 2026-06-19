@@ -23,6 +23,12 @@
             Dashboard
           </router-link>
           <router-link
+            to="/tracking"
+            class="nav-link"
+          >
+            Tracking
+          </router-link>
+          <router-link
             to="/forecast"
             class="nav-link"
           >
