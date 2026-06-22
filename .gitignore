@@ -20,8 +20,11 @@ venv/
 */venv/
 test-venv/
 etlhub_env/
-**__pychache__/
+__pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
 client_secret.json
 .gee-private-key.json
 */.gee-private-key.json
