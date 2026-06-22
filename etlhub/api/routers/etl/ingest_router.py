@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from etlhub.infrastructure.tasks import (
     task_import_gee,
@@ -22,13 +22,19 @@ router = APIRouter(tags=["Ingest"])
     description=(
         "Launches the GEE import process in the background. "
         "Executes `etl/scripts/import_gee.py` asynchronously. "
+        "Pass `webhook_url` to be notified when the job completes."
     ),
     response_description="Task accepted and queued in background.",
 )
-async def api_import_gee():
+async def api_import_gee(webhook_url: str | None = Query(None)):
     job_id = f"import_gee_{uuid.uuid4().hex[:8]}"
-    task_import_gee.delay(job_id)
-    return ETLResponse(status="accepted", message="Import GEE task started in background", job_id=job_id)
+    task_import_gee.delay(job_id, webhook_url=webhook_url)
+    return ETLResponse(
+        status="accepted",
+        message="Import GEE task started in background",
+        job_id=job_id,
+        webhook_url=webhook_url,
+    )
 
 
 @router.post(
@@ -39,13 +45,19 @@ async def api_import_gee():
     description=(
         "Launches the Pivot COM historical data import in the background. "
         "Executes `etl/scripts/import_pivot_COM.py` asynchronously. "
+        "Pass `webhook_url` to be notified when the job completes."
     ),
     response_description="Task accepted and queued in background.",
 )
-async def api_import_pivot_com():
+async def api_import_pivot_com(webhook_url: str | None = Query(None)):
     job_id = f"import_pivot_com_{uuid.uuid4().hex[:8]}"
-    task_import_pivot_com.delay(job_id)
-    return ETLResponse(status="accepted", message="Import Pivot COM task started in background", job_id=job_id)
+    task_import_pivot_com.delay(job_id, webhook_url=webhook_url)
+    return ETLResponse(
+        status="accepted",
+        message="Import Pivot COM task started in background",
+        job_id=job_id,
+        webhook_url=webhook_url,
+    )
 
 
 @router.post(
@@ -56,13 +68,19 @@ async def api_import_pivot_com():
     description=(
         "Launches the Pivot CSB historical data import in the background. "
         "Executes `etl/scripts/import_pivot_CSB.py` asynchronously. "
+        "Pass `webhook_url` to be notified when the job completes."
     ),
     response_description="Task accepted and queued in background.",
 )
-async def api_import_pivot_csb():
+async def api_import_pivot_csb(webhook_url: str | None = Query(None)):
     job_id = f"import_pivot_csb_{uuid.uuid4().hex[:8]}"
-    task_import_pivot_csb.delay(job_id)
-    return ETLResponse(status="accepted", message="Import Pivot CSB task started in background", job_id=job_id)
+    task_import_pivot_csb.delay(job_id, webhook_url=webhook_url)
+    return ETLResponse(
+        status="accepted",
+        message="Import Pivot CSB task started in background",
+        job_id=job_id,
+        webhook_url=webhook_url,
+    )
 
 
 @router.post(
@@ -73,13 +91,19 @@ async def api_import_pivot_csb():
     description=(
         "Launches the climate data fetch in the background. "
         "Executes `etl/scripts/fetch_pridec_climate.py` asynchronously. "
+        "Pass `webhook_url` to be notified when the job completes."
     ),
     response_description="Climate data fetch accepted and queued in background.",
 )
-async def api_fetch_climate():
+async def api_fetch_climate(webhook_url: str | None = Query(None)):
     job_id = f"fetch_climate_{uuid.uuid4().hex[:8]}"
-    task_fetch_climate.delay(job_id)
-    return ETLResponse(status="accepted", message="Fetch climate task started in background", job_id=job_id)
+    task_fetch_climate.delay(job_id, webhook_url=webhook_url)
+    return ETLResponse(
+        status="accepted",
+        message="Fetch climate task started in background",
+        job_id=job_id,
+        webhook_url=webhook_url,
+    )
 
 
 @router.post(
@@ -90,13 +114,19 @@ async def api_fetch_climate():
     description=(
         "Launches the disease data fetch in the background. "
         "Executes `etl/scripts/fetch_pridec_disease.py` asynchronously. "
+        "Pass `webhook_url` to be notified when the job completes."
     ),
     response_description="Disease data fetch accepted and queued in background.",
 )
-async def api_fetch_disease():
+async def api_fetch_disease(webhook_url: str | None = Query(None)):
     job_id = f"fetch_disease_{uuid.uuid4().hex[:8]}"
-    task_fetch_disease.delay(job_id)
-    return ETLResponse(status="accepted", message="Fetch disease task started in background", job_id=job_id)
+    task_fetch_disease.delay(job_id, webhook_url=webhook_url)
+    return ETLResponse(
+        status="accepted",
+        message="Fetch disease task started in background",
+        job_id=job_id,
+        webhook_url=webhook_url,
+    )
 
 
 @router.post(
@@ -107,10 +137,16 @@ async def api_fetch_disease():
     description=(
         "Launches the GeoJSON boundary data fetch in the background. "
         "Executes `etl/scripts/fetch_pridec_geojson.py` asynchronously. "
+        "Pass `webhook_url` to be notified when the job completes."
     ),
     response_description="GeoJSON data fetch accepted and queued in background.",
 )
-async def api_fetch_geojson():
+async def api_fetch_geojson(webhook_url: str | None = Query(None)):
     job_id = f"fetch_geojson_{uuid.uuid4().hex[:8]}"
-    task_fetch_geojson.delay(job_id)
-    return ETLResponse(status="accepted", message="Fetch geojson task started in background", job_id=job_id)
+    task_fetch_geojson.delay(job_id, webhook_url=webhook_url)
+    return ETLResponse(
+        status="accepted",
+        message="Fetch geojson task started in background",
+        job_id=job_id,
+        webhook_url=webhook_url,
+    )

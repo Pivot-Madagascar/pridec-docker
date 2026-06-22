@@ -20,3 +20,10 @@ class RequestLog(BaseModel):
     client_host: str | None = None
     services: list[ServiceCallLog] = []
     error: str | None = None
+
+
+class ETLLog(BaseModel):
+    job_id: str
+    status: str | None = None
+    message: str | None = None
+    logs: str | None = None

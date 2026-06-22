@@ -1,3 +1,6 @@
+import json
+import urllib.request
+import urllib.error
 from datetime import datetime
 from celery import current_task
 
@@ -16,6 +19,25 @@ from etlhub.infrastructure.forecast_runner import run_rscript
 from etlhub.infrastructure.job_store import JobStore
 
 
+def _send_webhook(webhook_url: str, job_id: str, status: str, message: str, logs_url: str | None = None):
+    try:
+        payload = json.dumps({
+            "job_id": job_id,
+            "status": status,
+            "message": message,
+            "logs_url": logs_url,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            webhook_url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=10)
+    except Exception:
+        pass
+
+
 def _update_task_status(job_store: JobStore, job_id: str, status: str, message: str = None, logs: str = None):
     task_status = {
         "status": status,
@@ -29,108 +51,96 @@ def _update_task_status(job_store: JobStore, job_id: str, status: str, message: 
     job_store.set(job_id, task_status)
 
 
-@celery_app.task(bind=True)
-def task_import_gee(self, job_id: str):
+def _run_task(self, job_id: str, task_name: str, run_fn, webhook_url: str | None = None):
     job_store = JobStore()
-    _update_task_status(job_store, job_id, "running", "Starting GEE import")
+    _update_task_status(job_store, job_id, "running", f"Starting {task_name}")
     try:
-        run_import_gee()
-        _update_task_status(job_store, job_id, "success", "GEE import completed")
+        run_fn(job_store=job_store, job_id=job_id)
+        _update_task_status(job_store, job_id, "success", f"{task_name} completed")
+        if webhook_url:
+            _send_webhook(
+                webhook_url,
+                job_id=job_id,
+                status="success",
+                message=f"{task_name} completed",
+                logs_url=f"/api/tracking/etl-logs/{job_id}",
+            )
     except Exception as e:
         _update_task_status(job_store, job_id, "error", str(e))
+        if webhook_url:
+            _send_webhook(
+                webhook_url,
+                job_id=job_id,
+                status="error",
+                message=str(e),
+                logs_url=f"/api/tracking/etl-logs/{job_id}",
+            )
         raise
 
 
 @celery_app.task(bind=True)
-def task_import_pivot_com(self, job_id: str):
-    job_store = JobStore()
-    _update_task_status(job_store, job_id, "running", "Starting Pivot COM import")
-    try:
-        run_import_pivot_com()
-        _update_task_status(job_store, job_id, "success", "Pivot COM import completed")
-    except Exception as e:
-        _update_task_status(job_store, job_id, "error", str(e))
-        raise
+def task_import_gee(self, job_id: str, webhook_url: str | None = None):
+    _run_task(self, job_id, "GEE import", run_import_gee, webhook_url=webhook_url)
 
 
 @celery_app.task(bind=True)
-def task_import_pivot_csb(self, job_id: str):
-    job_store = JobStore()
-    _update_task_status(job_store, job_id, "running", "Starting Pivot CSB import")
-    try:
-        run_import_pivot_csb()
-        _update_task_status(job_store, job_id, "success", "Pivot CSB import completed")
-    except Exception as e:
-        _update_task_status(job_store, job_id, "error", str(e))
-        raise
+def task_import_pivot_com(self, job_id: str, webhook_url: str | None = None):
+    _run_task(self, job_id, "Pivot COM import", run_import_pivot_com, webhook_url=webhook_url)
 
 
 @celery_app.task(bind=True)
-def task_fetch_climate(self, job_id: str):
-    job_store = JobStore()
-    _update_task_status(job_store, job_id, "running", "Starting climate data fetch")
-    try:
-        run_fetch_climate()
-        _update_task_status(job_store, job_id, "success", "Climate data fetch completed")
-    except Exception as e:
-        _update_task_status(job_store, job_id, "error", str(e))
-        raise
+def task_import_pivot_csb(self, job_id: str, webhook_url: str | None = None):
+    _run_task(self, job_id, "Pivot CSB import", run_import_pivot_csb, webhook_url=webhook_url)
 
 
 @celery_app.task(bind=True)
-def task_fetch_disease(self, job_id: str):
-    job_store = JobStore()
-    _update_task_status(job_store, job_id, "running", "Starting disease data fetch")
-    try:
-        run_fetch_disease()
-        _update_task_status(job_store, job_id, "success", "Disease data fetch completed")
-    except Exception as e:
-        _update_task_status(job_store, job_id, "error", str(e))
-        raise
+def task_fetch_climate(self, job_id: str, webhook_url: str | None = None):
+    _run_task(self, job_id, "climate data fetch", run_fetch_climate, webhook_url=webhook_url)
 
 
 @celery_app.task(bind=True)
-def task_fetch_geojson(self, job_id: str):
-    job_store = JobStore()
-    _update_task_status(job_store, job_id, "running", "Starting GeoJSON fetch")
-    try:
-        run_fetch_geojson()
-        _update_task_status(job_store, job_id, "success", "GeoJSON fetch completed")
-    except Exception as e:
-        _update_task_status(job_store, job_id, "error", str(e))
-        raise
+def task_fetch_disease(self, job_id: str, webhook_url: str | None = None):
+    _run_task(self, job_id, "disease data fetch", run_fetch_disease, webhook_url=webhook_url)
 
 
 @celery_app.task(bind=True)
-def task_build_analytics(self, job_id: str):
-    job_store = JobStore()
-    _update_task_status(job_store, job_id, "running", "Starting analytics build")
-    try:
-        run_build_analytics()
-        _update_task_status(job_store, job_id, "success", "Analytics build completed")
-    except Exception as e:
-        _update_task_status(job_store, job_id, "error", str(e))
-        raise
+def task_fetch_geojson(self, job_id: str, webhook_url: str | None = None):
+    _run_task(self, job_id, "GeoJSON fetch", run_fetch_geojson, webhook_url=webhook_url)
 
 
 @celery_app.task(bind=True)
-def task_calc_csb_alerts(self, job_id: str):
-    job_store = JobStore()
-    _update_task_status(job_store, job_id, "running", "Starting CSB alerts calculation")
-    try:
-        run_calc_csb_alerts()
-        _update_task_status(job_store, job_id, "success", "CSB alerts calculation completed")
-    except Exception as e:
-        _update_task_status(job_store, job_id, "error", str(e))
-        raise
+def task_build_analytics(self, job_id: str, webhook_url: str | None = None):
+    _run_task(self, job_id, "analytics build", run_build_analytics, webhook_url=webhook_url)
 
 
 @celery_app.task(bind=True)
-def task_forecast(self, job_id: str, params: dict):
+def task_calc_csb_alerts(self, job_id: str, webhook_url: str | None = None):
+    _run_task(self, job_id, "CSB alerts calculation", run_calc_csb_alerts, webhook_url=webhook_url)
+
+
+@celery_app.task(bind=True)
+def task_forecast(self, job_id: str, params: dict, webhook_url: str | None = None):
     job_store = JobStore()
     _update_task_status(job_store, job_id, "running", "Starting forecast pipeline")
     try:
         run_rscript(job_id, params, job_store)
+        _update_task_status(job_store, job_id, "success", "Forecast pipeline completed")
+        if webhook_url:
+            _send_webhook(
+                webhook_url,
+                job_id=job_id,
+                status="success",
+                message="Forecast pipeline completed",
+                logs_url=f"/api/tracking/etl-logs/{job_id}",
+            )
     except Exception as e:
         _update_task_status(job_store, job_id, "error", str(e))
+        if webhook_url:
+            _send_webhook(
+                webhook_url,
+                job_id=job_id,
+                status="error",
+                message=str(e),
+                logs_url=f"/api/tracking/etl-logs/{job_id}",
+            )
         raise
