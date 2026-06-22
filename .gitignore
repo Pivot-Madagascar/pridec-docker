@@ -18,6 +18,7 @@
 venv/
 */.env*
 */venv/
+**/__pycache__/
 test-venv/
 etlhub_env/
 __pycache__/

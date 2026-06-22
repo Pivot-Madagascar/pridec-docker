@@ -93,7 +93,7 @@ The primary steps are:
 4. Create a `.env` file following `.env.example` in the `pridec-docker` directory
 5. Run the full workflow from the project directory. Some example code is below:
 
-Calling `pridec` will launch a one-off container, loading the .env file and exiting afterwards. It is equivalent to `docker compose -f "compose.yaml" run --env-from-file .env --rm` and can take arguments to each service. Run `pridec -h` for more details.
+Calling `pridec` will launch a one-off container, loading the .env file and exiting afterwards. It is equivalent to `docker compose -f "compose.yaml" run --env-from-file .env --rm` and can take arguments for each task. Run `pridec -h` for more details.
 
 ```
 #import data from GEE into your DHIS2 instance (this only needs to be done once per month)
@@ -116,7 +116,8 @@ pridec etl fetch_geojson -e OU_LEVEL='5'
 pridec etl fetch_disease -e DISEASE_CODE="pridec_historic_CSBMalaria" --e OU_LEVEL='5'
 
 #config file can be changed for each disease. default is config.json
-pridec forecast --config "input/config_malaria.json" --external_data "input/external_data_csb.csv"
+pridec etl validate_inputs --config_valid "input/config_malaria.json" --external_data "input/external_data_csb.csv"
+pridec forecast forecast 
 
 #YOU SHOULD INSPECT output/forecast_report.html NOW
 
@@ -177,10 +178,11 @@ docker compose run --env-from-file .env --env DRYRUN="false" --rm etl build_anal
 The forecast step should be run for each dataElement being predicted. Its steps are:
 
 1. Fetching the necessary climate, disease, and geospatial data from teh PRIDE-C instance
+2. Validating the data into validated inputs
 2. Using the data in the `forecast` workflow
 3. `POST`ing the forecasts to the PRIDE-C instance
 
-#### 2.1. `fetch` service to download climate, disease, and geospatial data
+#### 2.1. `fetch` tasks to download climate, disease, and geospatial data
 
 This uses the ENV_VARIABLES stored in the `.env` file. It needs to be updated when using a different DHIS2 instance or dataSource following `.env.example`. This step is run for every `dataElement` that you wish to predict.
 
@@ -190,17 +192,39 @@ docker compose run --env-from-file .env --env DRYRUN="false" --rm etl fetch_dise
 docker compose run --env-from-file .env --env DRYRUN="false" --rm etl fetch_geojson
 ```
 
-#### 2.2. `forecast` service to create predictions.
+#### 2.2 Validate inputs via `etl validate_inputs`
 
-For `forecast`, input must contain a `config.json` file and `external_data.csv` file. They can have other names, but must be in the `input` directory to work with compose. If their name is different, it needs to be supplied via an argument to `docker run`, as in the below example
+This will read in teh data in the `input/` directory and save the validated inputs as:
+
+- input/config_valid.json
+- input/input_valid.json
+- input/polygon_valid.json
+
+It can take the following arguments. The defaults are set to the work with the defaults of the `fetch` tasks:
+
+- --help
+- --config          : path to configuration file. Default = "input/config.json"
+- --external_data   : path to external data csv file. Default = "input/external_data.csv". Can be set to None.
+- --disease_data    : path to fetched disease_data. Default = "input/disease_data.json"
+- --climate_data    : path to fetched climate_data. Default = "input/climate_data.json"
+- --orgUnit_poly    : path to fetched orgUnit spatial polygons. Default = "input/orgUnit_poly.geojson
 
 ```
-docker compose run --rm forecast --config "input/config.json" --external_data "input/external_data_fkt.csv"
+docker compose run etl validate_inputs
 ```
 
-You should now inspect the model validation report in `output/forecast_report.html`. If everything seems okay, proceed to step `2c` to import the forecast into the PRIDE-C instance.
+#### 2.3. `forecast` to create predictions.
 
-#### 2.3. `POST` the forecast to the PRIDE-C instance
+The `forecast` task is located in the `forecast` service. It requires the validate inputs output by the `validate_inputs` task. By default, it will use the default file paths corresponding to the inputs above, but they can be specified by other arguments.
+
+
+```
+docker compose run --rm forecast forecast 
+```
+
+You should now inspect the model validation report in `output/forecast_report.html`. If everything seems okay, proceed to step `2.4` to import the forecast into the PRIDE-C instance.
+
+#### 2.4. `POST` the forecast to the PRIDE-C instance
 
 Once the forecast has been validated, it can be posted to the instance.
 
@@ -287,7 +311,7 @@ docker compose logs -f <service-name>
 
 docker image inspect <service-name>
 
-docker run <service-name> --help
+docker compose run <service-name> --help
 
 ```
 
