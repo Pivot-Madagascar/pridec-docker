@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket
 
 from etlhub.infrastructure.request_tracker import get_request_tracker
 from etlhub.infrastructure.job_store import JobStore
 from etlhub.domain.schemas.tracking import RequestLog, ETLLog
+from etlhub.api.websockets.etl_logs import handle_etl_logs_ws
 
 router = APIRouter(prefix="/api/tracking", tags=["Tracking"])
 
@@ -29,3 +30,8 @@ def get_etl_logs(job_id: str):
     if logs is None:
         raise HTTPException(status_code=404, detail="ETL logs not found for this job_id")
     return ETLLog(job_id=job_id, logs=logs)
+
+
+@router.websocket("/etl-logs/{job_id}")
+async def websocket_etl_logs(websocket: WebSocket, job_id: str):
+    await handle_etl_logs_ws(websocket, job_id)

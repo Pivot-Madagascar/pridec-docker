@@ -34,11 +34,9 @@ async def api_forecast(
     job_id = f"forecast_{uuid.uuid4().hex[:8]}"
 
     forecast_params = {
-        "config": params.config_path,
-        "external_data": params.external_data_path,
-        "climate_data": params.climate_data_path,
-        "disease_data": params.disease_data_path,
-        "orgUnit_poly": params.orgUnit_poly_path,
+        "config_valid_path": params.config_valid_path,
+        "input_valid_path": params.input_valid_path,
+        "polygon_valid_path": params.polygon_valid_path,
     }
 
     task_forecast.delay(job_id, forecast_params)

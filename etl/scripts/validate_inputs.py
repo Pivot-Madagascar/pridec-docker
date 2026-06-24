@@ -1,4 +1,3 @@
-from config import setup_logging
 from typing import Any
 from dataclasses import dataclass
 from datetime import date
@@ -390,7 +389,7 @@ def validate_inputs(
     
 
 if __name__ == "__main__":
-
+    from config import setup_logging
     setup_logging()
     logger = logging.getLogger("validate_inputs")
 

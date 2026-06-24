@@ -1,4 +1,5 @@
 import json
+import traceback
 import urllib.request
 import urllib.error
 from datetime import datetime
@@ -15,6 +16,7 @@ from etlhub.application.use_cases.etl_use_cases import (
     run_build_analytics,
     run_calc_csb_alerts,
 )
+from etlhub.application.use_cases.validation_use_cases import run_validate_inputs
 from etlhub.infrastructure.forecast_runner import run_rscript
 from etlhub.infrastructure.job_store import JobStore
 
@@ -49,6 +51,11 @@ def _update_task_status(job_store: JobStore, job_id: str, status: str, message: 
     if logs:
         task_status["logs"] = logs
     job_store.set(job_id, task_status)
+    try:
+        from etlhub.api.etl_events import get_etl_event_manager
+        get_etl_event_manager().publish_status(job_id, status, message)
+    except Exception:
+        pass
 
 
 def _run_task(self, job_id: str, task_name: str, run_fn, webhook_url: str | None = None):
@@ -66,6 +73,16 @@ def _run_task(self, job_id: str, task_name: str, run_fn, webhook_url: str | None
                 logs_url=f"/api/tracking/etl-logs/{job_id}",
             )
     except Exception as e:
+        tb = traceback.format_exc()
+        try:
+            job_store.save_logs(job_id, tb)
+        except Exception:
+            pass
+        try:
+            from etlhub.api.etl_events import get_etl_event_manager
+            get_etl_event_manager().publish_log(job_id, "ERROR", tb)
+        except Exception:
+            pass
         _update_task_status(job_store, job_id, "error", str(e))
         if webhook_url:
             _send_webhook(
@@ -116,6 +133,13 @@ def task_build_analytics(self, job_id: str, webhook_url: str | None = None):
 @celery_app.task(bind=True)
 def task_calc_csb_alerts(self, job_id: str, webhook_url: str | None = None):
     _run_task(self, job_id, "CSB alerts calculation", run_calc_csb_alerts, webhook_url=webhook_url)
+
+
+@celery_app.task(bind=True)
+def task_validate_inputs(self, job_id: str, webhook_url: str | None = None, **kwargs):
+    _run_task(self, job_id, "validate inputs", lambda job_store, job_id: run_validate_inputs(
+        job_store=job_store, job_id=job_id, **kwargs
+    ), webhook_url=webhook_url)
 
 
 @celery_app.task(bind=True)

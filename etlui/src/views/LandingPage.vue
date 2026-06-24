@@ -155,7 +155,42 @@
           </div>
         </div>
 
-        <!-- Step 3: Forecast -->
+        <!-- Step 3: Validation -->
+        <div class="stepper-step">
+          <div class="stepper-indicator">
+            <svg class="step-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div class="stepper-content">
+            <h3 class="stepper-title">
+              Validation
+              <span class="stepper-badge">Step 3</span>
+            </h3>
+            <div class="action-grid">
+              <button @click="validateInputs" :disabled="loading.validate_inputs" class="action-card btn-etl" :class="{ 'card-success': results.validate_inputs }">
+                <div class="card-icon icon-teal">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div class="card-content">
+                  <span class="card-title">Validate Inputs</span>
+                  <span class="card-status">
+                    <span v-if="loading.validate_inputs" class="status-running">
+                      <span class="spinner"></span>
+                      Processing...
+                    </span>
+                    <span v-else-if="results.validate_inputs" class="status-done">✓ Validated</span>
+                    <span v-else class="status-pending">Ready</span>
+                  </span>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 4: Forecast -->
         <div class="stepper-step">
           <div class="stepper-indicator">
             <svg class="step-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -165,7 +200,7 @@
           <div class="stepper-content">
             <h3 class="stepper-title">
               Forecast
-              <span class="stepper-badge">Step 3</span>
+              <span class="stepper-badge">Step 4</span>
             </h3>
             <div class="action-grid">
               <button @click="navigateTo('/forecast')" class="action-card btn-forecast-primary">
@@ -231,7 +266,7 @@
           <div class="stepper-content">
             <h3 class="stepper-title">
               Analytics
-              <span class="stepper-badge">Step 4</span>
+              <span class="stepper-badge">Step 5</span>
             </h3>
             <div class="action-grid gapless">
               <button @click="triggerETL('build_analytics')" :disabled="loading.build_analytics" class="action-card btn-etl" :class="{ 'card-success': results.build_analytics }">
@@ -315,7 +350,8 @@ const loading = reactive({
   build_analytics: false,
   calc_csb_alerts: false,
   update_key: false,
-  post_forecast: false
+  post_forecast: false,
+  validate_inputs: false
 })
 
 const results = reactive({
@@ -325,7 +361,8 @@ const results = reactive({
   build_analytics: false,
   calc_csb_alerts: false,
   update_key: false,
-  post_forecast: false
+  post_forecast: false,
+  validate_inputs: false
 })
 
 const loadingClimate = ref(false)
@@ -439,6 +476,23 @@ const triggerETL = async (endpoint: string) => {
     )
   } finally {
     loading[endpoint as keyof typeof loading] = false
+  }
+}
+
+const validateInputs = async () => {
+  loading.validate_inputs = true
+  results.validate_inputs = false
+  try {
+    const response = await api.post('/validate_inputs')
+    results.validate_inputs = true
+    showNotification(response.data.message || 'Inputs validated', 'success')
+    addActivity('Validate Inputs', response.data.message || 'Validation passed', true)
+  } catch (err) {
+    showNotification('Validation failed', 'error')
+    addActivity('Validate Inputs', 'Validation failed', false)
+    results.validate_inputs = false
+  } finally {
+    loading.validate_inputs = false
   }
 }
 </script>
@@ -747,10 +801,11 @@ const triggerETL = async (endpoint: string) => {
   animation: fadeInUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-.stepper-step:nth-child(1) { animation-delay: 0s; }
-.stepper-step:nth-child(2) { animation-delay: 0.15s; }
-.stepper-step:nth-child(3) { animation-delay: 0.3s; }
-.stepper-step:nth-child(4) { animation-delay: 0.45s; }
+  .stepper-step:nth-child(1) { animation-delay: 0s; }
+  .stepper-step:nth-child(2) { animation-delay: 0.15s; }
+  .stepper-step:nth-child(3) { animation-delay: 0.3s; }
+  .stepper-step:nth-child(4) { animation-delay: 0.45s; }
+  .stepper-step:nth-child(5) { animation-delay: 0.6s; }
 
 /* ===== Responsive ===== */
 @media (max-width: 1024px) {
