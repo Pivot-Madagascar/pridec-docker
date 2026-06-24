@@ -21,39 +21,30 @@
       <!-- Configuration Inputs -->
       <div class="grid-cols-2-md gap-4 mb-6">
         <div>
-          <label class="form-label">Config Path</label>
+          <label class="form-label">Config Valid Path</label>
           <input
-            v-model="configPath"
+            v-model="configValidPath"
             type="text"
             class="form-input"
-            placeholder="input/config.json"
+            placeholder="input/config_valid.json"
           />
         </div>
         <div>
-          <label class="form-label">External Data Path</label>
+          <label class="form-label">Input Valid Path</label>
           <input
-            v-model="externalDataPath"
+            v-model="inputValidPath"
             type="text"
             class="form-input"
-            placeholder="input/external_data.csv"
+            placeholder="input/input_valid.json"
           />
         </div>
         <div>
-          <label class="form-label">Climate Data Path</label>
+          <label class="form-label">Polygon Valid Path</label>
           <input
-            v-model="climateDataPath"
+            v-model="polygonValidPath"
             type="text"
             class="form-input"
-            placeholder="input/climate_data.json"
-          />
-        </div>
-        <div>
-          <label class="form-label">Disease Data Path</label>
-          <input
-            v-model="diseaseDataPath"
-            type="text"
-            class="form-input"
-            placeholder="input/disease_data.json"
+            placeholder="input/polygon_valid.geojson"
           />
         </div>
       </div>
@@ -112,10 +103,9 @@ const jobId = ref('')
 const message = ref('')
 const messageType = ref<'success' | 'error'>('success')
 
-const configPath = ref('input/config.json')
-const externalDataPath = ref('input/external_data.csv')
-const climateDataPath = ref('input/climate_data.json')
-const diseaseDataPath = ref('input/disease_data.json')
+const configValidPath = ref('input/config_valid.json')
+const inputValidPath = ref('input/input_valid.json')
+const polygonValidPath = ref('input/polygon_valid.geojson')
 
 const runForecast = async () => {
   isRunning.value = true
@@ -124,11 +114,9 @@ const runForecast = async () => {
 
   try {
     const response = await api.post('/forecast/', {
-      config_path: configPath.value,
-      external_data_path: externalDataPath.value,
-      climate_data_path: climateDataPath.value,
-      disease_data_path: diseaseDataPath.value,
-      orgUnit_poly_path: 'input/orgUnit_poly.geojson'
+      config_valid_path: configValidPath.value,
+      input_valid_path: inputValidPath.value,
+      polygon_valid_path: polygonValidPath.value,
     })
 
     message.value = response.data.message || 'Forecast job started'

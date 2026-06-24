@@ -2,11 +2,9 @@ from pydantic import BaseModel, Field
 
 
 class ForecastParams(BaseModel):
-    config_path: str = Field(default="input/config.json")
-    external_data_path: str = Field(default="input/external_data.csv")
-    climate_data_path: str = Field(default="input/climate_data.json")
-    disease_data_path: str = Field(default="input/disease_data.json")
-    orgUnit_poly_path: str = Field(default="input/orgUnit_poly.geojson")
+    config_valid_path: str = Field(default="input/config_valid.json")
+    input_valid_path: str = Field(default="input/input_valid.json")
+    polygon_valid_path: str = Field(default="input/polygon_valid.geojson")
 
 
 class JobStatus(BaseModel):

@@ -39,6 +39,19 @@ class _JobLogger:
                 f.write(text)
         except Exception:
             pass
+        try:
+            from etlhub.api.etl_events import get_etl_event_manager
+            level = "INFO"
+            upper = text.upper()
+            if "ERROR" in upper:
+                level = "ERROR"
+            elif "WARNING" in upper or "WARN" in upper:
+                level = "WARNING"
+            elif "DEBUG" in upper:
+                level = "DEBUG"
+            get_etl_event_manager().publish_log(self.job_id, level, text)
+        except Exception:
+            pass
         return len(text)
 
     def flush(self) -> None:

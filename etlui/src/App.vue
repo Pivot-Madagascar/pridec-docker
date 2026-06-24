@@ -29,6 +29,12 @@
             Tracking
           </router-link>
           <router-link
+            to="/logs"
+            class="nav-link"
+          >
+            Logs
+          </router-link>
+          <router-link
             to="/forecast"
             class="nav-link"
           >
