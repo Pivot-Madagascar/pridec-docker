@@ -14,8 +14,12 @@ DHIS2_TOKEN="d2pat_odhYW86O8auDuQ73u4r3HElEJxMFQziM3326734980"
 Building and pushing to Docker Hub (both images at once)
 
 ```
-docker compose -f compose-build.yaml build --no-cache && docker compose push
+docker compose -f compose-build.yaml build --no-cache && docker compose -f compose-build.yaml push
 ```
+
+## 2026-06-25
+
+Updated the images to using explicit versioning, beginning with 0.1.0, to help with conflicts from local vs. built images. This is realted to issue #9.
 
 ## 2026-05-25
 
