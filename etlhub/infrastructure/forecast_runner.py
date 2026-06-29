@@ -68,3 +68,20 @@ def run_rscript(job_id, params, job_store: JobStore):
         print(f"Warning: Could not write status file: {e}")
 
     job_store.set(job_id, status)
+
+    logs = status.get("logs") or status.get("message") or ""
+    if logs:
+        try:
+            job_store.save_logs(job_id, logs)
+        except Exception:
+            pass
+        try:
+            from etlhub.api.etl_events import get_etl_event_manager
+            get_etl_event_manager().publish_log(job_id, "ERROR" if status.get("status") == "error" else "INFO", logs)
+        except Exception:
+            pass
+        try:
+            from etlhub.api.etl_events import get_etl_event_manager
+            get_etl_event_manager().publish_status(job_id, status.get("status"), status.get("message"))
+        except Exception:
+            pass
