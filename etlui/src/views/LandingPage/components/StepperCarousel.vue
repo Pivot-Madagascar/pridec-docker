@@ -38,9 +38,7 @@
               @click="action.onClick ? action.onClick() : $emit('action-click', action.key)"
             >
               <div class="card-icon" :class="action.iconClass">
-                <svg v-if="action.icon" xmlns="http://www.w3.org/2000/svg" class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="action.icon" />
-                </svg>
+                <Icon v-if="action.icon" :path="action.icon" class="icon-svg" />
               </div>
               <div class="card-content">
                 <span class="card-title">{{ action.label }}</span>
@@ -88,6 +86,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import Icon from '@/components/Icons'
 
 interface Action {
   key: string
