@@ -61,9 +61,9 @@
     </main>
 
     <!-- Footer -->
-    <footer class="app-footer">
+    <!-- <footer class="app-footer">
       <p class="footer-text">© 2026 PRIDE-C ETL Hub. All rights reserved.</p>
-    </footer>
+    </footer> -->
   </div>
 </template>
 

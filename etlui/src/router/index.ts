@@ -6,7 +6,7 @@ const router = createRouter({
     {
       path: '/',
       name: 'Landing',
-      component: () => import('@/views/LandingPage.vue'),
+      component: () => import('@/views/LandingPage/LandingPage.vue'),
       meta: { title: 'ETL UI - Dashboard' }
     },
     {
@@ -18,7 +18,7 @@ const router = createRouter({
     {
       path: '/tracking',
       name: 'Tracking',
-      component: () => import('@/views/TrackerView.vue'),
+      component: () => import('@/views/TrackerView/TrackerView.vue'),
       meta: { title: 'Request Tracking' }
     },
     {
