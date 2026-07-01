@@ -51,3 +51,5 @@ logs/
 
 # Redis Database backup
 dump.rdb
+
+etlui/dist/

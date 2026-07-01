@@ -51,11 +51,12 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useTrackingStore } from '@/stores/useTrackingStore'
-import RequestTable from '@/views/components/RequestTable.vue'
-import RequestDetail from '@/views/components/RequestDetail.vue'
+import type { RequestLog } from '@/services/api'
+import RequestTable from './components/RequestTable.vue'
+import RequestDetail from './components/RequestDetail.vue'
 
 const store = useTrackingStore()
-const selectedRequest = ref<import('@/services/api').RequestLog | null>(null)
+const selectedRequest = ref<RequestLog | null>(null)
 const showModal = ref(false)
 const page = ref(0)
 const pageSize = 10

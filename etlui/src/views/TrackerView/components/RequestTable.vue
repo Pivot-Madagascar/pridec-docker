@@ -95,7 +95,7 @@ const props = defineProps<{
   pageSize?: number
 }>()
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'select', requestId: string): void
   (e: 'update:page', page: number): void
 }>()

@@ -28,7 +28,8 @@ def run_rscript(job_id, params, job_store: JobStore):
         '--cap-add', 'SYS_NICE',
         '-v', input_vol,
         '-v', output_vol,
-        'mvevans89/pridec_forecast:latest',
+        'mvevans89/pridec_forecast:0.1.0',
+        'forecast',
         '--config_valid', params['config_valid_path'],
         '--input_valid', params['input_valid_path'],
         '--polygon_valid', params['polygon_valid_path']
