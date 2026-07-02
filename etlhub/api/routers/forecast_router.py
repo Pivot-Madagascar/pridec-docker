@@ -1,16 +1,15 @@
-import uuid
 from fastapi import APIRouter, HTTPException, Depends
 
-from etlhub.infrastructure.tasks import task_forecast
-from etlhub.infrastructure.job_store import JobStore
+from etlhub.application.use_cases.forecast_service import ForecastService
 from etlhub.domain.schemas import ETLResponse, ForecastParams, JobStatus
-from etlhub.api.dependencies import get_job_store
+from etlhub.domain.exceptions import ETLException
+from etlhub.core.dependencies import get_forecast_service
 
 router = APIRouter(prefix="/forecast", tags=["Forecast"])
 
 
 @router.post(
-    "/",
+    "/", 
     response_model=ETLResponse,
     status_code=202,
     summary="Launch R forecast pipeline via Docker",
@@ -28,23 +27,14 @@ router = APIRouter(prefix="/forecast", tags=["Forecast"])
     },
 )
 async def api_forecast(
-    params: ForecastParams = Depends(),
-    job_store: JobStore = Depends(get_job_store),
+    params: ForecastParams,
+    service: ForecastService = Depends(get_forecast_service),
 ):
-    job_id = f"forecast_{uuid.uuid4().hex[:8]}"
-
-    forecast_params = {
-        "config_valid_path": params.config_valid_path,
-        "input_valid_path": params.input_valid_path,
-        "polygon_valid_path": params.polygon_valid_path,
-    }
-
-    task_forecast.delay(job_id, forecast_params)
-
+    job_id = service.launch(params)
     return ETLResponse(
         status="accepted",
         message="Forecast started",
-        job_id=job_id
+        job_id=job_id,
     )
 
 
@@ -70,16 +60,10 @@ async def api_forecast(
 )
 async def forecast_status(
     job_id: str,
-    job_store: JobStore = Depends(get_job_store),
+    service: ForecastService = Depends(get_forecast_service),
 ):
-    status = job_store.get(job_id)
-    if status:
+    try:
+        status = service.get_status(job_id)
         return JobStatus(**status)
-
-    from etlhub.core.config import get_settings
-    settings = get_settings()
-    status = job_store.load_from_file(job_id, settings.logs_dir)
-    if status:
-        return JobStatus(**status)
-
-    raise HTTPException(status_code=404, detail="Job not found")
+    except ETLException:
+        raise HTTPException(status_code=404, detail="Job not found")

@@ -1,0 +1,6 @@
+from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class EventPublisher(Protocol):
+    def publish_log(self, job_id: str, level: str, message: str, source: str = "etl-processor") -> None: ...
+    def publish_status(self, job_id: str, status: str, message: str | None = None) -> None: ...
