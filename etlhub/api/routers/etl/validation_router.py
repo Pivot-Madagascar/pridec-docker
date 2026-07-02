@@ -1,8 +1,9 @@
 import uuid
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 
-from etlhub.infrastructure.tasks import task_validate_inputs
+from etlhub.application.use_cases.validation_service import ValidationService
 from etlhub.domain.schemas import ETLResponse
+from etlhub.core.dependencies import get_validation_service
 
 router = APIRouter(tags=["Validation"])
 
@@ -28,10 +29,9 @@ async def api_validate_inputs(
     orgunit_poly_path: str | None = Query(None, description="Path to orgUnit_poly.geojson"),
     input_dir: str | None = Query(None, description="Base input directory (default: input/)"),
     webhook_url: str | None = Query(None, description="Optional webhook callback URL"),
+    service: ValidationService = Depends(get_validation_service),
 ):
-    job_id = f"validate_inputs_{uuid.uuid4().hex[:8]}"
-    task_validate_inputs.delay(
-        job_id,
+    job_id = service.validate_inputs(
         webhook_url=webhook_url,
         config_path=config_path,
         external_data_path=external_data_path,

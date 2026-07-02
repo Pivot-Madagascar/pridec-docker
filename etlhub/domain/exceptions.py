@@ -1,0 +1,2 @@
+class ETLException(Exception):
+    pass

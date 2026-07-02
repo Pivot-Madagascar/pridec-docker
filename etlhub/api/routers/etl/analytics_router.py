@@ -1,18 +1,9 @@
-import uuid
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 
-from etlhub.application.use_cases.etl_use_cases import (
-    ETLException,
-    run_post_forecast,
-    run_update_key,
-)
-from etlhub.infrastructure.tasks import (
-    task_build_analytics,
-    task_calc_csb_alerts,
-    _send_webhook,
-)
-from etlhub.infrastructure.job_store import JobStore
+from etlhub.application.use_cases.analytics_service import AnalyticsService
 from etlhub.domain.schemas import ETLResponse
+from etlhub.domain.exceptions import ETLException
+from etlhub.core.dependencies import get_analytics_service
 
 router = APIRouter(tags=["Analytics"])
 
@@ -29,9 +20,11 @@ router = APIRouter(tags=["Analytics"])
     ),
     response_description="Analytics build task accepted and queued in background.",
 )
-async def api_build_analytics(webhook_url: str | None = Query(None)):
-    job_id = f"build_analytics_{uuid.uuid4().hex[:8]}"
-    task_build_analytics.delay(job_id, webhook_url=webhook_url)
+async def api_build_analytics(
+    webhook_url: str | None = Query(None),
+    service: AnalyticsService = Depends(get_analytics_service),
+):
+    job_id = service.build_analytics(webhook_url)
     return ETLResponse(
         status="accepted",
         message="Build analytics task started in background",
@@ -62,16 +55,14 @@ async def api_build_analytics(webhook_url: str | None = Query(None)):
         }
     },
 )
-async def api_post_forecast(webhook_url: str | None = Query(None)):
-    job_id = f"post_forecast_{uuid.uuid4().hex[:8]}"
-    job_store = JobStore()
+async def api_post_forecast(
+    webhook_url: str | None = Query(None),
+    service: AnalyticsService = Depends(get_analytics_service),
+):
     try:
-        run_post_forecast(job_store=job_store, job_id=job_id)
-        result = ETLResponse(status="success", message="Forecast posted successfully", job_id=job_id, webhook_url=webhook_url)
+        result = service.post_forecast(webhook_url)
     except ETLException as e:
         raise HTTPException(status_code=500, detail=str(e))
-    if webhook_url:
-        _send_webhook(webhook_url, job_id=job_id, status="success", message="Forecast posted successfully", logs_url=f"/api/tracking/etl-logs/{job_id}")
     return result
 
 
@@ -87,9 +78,11 @@ async def api_post_forecast(webhook_url: str | None = Query(None)):
     ),
     response_description="CSB alert calculation task accepted and queued in background.",
 )
-async def api_calc_csb_alerts(webhook_url: str | None = Query(None)):
-    job_id = f"calc_csb_alerts_{uuid.uuid4().hex[:8]}"
-    task_calc_csb_alerts.delay(job_id, webhook_url=webhook_url)
+async def api_calc_csb_alerts(
+    webhook_url: str | None = Query(None),
+    service: AnalyticsService = Depends(get_analytics_service),
+):
+    job_id = service.calc_csb_alerts(webhook_url)
     return ETLResponse(
         status="accepted",
         message="Calculate CSB alerts task started in background",
@@ -120,14 +113,12 @@ async def api_calc_csb_alerts(webhook_url: str | None = Query(None)):
         }
     },
 )
-async def api_update_key(webhook_url: str | None = Query(None)):
-    job_id = f"update_key_{uuid.uuid4().hex[:8]}"
-    job_store = JobStore()
+async def api_update_key(
+    webhook_url: str | None = Query(None),
+    service: AnalyticsService = Depends(get_analytics_service),
+):
     try:
-        run_update_key(job_store=job_store, job_id=job_id)
-        result = ETLResponse(status="success", message="Key updated successfully", job_id=job_id, webhook_url=webhook_url)
+        result = service.update_key(webhook_url)
     except ETLException as e:
         raise HTTPException(status_code=500, detail=str(e))
-    if webhook_url:
-        _send_webhook(webhook_url, job_id=job_id, status="success", message="Key updated successfully", logs_url=f"/api/tracking/etl-logs/{job_id}")
     return result

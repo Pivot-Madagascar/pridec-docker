@@ -168,3 +168,30 @@ def task_forecast(self, job_id: str, params: dict, webhook_url: str | None = Non
                 logs_url=f"/api/tracking/etl-logs/{job_id}",
             )
         raise
+
+
+class CeleryTaskLauncher:
+    def __init__(self):
+        self._registry = {
+            "import_gee": task_import_gee,
+            "import_pivot_com": task_import_pivot_com,
+            "import_pivot_csb": task_import_pivot_csb,
+            "fetch_climate": task_fetch_climate,
+            "fetch_disease": task_fetch_disease,
+            "fetch_geojson": task_fetch_geojson,
+            "build_analytics": task_build_analytics,
+            "calc_csb_alerts": task_calc_csb_alerts,
+            "validate_inputs": task_validate_inputs,
+            "forecast": task_forecast,
+        }
+
+    def launch(self, task_type: str, job_id: str, webhook_url: str | None = None, **kwargs) -> None:
+        fn = self._registry.get(task_type)
+        if fn is None:
+            raise ValueError(f"Unknown task type: {task_type}")
+        fn.delay(job_id, webhook_url=webhook_url, **kwargs)
+
+
+class DefaultWebhookNotifier:
+    def send(self, webhook_url: str, job_id: str, status: str, message: str, logs_url: str | None = None) -> None:
+        _send_webhook(webhook_url, job_id=job_id, status=status, message=message, logs_url=logs_url)

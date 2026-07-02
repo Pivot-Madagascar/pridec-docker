@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 from etlhub.core.config import get_settings
+from etlhub.domain.exceptions import ETLException
 from etl.scripts.import_gee import import_gee
 from etl.scripts.import_pivot_COM import import_pivot_com
 from etl.scripts.import_pivot_CSB import import_pivot_csb
@@ -14,10 +15,6 @@ from etl.scripts.build_analytics import build_analytics
 from etl.scripts.post_forecast import post_forecast
 from etl.scripts.calc_CSB_alerts import calc_csb_alerts
 from etl.scripts.update_pridec_key import update_key
-
-
-class ETLException(Exception):
-    pass
 
 
 class _JobLogger:
@@ -86,101 +83,51 @@ def capture_stdout(job_id: str | None = None):
             yield buf
 
 
-def run_import_gee(job_store=None, job_id=None) -> None:
+def _execute_etl_job(fn, job_store=None, job_id=None, name=None) -> None:
     with capture_stdout(job_id=job_id) as buf:
         try:
-            import_gee()
+            fn()
         except Exception as e:
-            raise ETLException(f"import_gee failed: {e}") from e
+            raise ETLException(f"{name} failed: {e}") from e
     if job_store and job_id:
         job_store.save_logs(job_id, buf.getvalue())
+
+
+def run_import_gee(job_store=None, job_id=None) -> None:
+    _execute_etl_job(import_gee, job_store=job_store, job_id=job_id, name="import_gee")
 
 
 def run_import_pivot_com(job_store=None, job_id=None) -> None:
-    with capture_stdout(job_id=job_id) as buf:
-        try:
-            import_pivot_com()
-        except Exception as e:
-            raise ETLException(f"import_pivot_com failed: {e}") from e
-    if job_store and job_id:
-        job_store.save_logs(job_id, buf.getvalue())
+    _execute_etl_job(import_pivot_com, job_store=job_store, job_id=job_id, name="import_pivot_com")
 
 
 def run_import_pivot_csb(job_store=None, job_id=None) -> None:
-    with capture_stdout(job_id=job_id) as buf:
-        try:
-            import_pivot_csb()
-        except Exception as e:
-            raise ETLException(f"import_pivot_csb failed: {e}") from e
-    if job_store and job_id:
-        job_store.save_logs(job_id, buf.getvalue())
+    _execute_etl_job(import_pivot_csb, job_store=job_store, job_id=job_id, name="import_pivot_csb")
 
 
 def run_fetch_climate(job_store=None, job_id=None) -> None:
-    with capture_stdout(job_id=job_id) as buf:
-        try:
-            fetch_climate()
-        except Exception as e:
-            raise ETLException(f"fetch_climate failed: {e}") from e
-    if job_store and job_id:
-        job_store.save_logs(job_id, buf.getvalue())
+    _execute_etl_job(fetch_climate, job_store=job_store, job_id=job_id, name="fetch_climate")
 
 
 def run_fetch_disease(job_store=None, job_id=None) -> None:
-    with capture_stdout(job_id=job_id) as buf:
-        try:
-            fetch_disease()
-        except Exception as e:
-            raise ETLException(f"fetch_disease failed: {e}") from e
-    if job_store and job_id:
-        job_store.save_logs(job_id, buf.getvalue())
+    _execute_etl_job(fetch_disease, job_store=job_store, job_id=job_id, name="fetch_disease")
 
 
 def run_fetch_geojson(job_store=None, job_id=None) -> None:
-    with capture_stdout(job_id=job_id) as buf:
-        try:
-            fetch_geojson()
-        except Exception as e:
-            raise ETLException(f"fetch_geojson failed: {e}") from e
-    if job_store and job_id:
-        job_store.save_logs(job_id, buf.getvalue())
+    _execute_etl_job(fetch_geojson, job_store=job_store, job_id=job_id, name="fetch_geojson")
 
 
 def run_build_analytics(job_store=None, job_id=None) -> None:
-    with capture_stdout(job_id=job_id) as buf:
-        try:
-            build_analytics()
-        except Exception as e:
-            raise ETLException(f"build_analytics failed: {e}") from e
-    if job_store and job_id:
-        job_store.save_logs(job_id, buf.getvalue())
+    _execute_etl_job(build_analytics, job_store=job_store, job_id=job_id, name="build_analytics")
 
 
 def run_post_forecast(job_store=None, job_id=None) -> None:
-    with capture_stdout(job_id=job_id) as buf:
-        try:
-            post_forecast()
-        except Exception as e:
-            raise ETLException(f"post_forecast failed: {e}") from e
-    if job_store and job_id:
-        job_store.save_logs(job_id, buf.getvalue())
+    _execute_etl_job(post_forecast, job_store=job_store, job_id=job_id, name="post_forecast")
 
 
 def run_calc_csb_alerts(job_store=None, job_id=None) -> None:
-    with capture_stdout(job_id=job_id) as buf:
-        try:
-            calc_csb_alerts()
-        except Exception as e:
-            raise ETLException(f"calc_csb_alerts failed: {e}") from e
-    if job_store and job_id:
-        job_store.save_logs(job_id, buf.getvalue())
+    _execute_etl_job(calc_csb_alerts, job_store=job_store, job_id=job_id, name="calc_csb_alerts")
 
 
 def run_update_key(job_store=None, job_id=None) -> None:
-    with capture_stdout(job_id=job_id) as buf:
-        try:
-            update_key()
-        except Exception as e:
-            raise ETLException(f"update_key failed: {e}") from e
-    if job_store and job_id:
-        job_store.save_logs(job_id, buf.getvalue())
+    _execute_etl_job(update_key, job_store=job_store, job_id=job_id, name="update_key")
