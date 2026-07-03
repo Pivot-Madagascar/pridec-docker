@@ -1,8 +1,7 @@
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, Query, Depends
 
 from etlhub.application.use_cases.analytics_service import AnalyticsService
 from etlhub.domain.schemas import ETLResponse
-from etlhub.domain.exceptions import ETLException
 from etlhub.core.dependencies import get_analytics_service
 
 router = APIRouter(tags=["Analytics"])
@@ -48,8 +47,7 @@ async def api_build_analytics(
             "description": "Internal Server Error - publish failed",
             "content": {
                 "application/json": {
-                    "schema": {"$ref": "#/components/schemas/ETLResponse"},
-                    "example": {"status": "error", "message": "post_forecast failed: ..."},
+                    "example": {"message": "post_forecast failed: ..."}
                 }
             },
         }
@@ -59,11 +57,7 @@ async def api_post_forecast(
     webhook_url: str | None = Query(None),
     service: AnalyticsService = Depends(get_analytics_service),
 ):
-    try:
-        result = service.post_forecast(webhook_url)
-    except ETLException as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    return result
+    return service.post_forecast(webhook_url)
 
 
 @router.post(
@@ -106,8 +100,7 @@ async def api_calc_csb_alerts(
             "description": "Internal Server Error - update failed",
             "content": {
                 "application/json": {
-                    "schema": {"$ref": "#/components/schemas/ETLResponse"},
-                    "example": {"status": "error", "message": "update_pridec_key failed: ..."},
+                    "example": {"message": "update_pridec_key failed: ..."}
                 }
             },
         }
@@ -117,8 +110,4 @@ async def api_update_key(
     webhook_url: str | None = Query(None),
     service: AnalyticsService = Depends(get_analytics_service),
 ):
-    try:
-        result = service.update_key(webhook_url)
-    except ETLException as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    return result
+    return service.update_key(webhook_url)

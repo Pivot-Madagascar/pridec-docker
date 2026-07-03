@@ -3,7 +3,7 @@ from typing import Any
 
 from etlhub.domain.interfaces.job_repository import JobRepository
 from etlhub.domain.interfaces.task_launcher import TaskLauncher
-from etlhub.domain.exceptions import ETLException
+from etlhub.domain.exceptions import JobNotFoundError
 from etlhub.domain.schemas.forecast import ForecastParams
 
 
@@ -26,8 +26,7 @@ class ForecastService:
         if status is not None:
             return status
         from etlhub.core.config import get_settings
-        settings = get_settings()
-        status = self._job_repo.load_from_file(job_id, settings.logs_dir)
+        status = self._job_repo.load_from_file(job_id, get_settings().logs_dir)
         if status is not None:
             return status
-        raise ETLException("Job not found")
+        raise JobNotFoundError(f"Job not found: {job_id}")
