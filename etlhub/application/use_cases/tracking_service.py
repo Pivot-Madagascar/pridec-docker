@@ -1,6 +1,7 @@
 from etlhub.domain.interfaces.request_tracker import RequestTrackerProtocol
 from etlhub.domain.interfaces.job_repository import JobRepository
 from etlhub.domain.schemas.tracking import RequestLog, ETLLog
+from etlhub.domain.exceptions import JobNotFoundError
 
 
 class TrackingService:
@@ -14,11 +15,11 @@ class TrackingService:
     def get_request(self, request_id: str) -> RequestLog:
         log = self._request_tracker.get(request_id)
         if log is None:
-            raise ValueError("Request not found")
+            raise JobNotFoundError(f"Request not found: {request_id}")
         return RequestLog(**log)
 
     def get_etl_logs(self, job_id: str) -> ETLLog:
         logs = self._job_repo.get_logs(job_id)
         if logs is None:
-            raise ValueError("ETL logs not found for this job_id")
+            raise JobNotFoundError(f"ETL logs not found for this job_id: {job_id}")
         return ETLLog(job_id=job_id, logs=logs)
