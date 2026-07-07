@@ -65,15 +65,6 @@
         </svg>
         <span>Previous</span>
       </button>
-      <div class="carousel-dots">
-        <button
-          v-for="(_, index) in steps"
-          :key="index"
-          class="dot"
-          :class="{ active: currentStep === index }"
-          @click="goToStep(index)"
-        />
-      </div>
       <button class="control-btn control-next" :disabled="currentStep === steps.length - 1" @click="nextStep">
         <span>Next</span>
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -85,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import Icon from '@/components/Icons'
 
 interface Action {
@@ -442,7 +433,8 @@ const nextStep = () => {
 .carousel-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
+  gap: 0.75rem;
   padding: 0.5rem 0;
 }
 
@@ -469,30 +461,6 @@ const nextStep = () => {
 .control-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
-}
-
-.carousel-dots {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.dot {
-  width: 0.625rem;
-  height: 0.625rem;
-  border-radius: 50%;
-  background: #334155;
-  border: none;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.dot:hover {
-  background: #6366f1;
-}
-
-.dot.active {
-  background: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
 }
 
 /* ===== Icon Colors ===== */
@@ -526,12 +494,8 @@ const nextStep = () => {
   .action-grid.gapless {
     grid-template-columns: 1fr;
   }
-  .stepper-label {
+  .step-label {
     font-size: 0.7rem;
-  }
-  .step-title {
-    flex-direction: column;
-    align-items: flex-start;
   }
 }
 </style>

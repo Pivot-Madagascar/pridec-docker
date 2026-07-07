@@ -2,7 +2,7 @@
   <div class="hero-section">
     <h1 class="hero-title">Welcome to PRIDE-C ETL Hub</h1>
     <p class="hero-description">
-      Data ingestion, processing, and forecasting platform for malaria surveillance. 
+      Data ingestion, processing, and forecasting platform for disease surveillance. 
       Manage your ETL pipelines with ease.
     </p>
   </div>
