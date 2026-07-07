@@ -4,7 +4,7 @@
       <h1 class="heading-primary">ETL Logs Live</h1>
       <div class="flex-row-center space-x-3">
         <span
-          v-if="jobId"
+          v-if="currentJobId"
           class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold"
           :class="statusBadgeClass"
         >
@@ -26,14 +26,14 @@
 
     <div class="card card-padded">
       <div class="flex-row-center-between gap-4 flex-wrap">
-        <div class="flex-row-center flex-1 space-x-3 min-w-[300px]">
+        <div class="flex-row-center flex-1 space-x-3 min-w-75">
           <input
             v-model="jobIdInput"
             type="text"
             class="form-input font-mono"
             placeholder="Enter job ID (e.g. import_gee_a1b2c3d4)"
             @keyup.enter="start"
-            :disabled="connected"
+            :disabled="connected || !!route.query.jobId"
           />
           <button
             class="btn-primary"
@@ -106,46 +106,13 @@
   </div>
 </template>
 
-<style scoped>
-@reference "tailwindcss";
-
-.log-container {
-  @apply bg-[#1a1a1a] rounded-lg p-4 h-[500px] overflow-y-auto border border-gray-800;
-}
-
-.status-badge-success {
-  @apply bg-green-50 text-green-800 border border-green-200;
-}
-
-.status-badge-running {
-  @apply bg-yellow-50 text-yellow-800 border border-yellow-200;
-}
-
-.status-badge-error {
-  @apply bg-red-50 text-red-800 border border-red-200;
-}
-
-.status-badge-unknown {
-  @apply bg-gray-50 text-gray-800 border border-gray-200;
-}
-
-.log-line-enter-active,
-.log-line-leave-active {
-  transition: all 0.3s ease;
-}
-
-.log-line-enter-from,
-.log-line-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
-}
-</style>
-
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { useWebSocketLogger } from '@/composables/useWebSocketLogger'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8111'
+const route = useRoute()
 
 const {
   logs,
@@ -167,6 +134,19 @@ const currentJobId = ref('')
 const connecting = ref(false)
 const logContainer = ref<HTMLElement | null>(null)
 const lineCount = ref(0)
+
+watch(
+  () => route.query.jobId,
+  (jobId) => {
+    if (typeof jobId === 'string' && jobId && !connected.value) {
+      jobIdInput.value = jobId
+      currentJobId.value = jobId
+      connecting.value = true
+      connect(jobId)
+    }
+  },
+  { immediate: true }
+)
 
 const statusDotClass = computed(() => {
   if (isRunning.value) return 'bg-yellow-500'
@@ -228,3 +208,38 @@ function scrollToBottom() {
   }
 }
 </script>
+
+<style scoped>
+@reference "tailwindcss";
+
+.log-container {
+  @apply bg-[#1a1a1a] rounded-lg p-4 h-[500px] overflow-y-auto border border-gray-800;
+}
+
+.status-badge-success {
+  @apply bg-green-50 text-green-800 border border-green-200;
+}
+
+.status-badge-running {
+  @apply bg-yellow-50 text-yellow-800 border border-yellow-200;
+}
+
+.status-badge-error {
+  @apply bg-red-50 text-red-800 border border-red-200;
+}
+
+.status-badge-unknown {
+  @apply bg-gray-50 text-gray-800 border border-gray-200;
+}
+
+.log-line-enter-active,
+.log-line-leave-active {
+  transition: all 0.3s ease;
+}
+
+.log-line-enter-from,
+.log-line-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+</style>

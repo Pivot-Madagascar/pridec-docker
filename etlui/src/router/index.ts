@@ -10,12 +10,6 @@ const router = createRouter({
       meta: { title: 'ETL UI - Dashboard' }
     },
     {
-      path: '/forecast',
-      name: 'Forecast',
-      component: () => import('@/views/ForecastPage.vue'),
-      meta: { title: 'Forecast' }
-    },
-    {
       path: '/tracking',
       name: 'Tracking',
       component: () => import('@/views/TrackerView/TrackerView.vue'),

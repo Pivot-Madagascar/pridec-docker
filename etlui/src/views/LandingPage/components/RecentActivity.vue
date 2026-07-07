@@ -10,13 +10,24 @@
             <p class="activity-message">{{ entry.message }}</p>
           </div>
         </div>
-        <span class="activity-time">{{ entry.time }}</span>
+        <div class="flex-row-center space-x-2">
+          <span class="activity-time">{{ entry.time }}</span>
+          <button
+            v-if="entry.jobId"
+            class="text-xs text-blue-400 hover:text-blue-300"
+            @click="viewLogs(entry.jobId)"
+          >
+            Voir Logs
+          </button>
+        </div>
       </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
+
 const props = defineProps<{
   activityLog: Array<{
     id: number
@@ -24,6 +35,13 @@ const props = defineProps<{
     message: string
     time: string
     success: boolean
+    jobId?: string
   }>
 }>()
+
+const router = useRouter()
+
+function viewLogs(jobId: string) {
+  router.push({ path: '/logs', query: { jobId } })
+}
 </script>

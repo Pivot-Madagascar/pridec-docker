@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-8">
+  <div class="space-y-0">
     <!-- <HeroSection /> -->
 
     <section class="dashboard-section">
@@ -14,126 +14,26 @@
       :notificationType="notificationType"
     />
 
-    <section v-if="lastJobId" class="dashboard-section">
-      <div class="flex-row-center-between mb-4">
-        <h2 class="section-header">Live Logs</h2>
-        <div class="flex-row-center space-x-2">
-          <span class="text-xs text-gray-500">Job: {{ lastJobId }}</span>
-          <span
-            class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold"
-            :class="statusBadgeClass"
-          >
-            <span class="w-2 h-2 rounded-full mr-2" :class="statusDotClass"></span>
-            {{ wsStatus || 'Idle' }}
-          </span>
-          <button
-            v-if="lineCount > 0"
-            class="text-xs text-gray-400 hover:text-gray-300"
-            @click="clearLogs"
-          >
-            Clear
-          </button>
-        </div>
-      </div>
-      <div v-if="statusMessage" class="mt-4 p-3 rounded-lg bg-blue-900/20 border border-blue-800">
-        <p class="text-sm text-blue-300">{{ statusMessage }}</p>
-      </div>
-      <div
-        ref="logContainer"
-        class="log-container"
-      >
-        <template v-if="history && !wsLogs.length && !connected">
-          <pre class="text-sm text-gray-300 font-mono whitespace-pre-wrap">{{ history }}</pre>
-        </template>
-        <template v-else-if="combinedLogs">
-          <pre class="text-sm text-green-400 font-mono whitespace-pre-wrap">{{ combinedLogs }}</pre>
-        </template>
-        <template v-else>
-          <p class="text-sm text-gray-500 text-center py-8">
-            Waiting for logs...
-          </p>
-        </template>
-      </div>
-    </section>
-
     <RecentActivity :activityLog="activityLog" />
+
+    <ForecastModal 
+      v-model="showForecastModal"
+      @job-created="handleForecastJobCreated"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, nextTick, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed } from 'vue'
 import api from '@/services/api'
-import { useWebSocketLogger } from '@/composables/useWebSocketLogger'
 
-import HeroSection from './components/HeroSection.vue'
 import Notifications from './components/Notifications.vue'
 import RecentActivity from './components/RecentActivity.vue'
 import StepperCarousel from './components/StepperCarousel.vue'
-import Icon, { ICONS } from '@/components/Icons'
+import ForecastModal from './components/ForecastModal.vue'
+import { ICONS } from '@/components/Icons'
 
-const router = useRouter()
-
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8111'
-
-const {
-  logs: wsLogs,
-  history,
-  status: wsStatus,
-  statusMessage,
-  connected,
-  connectionError,
-  connect,
-  disconnect,
-  clearLogs: clearWsLogs,
-  isRunning,
-  isCompleted,
-  combinedLogs,
-} = useWebSocketLogger({ baseUrl: apiBaseUrl })
-
-const lastJobId = ref('')
-const logContainer = ref<HTMLElement | null>(null)
-const lineCount = ref(0)
-
-const statusDotClass = computed(() => {
-  if (isRunning.value) return 'bg-yellow-500'
-  if (wsStatus.value === 'success') return 'bg-green-500'
-  if (wsStatus.value === 'error') return 'bg-red-500'
-  return 'bg-gray-400'
-})
-
-const statusBadgeClass = computed(() => {
-  if (isRunning.value) return 'status-badge-running'
-  if (wsStatus.value === 'success') return 'status-badge-success'
-  if (wsStatus.value === 'error') return 'status-badge-error'
-  return 'status-badge-unknown'
-})
-
-watch(combinedLogs, (val) => {
-  if (!val) {
-    lineCount.value = 0
-    return
-  }
-  lineCount.value = val.split('\n').filter(l => l.trim()).length
-  nextTick(() => scrollToBottom())
-})
-
-watch(lastJobId, (jobId) => {
-  if (jobId) {
-    connect(jobId)
-  }
-})
-
-function scrollToBottom() {
-  if (logContainer.value) {
-    logContainer.value.scrollTop = logContainer.value.scrollHeight
-  }
-}
-
-function clearLogs() {
-  clearWsLogs()
-  lineCount.value = 0
-}
+const showForecastModal = ref(false)
 
 interface ActivityEntry {
   id: number
@@ -141,12 +41,17 @@ interface ActivityEntry {
   message: string
   time: string
   success: boolean
+  jobId?: string
 }
+
+const lastJobId = ref('')
 
 const notification = ref('')
 const notificationType = ref<'success' | 'error'>('success')
 const notificationTimer = ref<number | null>(null)
 const activityLog = ref<ActivityEntry[]>([])
+
+const commonIcon = ICONS
 
 const loading = reactive({
   import_gee: false,
@@ -178,9 +83,7 @@ const climateSuccess = ref(false)
 const diseaseSuccess = ref(false)
 const geojsonSuccess = ref(false)
 
-const commonIcon = ICONS
-
-const pipelineSteps = [
+const pipelineSteps = computed(() => [
   {
     id: 'step-1',
     title: 'Data Import',
@@ -371,7 +274,7 @@ const pipelineSteps = [
       }
     ]
   }
-]
+])
 
 const showNotification = (msg: string, type: 'success' | 'error') => {
   notification.value = msg
@@ -382,13 +285,14 @@ const showNotification = (msg: string, type: 'success' | 'error') => {
   }, 5000)
 }
 
-const addActivity = (action: string, message: string, success: boolean) => {
+const addActivity = (action: string, message: string, success: boolean, jobId?: string) => {
   activityLog.value.unshift({
     id: Date.now() + Math.random(),
     action,
     message,
     time: new Date().toLocaleTimeString(),
-    success
+    success,
+    jobId
   })
   if (activityLog.value.length > 20) {
     activityLog.value = activityLog.value.slice(0, 20)
@@ -397,7 +301,7 @@ const addActivity = (action: string, message: string, success: boolean) => {
 
 const handleActionClick = async (key: string) => {
   if (key === 'navigate_to_forecast') {
-    router.push('/forecast')
+    showForecastModal.value = true
     return
   }
 
@@ -416,7 +320,19 @@ const handleActionClick = async (key: string) => {
     return
   }
 
+  if (key === 'validate_inputs') {
+    await validateInputs()
+    return
+  }
+
   await triggerETL(key)
+}
+
+const handleForecastJobCreated = (jobId: string) => {
+  if (jobId) {
+    lastJobId.value = jobId
+    addActivity('Run Forecast', 'Forecast job started', true, jobId)
+  }
 }
 
 const fetchClimate = async () => {
@@ -428,7 +344,7 @@ const fetchClimate = async () => {
     if (jobId) lastJobId.value = jobId
     showNotification('Climate data retrieved', 'success')
     climateSuccess.value = true
-    addActivity('Fetch Climate', 'Weather data retrieved', true)
+    addActivity('Fetch Climate', 'Weather data retrieved', true, jobId)
   } catch (err) {
     showNotification('Retrieval error', 'error')
     addActivity('Fetch Climate', 'Retrieval failed', false)
@@ -447,7 +363,7 @@ const fetchDisease = async () => {
     if (jobId) lastJobId.value = jobId
     showNotification('Disease data retrieved', 'success')
     diseaseSuccess.value = true
-    addActivity('Fetch Disease', 'Health data retrieved', true)
+    addActivity('Fetch Disease', 'Health data retrieved', true, jobId)
   } catch (err) {
     showNotification('Retrieval error', 'error')
     addActivity('Fetch Disease', 'Retrieval failed', false)
@@ -466,7 +382,7 @@ const fetchGeoJSON = async () => {
     if (jobId) lastJobId.value = jobId
     showNotification('GeoJSON retrieved', 'success')
     geojsonSuccess.value = true
-    addActivity('Fetch GeoJSON', 'Geospatial boundaries retrieved', true)
+    addActivity('Fetch GeoJSON', 'Geospatial boundaries retrieved', true, jobId)
   } catch (err) {
     showNotification('Retrieval error', 'error')
     addActivity('Fetch GeoJSON', 'Retrieval failed', false)
@@ -489,7 +405,8 @@ const triggerETL = async (endpoint: string) => {
     addActivity(
       endpoint.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
       response.data.message || 'ETL step completed',
-      true
+      true,
+      jobId
     )
   } catch (err) {
     showNotification(`Failed: ${endpoint}`, 'error')
@@ -512,7 +429,7 @@ const validateInputs = async () => {
     if (jobId) lastJobId.value = jobId
     results.validate_inputs = true
     showNotification(response.data.message || 'Inputs validated', 'success')
-    addActivity('Validate Inputs', response.data.message || 'Validation passed', true)
+    addActivity('Validate Inputs', response.data.message || 'Validation passed', true, jobId)
   } catch (err) {
     showNotification('Validation failed', 'error')
     addActivity('Validate Inputs', 'Validation failed', false)
@@ -554,38 +471,5 @@ const validateInputs = async () => {
   color: #94a3b8;
   font-size: 0.875rem;
   margin-bottom: 2rem;
-}
-
-.log-container {
-  background: #1a1a1a;
-  border-radius: 0.75rem;
-  padding: 1rem;
-  height: 400px;
-  overflow-y: auto;
-  border: 1px solid #334155;
-}
-
-.status-badge-success {
-  background: #064e3b;
-  color: #6ee7b7;
-  border: 1px solid #065f46;
-}
-
-.status-badge-running {
-  background: #78350f;
-  color: #fcd34d;
-  border: 1px solid #92400e;
-}
-
-.status-badge-error {
-  background: #7f1d1d;
-  color: #fca5a5;
-  border: 1px solid #991b1b;
-}
-
-.status-badge-unknown {
-  background: #1e293b;
-  color: #94a3b8;
-  border: 1px solid #334155;
 }
 </style>
