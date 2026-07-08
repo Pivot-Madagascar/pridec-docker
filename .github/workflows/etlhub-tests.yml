@@ -11,6 +11,10 @@ on:
       - 'etlhub/**'
       - '.github/workflows/etlhub-tests.yml'
 
+concurrency:
+  group: etlhub-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   unit-tests:
     name: Unit tests (etlhub)
@@ -44,7 +48,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-test.txt
-          pip install httpx==0.25.0
 
       - name: Run unit tests
         run: pytest tests -v
