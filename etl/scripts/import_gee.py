@@ -1,4 +1,3 @@
-import argparse
 from pridec_gee import AVAILABLE_VARIABLES
 
 def print_help():
@@ -16,30 +15,25 @@ Notes:
 The available variables are:
 {chr(10).join(f'  - {v}' for v in AVAILABLE_VARIABLES)}
 """)
-    
-parser = argparse.ArgumentParser(add_help=False)
-parser.add_argument("--help", "-h", action="store_true")
 
-args = parser.parse_args()
-
-if args.help:
-    print_help()
-    exit(0)
-
-from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PARENT_OU, GEE_SERVICE_ACCOUNT, GEE_VARIABLES, dryRun, setup_logging, check_envvars
-import json
-import ee
-import os
-import logging
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--help", "-h", action="store_true")
+    return parser.parse_args()
 
 def import_gee():
-    setup_logging()
-    logger = logging.getLogger("import_gee")
-
+    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PARENT_OU, GEE_SERVICE_ACCOUNT, GEE_VARIABLES, dryRun, setup_logging, check_envvars
+    import json
+    import ee
+    import os
+    import logging
     from importlib.resources import files
-
     from pridec_gee import import_pridec_climate
     from pridec_gee import calc_date_range
+
+    setup_logging()
+    logger = logging.getLogger("import_gee")
 
     check_envvars(required_vars = {
                 'DHIS_TOKEN': DHIS_TOKEN,
@@ -77,4 +71,10 @@ def import_gee():
                           rice_features=rice_fields, dryRun=dryRun)
 
 if __name__ == "__main__":
+    args = parse_args()
+    
+    if args.help:
+        print_help()
+        exit(0)
+    
     import_gee()

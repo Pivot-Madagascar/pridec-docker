@@ -1,4 +1,7 @@
-import argparse
+from pivot_dhis_tools import pridec_fetch_disease
+import os
+import json
+import logging
 
 def print_help():
     print(f"""
@@ -14,22 +17,15 @@ Notes:
     Options: 
 """)
 
-parser = argparse.ArgumentParser(add_help=False)  # disable default help
-parser.add_argument("--help", "-h", action="store_true")
-
-args = parser.parse_args()
-
-if args.help:
-    print_help()
-    exit(0)
-
-from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PARENT_OU, OU_LEVEL, DISEASE_CODE, setup_logging, check_envvars
-from pivot_dhis_tools import pridec_fetch_disease
-import os
-import json
-import logging
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False) # disable default help
+    parser.add_argument("--help", "-h", action="store_true")
+    return parser.parse_args()
 
 def fetch_disease():
+    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PARENT_OU, OU_LEVEL, DISEASE_CODE, setup_logging, check_envvars
+
     setup_logging()
 
     logger = logging.getLogger("fetch_disease")
@@ -67,4 +63,8 @@ def fetch_disease():
     logger.info("Saved %s to input/disease_data.json", DISEASE_CODE)
 
 if __name__ == "__main__":
+    args = parse_args()
+    if args.help:
+        print_help()
+        exit(0)
     fetch_disease()

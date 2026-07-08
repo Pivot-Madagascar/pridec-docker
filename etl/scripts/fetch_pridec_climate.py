@@ -1,4 +1,7 @@
-import argparse
+from pivot_dhis_tools import pridec_fetch_climate
+import os
+import json
+import logging
 
 def print_help():
     print(f"""
@@ -12,22 +15,15 @@ Notes:
     Fokontany = 6. CSB = 5.
 """)
 
-parser = argparse.ArgumentParser(add_help=False)  # disable default help
-parser.add_argument("--help", "-h", action="store_true")
-
-args = parser.parse_args()
-
-if args.help:
-    print_help()
-    exit(0)
-
-from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PARENT_OU, OU_LEVEL, setup_logging, check_envvars
-from pivot_dhis_tools import pridec_fetch_climate
-import os
-import json
-import logging
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False) # disable default help
+    parser.add_argument("--help", "-h", action="store_true")
+    return parser.parse_args()
 
 def fetch_climate():
+    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PARENT_OU, OU_LEVEL, setup_logging, check_envvars
+
     setup_logging()
 
     logger = logging.getLogger("fetch_climate")
@@ -60,5 +56,9 @@ def fetch_climate():
     logger.info("Saved all PRIDE-C climate variables to input/climate_data.json")
 
 if __name__ == "__main__":
+    args = parse_args()
+    if args.help:
+        print_help()
+        exit(0)
     fetch_climate()
 
