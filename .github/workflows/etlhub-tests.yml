@@ -59,12 +59,22 @@ jobs:
             --cov-report=xml:test-results/coverage.xml \
             --cov-report=term
 
+      - name: Debug test artifacts
+        if: always()
+        run: |
+          echo "=== Checking test results directory ==="
+          ls -la test-results/ || echo "test-results directory does not exist"
+          echo "=== Checking for test files ==="
+          find tests -name "*.py" -type f || echo "No test files found"
+          echo "=== Current directory contents ==="
+          ls -la
+
       - name: Publish test report
         if: always()
         uses: dorny/test-reporter@v1
         with:
           name: ETLHub Unit Tests Report
-          path: test-results/junit.xml
+          path: etlhub/test-results/junit.xml
           reporter: java-junit
 
       - name: Upload test artifacts
@@ -76,3 +86,4 @@ jobs:
             etlhub/test-results/junit.xml
             etlhub/test-results/coverage.xml
           retention-days: 14
+          if-no-files-found: ignore
