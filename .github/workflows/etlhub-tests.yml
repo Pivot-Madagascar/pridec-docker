@@ -64,9 +64,8 @@ jobs:
         uses: dorny/test-reporter@v1
         with:
           name: ETLHub Unit Tests Report
-          path: etlhub/test-results/junit.xml
+          path: test-results/junit.xml
           reporter: java-junit
-          working-directory: etlhub
 
       - name: Upload test artifacts
         if: always()
