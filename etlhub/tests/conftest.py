@@ -1,7 +1,10 @@
 import sys
 from unittest.mock import MagicMock
 
-sys.modules['redis'] = MagicMock()
+redis_mock = MagicMock()
+redis_mock.asyncio = MagicMock()
+sys.modules['redis'] = redis_mock
+sys.modules['redis.asyncio'] = redis_mock.asyncio
 sys.modules['pridec_gee'] = MagicMock()
 sys.modules['pivot_dhis_tools'] = MagicMock()
 sys.modules['earthengine_api'] = MagicMock()
