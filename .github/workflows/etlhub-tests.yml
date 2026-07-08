@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      checks: write
 
     defaults:
       run:
@@ -48,6 +49,31 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-test.txt
+          pip install pytest-cov
 
       - name: Run unit tests
-        run: pytest tests -v
+        run: |
+          pytest tests -v \
+            --junitxml=test-results/junit.xml \
+            --cov=. \
+            --cov-report=xml:test-results/coverage.xml \
+            --cov-report=term
+
+      - name: Publish test report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: ETLHub Unit Tests Report
+          path: etlhub/test-results/junit.xml
+          reporter: java-junit
+          working-directory: etlhub
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: etlhub-test-results
+          path: |
+            etlhub/test-results/junit.xml
+            etlhub/test-results/coverage.xml
+          retention-days: 14
