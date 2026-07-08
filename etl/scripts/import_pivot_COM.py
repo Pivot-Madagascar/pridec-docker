@@ -1,4 +1,9 @@
-import argparse
+import pandas as pd
+from datetime import date
+from dateutil.relativedelta import relativedelta
+import logging
+#update to pivot_dhis_tools package
+from pivot_dhis_tools import get_dataElements, create_period_range, check_dhis_value, post_dataElements
 
 def print_help():
     print(f"""
@@ -12,25 +17,15 @@ Notes:
 -   The fokontany imported are limited to those that were supported from YEAR.
 """)
 
-parser = argparse.ArgumentParser(add_help=False)  # disable default help
-parser.add_argument("--help", "-h", action="store_true")
-
-args = parser.parse_args()
-
-if args.help:
-    print_help()
-    exit(0)
-
-
-from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PIVOT_URL, PIVOT_TOKEN, dryRun, setup_logging, check_envvars
-import pandas as pd
-from datetime import date
-from dateutil.relativedelta import relativedelta
-import logging
-#update to pivot_dhis_tools package
-from pivot_dhis_tools import get_dataElements, create_period_range, check_dhis_value, post_dataElements
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False) # disable default help
+    parser.add_argument("--help", "-h", action="store_true")
+    return parser.parse_args()
 
 def import_pivot_com():
+    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PIVOT_URL, PIVOT_TOKEN, dryRun, setup_logging, check_envvars
+
     setup_logging()
 
     logger = logging.getLogger("import_pivot_COM")
@@ -235,4 +230,8 @@ def import_pivot_com():
         logger.error("Response: %s", resp.text)
 
 if __name__ == "__main__":
+    args = parse_args()
+    if args.help:
+        print_help()
+        exit(0)
     import_pivot_com()

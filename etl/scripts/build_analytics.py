@@ -1,4 +1,5 @@
-import argparse
+from pivot_dhis_tools import launch_analytics
+import logging
 
 def print_help():
     print(f"""
@@ -12,20 +13,15 @@ Notes:
     Check the url for the `completed` status before running other steps.
 """)
 
-parser = argparse.ArgumentParser(add_help=False)  # disable default help
-parser.add_argument("--help", "-h", action="store_true")
-
-args = parser.parse_args()
-
-if args.help:
-    print_help()
-    exit(0)
-
-from etl.scripts.config import DHIS_TOKEN, DHIS_URL,  setup_logging
-import logging
-from pivot_dhis_tools import launch_analytics
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False) # disable default help
+    parser.add_argument("--help", "-h", action="store_true")
+    return parser.parse_args()
 
 def build_analytics():
+    from etl.scripts.config import DHIS_TOKEN, DHIS_URL,  setup_logging
+
     setup_logging()
     logger = logging.getLogger("analytics")
 
@@ -35,4 +31,8 @@ def build_analytics():
                      token=DHIS_TOKEN)
 
 if __name__ == "__main__":
+    args = parse_args()
+    if args.help:
+        print_help()
+        exit(0)
     build_analytics()

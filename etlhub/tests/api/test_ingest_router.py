@@ -3,11 +3,9 @@ from unittest.mock import MagicMock
 
 
 def test_import_gee_returns_202(override_dependencies):
-    client = pytest.fixture(lambda: None)()  # Access client via fixture
-    # Use the override_dependencies fixture to get the client
     from fastapi.testclient import TestClient
     from etlhub.main import app
-    
+
     client = TestClient(app)
     response = client.post("/import_gee")
     assert response.status_code == 202

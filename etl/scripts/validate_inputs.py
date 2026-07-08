@@ -34,7 +34,6 @@ def missing_columns(input_data: pd.DataFrame, column_names: list[str]) -> list[s
     return [c for c in column_names if c not in input_data.columns]
 
 
-
 def load_inputs(args):
     with open(args.config) as f:
         config = json.load(f)
@@ -73,7 +72,7 @@ Notes:
         * ``month_assess``     – int
         * ``month_lag``        – int (defaults to 3)
         * ``forecast_start``   – date string in ``YYYYMM`` format (defaults to
-                                  current month)
+                                current month)
     disease_data.json:
         DataFrame with columns ``orgUnit``, ``period``, ``dataElement``,
         ``value``.

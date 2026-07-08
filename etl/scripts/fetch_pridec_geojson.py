@@ -1,4 +1,8 @@
-import argparse
+import logging
+import json
+import os
+
+from pridec_gee import get_dhis_geojson
 
 def print_help():
     print(f"""
@@ -12,23 +16,15 @@ Notes:
     Fokontany = 6. CSB = 5.
 """)
 
-parser = argparse.ArgumentParser(add_help=False)  # disable default help
-parser.add_argument("--help", "-h", action="store_true")
-
-args = parser.parse_args()
-
-if args.help:
-    print_help()
-    exit(0)
-
-from etl.scripts.config import DHIS_TOKEN, DHIS_URL, OU_LEVEL, PARENT_OU, setup_logging, check_envvars
-import logging
-import json
-import os
-
-from pridec_gee import get_dhis_geojson
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False) # disable default help
+    parser.add_argument("--help", "-h", action="store_true")
+    return parser.parse_args()
 
 def fetch_geojson():
+    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, OU_LEVEL, PARENT_OU, setup_logging, check_envvars
+
     setup_logging()
 
     logger = logging.getLogger("fetch_pridec_geojson")
@@ -63,5 +59,9 @@ def fetch_geojson():
     logger.info("Saved geojson polygons to %s", output_path)
 
 if __name__ == "__main__":
+    args = parse_args()
+    if args.help:
+        print_help()
+        exit(0)
     fetch_geojson()
 

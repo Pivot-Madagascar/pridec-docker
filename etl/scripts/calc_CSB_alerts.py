@@ -1,4 +1,7 @@
-import argparse
+from pivot_dhis_tools import post_dataElements, pridec_calc_CSB_alerts
+import os
+import json
+import logging
 
 def print_help():
     print(f"""
@@ -12,22 +15,15 @@ Notes:
 -   This currently runs only on the Pivot PRIDE-C instance due to specific configurations.
 """)
 
-parser = argparse.ArgumentParser(add_help=False)  # disable default help
-parser.add_argument("--help", "-h", action="store_true")
-
-args = parser.parse_args()
-
-if args.help:
-    print_help()
-    exit(0)
-
-from etl.scripts.config import DHIS_TOKEN, DHIS_URL, dryRun, setup_logging, check_envvars
-from pivot_dhis_tools import post_dataElements, pridec_calc_CSB_alerts
-import os
-import json
-import logging
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False) # disable default help
+    parser.add_argument("--help", "-h", action="store_true")
+    return parser.parse_args()
 
 def calc_csb_alerts():
+    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, dryRun, setup_logging, check_envvars
+
     setup_logging()
 
     logger = logging.getLogger("calc_CSB_alerts")
@@ -46,4 +42,8 @@ def calc_csb_alerts():
                        token= DHIS_TOKEN, dryRun=dryRun)
 
 if __name__ == "__main__":
+    args = parse_args()
+    if args.help:
+        print_help()
+        exit(0)
     calc_csb_alerts()
