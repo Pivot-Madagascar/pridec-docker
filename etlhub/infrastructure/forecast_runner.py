@@ -1,10 +1,46 @@
 import subprocess
 import os
 import json
+import stat
 from pathlib import Path
 from datetime import datetime
 
 from etlhub.infrastructure.job_store import JobStore
+
+
+def _get_output_dir() -> str:
+    """Get the output directory path."""
+    settings = __import__('etlhub.core.config', fromlist=['get_settings']).get_settings()
+    return os.path.join(settings.data_dir, "output")
+
+
+def generate_signature() -> str:
+    """Generate a unique signature for this server session."""
+    import secrets
+    settings = __import__('etlhub.core.config', fromlist=['get_settings']).get_settings()
+    sig_file = os.path.join(settings.data_dir, ".output_sig")
+    
+    sig = secrets.token_hex(32)
+    with open(sig_file, 'w') as f:
+        f.write(sig)
+    
+    return sig
+
+
+def verify_signature() -> bool:
+    """Verify that the signature exists and is valid."""
+    settings = __import__('etlhub.core.config', fromlist=['get_settings']).get_settings()
+    sig_file = os.path.join(settings.data_dir, ".output_sig")
+    
+    if not os.path.exists(sig_file):
+        return False
+    
+    # If we can read it, we're authorized
+    try:
+        with open(sig_file, 'r') as f:
+            return len(f.read().strip()) > 0
+    except Exception:
+        return False
 
 
 def run_rscript(job_id, params, job_store: JobStore):
@@ -57,6 +93,24 @@ def run_rscript(job_id, params, job_store: JobStore):
             "completed": datetime.now().isoformat(),
             "message": str(e)
         })
+
+    # Generate signature and chown output directory to allow API deletion
+    try:
+        generate_signature()
+        output_dir = _get_output_dir()
+        if os.path.exists(output_dir):
+            # Get current user's uid/gid
+            uid = os.getuid()
+            gid = os.getgid()
+            # Recursively chown to current user
+            for root, dirs, files in os.walk(output_dir):
+                for d in dirs:
+                    os.chown(os.path.join(root, d), uid, gid)
+                for f in files:
+                    os.chown(os.path.join(root, f), uid, gid)
+            os.chown(output_dir, uid, gid)
+    except Exception as e:
+        print(f"Warning: Could not setup output permissions: {e}")
 
     try:
         settings = __import__('etlhub.core.config', fromlist=['get_settings']).get_settings()

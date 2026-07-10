@@ -4,7 +4,7 @@
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    stroke-width="2"
+    :stroke-width="strokeWidth"
     stroke-linecap="round"
     stroke-linejoin="round"
     :class="className"
@@ -18,5 +18,6 @@
 defineProps<{
   path: string
   className?: string
+  strokeWidth?: number | string
 }>()
 </script>

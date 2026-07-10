@@ -9,9 +9,7 @@
         @click="goToStep(index)"
       >
         <div class="stepper-dot" :class="getStepStatusClass(index)">
-          <svg v-if="isStepCompleted(index)" class="step-check" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-          </svg>
+          <Icon v-if="isStepCompleted(index)" :path="ICONS.check" :stroke-width="3" class="step-check" />
           <span v-else class="step-number">{{ index + 1 }}</span>
         </div>
         <span class="step-label">{{ step.title }}</span>
@@ -23,7 +21,25 @@
         <div :key="currentStep" class="step-card">
           <div class="step-card-header">
             <h3 class="step-card-title">{{ steps[currentStep].title }}</h3>
-            <span class="step-card-badge">Step {{ currentStep + 1 }}</span>
+            <div class="flex items-center gap-2">
+              <button 
+                v-if="steps[currentStep].onRefresh" 
+                class="header-refresh-btn" 
+                @click="steps[currentStep].onRefresh"
+                title="Refresh"
+              >
+                <Icon :path="ICONS.refresh" />
+              </button>
+              <button 
+                v-if="steps[currentStep].onReset" 
+                class="header-reset-btn" 
+                @click="steps[currentStep].onReset"
+                title="Reset"
+              >
+                <Icon :path="ICONS.reset" />
+              </button>
+              <span class="step-card-badge">Step {{ currentStep + 1 }}</span>
+            </div>
           </div>
           <div class="action-grid" :class="{ gapless: steps[currentStep].actions.length <= 2 }">
             <button
@@ -60,16 +76,12 @@
 
     <div class="carousel-controls">
       <button class="control-btn control-prev" :disabled="currentStep === 0" @click="prevStep">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-        </svg>
+        <Icon :path="ICONS.prev" />
         <span>Previous</span>
       </button>
       <button class="control-btn control-next" :disabled="currentStep === steps.length - 1" @click="nextStep">
         <span>Next</span>
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-        </svg>
+        <Icon :path="ICONS.next" />
       </button>
     </div>
   </div>
@@ -78,6 +90,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import Icon from '@/components/Icons'
+import { ICONS } from '@/components/Icons'
 
 interface Action {
   key: string
@@ -100,6 +113,8 @@ interface Step {
   id: string
   title: string
   actions: Action[]
+  onRefresh?: () => void
+  onReset?: () => void
 }
 
 const props = defineProps<{
@@ -272,6 +287,48 @@ const nextStep = () => {
   text-transform: uppercase;
   letter-spacing: 0.025em;
   border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.header-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.375rem;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.header-refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+}
+
+.header-refresh-btn svg,
+.header-reset-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.header-reset-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 0.375rem;
+  color: #f87171;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.header-reset-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
 }
 
 /* ===== Action Grid ===== */
@@ -456,6 +513,11 @@ const nextStep = () => {
 .control-btn:hover:not(:disabled) {
   background: #334155;
   border-color: #6366f1;
+}
+
+.control-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .control-btn:disabled {
