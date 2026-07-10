@@ -20,20 +20,26 @@
       v-model="showForecastModal"
       @job-created="handleForecastJobCreated"
     />
+
+    <ForecastReportModal 
+      v-model="showReportModal"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import api from '@/services/api'
 
 import Notifications from './components/Notifications.vue'
 import RecentActivity from './components/RecentActivity.vue'
 import StepperCarousel from './components/StepperCarousel.vue'
 import ForecastModal from './components/ForecastModal.vue'
+import ForecastReportModal from './components/ForecastReportModal.vue'
 import { ICONS } from '@/components/Icons'
 
 const showForecastModal = ref(false)
+const showReportModal = ref(false)
 
 interface ActivityEntry {
   id: number
@@ -45,6 +51,7 @@ interface ActivityEntry {
 }
 
 const lastJobId = ref('')
+const forecastReportExists = ref(false)
 
 const notification = ref('')
 const notificationType = ref<'success' | 'error'>('success')
@@ -78,10 +85,41 @@ const results = reactive({
 const loadingClimate = ref(false)
 const loadingDisease = ref(false)
 const loadingGeoJSON = ref(false)
+const refreshingReport = ref(false)
 
 const climateSuccess = ref(false)
 const diseaseSuccess = ref(false)
 const geojsonSuccess = ref(false)
+
+const checkForecastReportExists = async () => {
+  refreshingReport.value = true
+  try {
+    const response = await api.get('/output/forecast_report.html/exists')
+    forecastReportExists.value = response.data.exists
+    showNotification('Report status refreshed', 'success')
+  } catch {
+    forecastReportExists.value = false
+  } finally {
+    refreshingReport.value = false
+  }
+}
+
+const resetReports = async () => {
+  if (!confirm('Are you sure you want to delete the output folder and all its contents?')) return
+  try {
+    await api.delete('/output/reset')
+    forecastReportExists.value = false
+    showNotification('Output folder cleared', 'success')
+    addActivity('Reset Output', 'Output folder deleted', true)
+  } catch (err) {
+    showNotification('Failed to reset output', 'error')
+    addActivity('Reset Output', 'Failed to delete output folder', false)
+  }
+}
+
+onMounted(() => {
+  checkForecastReportExists()
+})
 
 const pipelineSteps = computed(() => [
   {
@@ -210,15 +248,17 @@ const pipelineSteps = computed(() => [
     title: 'Approve Forecast',
     actions: [
       {
-        key: 'approve_forecast',
-        label: 'Approve Forecast',
-        icon: commonIcon.thumbsUp,
-        iconClass: 'icon-emerald',
-        inactive: true,
-        statusText: 'Coming soon',
-        statusClass: 'status-pending'
+        key: 'view_forecast_report',
+        label: 'View Report',
+        icon: commonIcon.eye,
+        iconClass: 'icon-blue',
+        inactive: !forecastReportExists.value,
+        statusText: forecastReportExists.value ? 'View forecast report' : 'Report unavailable',
+        statusClass: forecastReportExists.value ? 'status-pending' : 'status-pending'
       }
-    ]
+    ],
+    onRefresh: checkForecastReportExists,
+    onReset: resetReports
   },
   {
     id: 'step-5',
@@ -302,6 +342,11 @@ const addActivity = (action: string, message: string, success: boolean, jobId?: 
 const handleActionClick = async (key: string) => {
   if (key === 'navigate_to_forecast') {
     showForecastModal.value = true
+    return
+  }
+
+  if (key === 'view_forecast_report') {
+    showReportModal.value = true
     return
   }
 
