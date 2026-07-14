@@ -16,3 +16,4 @@ pivot_dhis_tools @ git+https://github.com/Pivot-Madagascar/pivot_dhis_tools@f45f
 celery>=5.4.0
 redis>=5.0.0
 geopandas>=1.1.3
+httpx>=0.27.0

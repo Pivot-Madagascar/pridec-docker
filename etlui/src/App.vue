@@ -15,13 +15,7 @@
           </div>
         </router-link>
 
-        <nav class="app-nav">
-          <router-link
-            to="/"
-            class="nav-link"
-          >
-            Dashboard
-          </router-link>
+        <nav v-if="isAuthenticated" class="app-nav">
           <router-link
             to="/tracking"
             class="nav-link"
@@ -40,9 +34,15 @@
           >
             Forecast
           </router-link>
+          <router-link
+             to="/parameters"
+             class="nav-link"
+          >
+             Parameters
+           </router-link>
         </nav>
 
-        <div class="flex-row-center space-x-3">
+        <div v-if="isAuthenticated" class="flex-row-center space-x-3">
           <span class="app-badge">ETL Hub v1.0</span>
           <a
             :href="`${apiBaseUrl}/docs`"
@@ -165,8 +165,10 @@
 </style>
 
 <script setup lang="ts">
-import { useRoute } from 'vue-router'
+import { computed } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 
-const route = useRoute()
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8111'
+const authStore = useAuthStore()
+const isAuthenticated = computed(() => authStore.isAuthenticated)
 </script>
