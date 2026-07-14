@@ -1,0 +1,82 @@
+name: ETLHub Integration Tests
+run-name: ETLHub Integration Tests — ${{ github.ref_name }}
+
+on:
+  push:
+    paths:
+      - 'etlhub/tests/api/test_auth.py'
+      - '.github/workflows/etlhub-integration-tests.yml'
+  pull_request:
+    paths:
+      - 'etlhub/tests/api/test_auth.py'
+      - '.github/workflows/etlhub-integration-tests.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: etlhub-integration-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration-tests:
+    name: Integration tests (DHIS2 auth)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+
+    defaults:
+      run:
+        working-directory: etlhub
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-integration-${{ hashFiles('etlhub/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+          pip install pytest-cov
+
+      - name: Run integration tests
+        env:
+          DHIS2_URL: ${{ secrets.DHIS2_URL }}
+          DHIS2_TOKEN: ${{ secrets.DHIS2_TOKEN }}
+        run: |
+          pytest tests -v -m "integration" \
+            --junitxml=test-results/junit-integration.xml \
+            --cov=. \
+            --cov-report=xml:test-results/coverage-integration.xml
+
+      - name: Publish integration test report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: ETLHub Integration Tests Report
+          path: etlhub/test-results/junit-integration.xml
+          reporter: java-junit
+
+      - name: Upload integration test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: etlhub-integration-test-results
+          path: |
+            etlhub/test-results/junit-integration.xml
+            etlhub/test-results/coverage-integration.xml
+          retention-days: 14
+          if-no-files-found: ignore

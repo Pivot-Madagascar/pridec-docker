@@ -198,3 +198,32 @@ def test_no_credentials_raises_error():
 
         with pytest.raises(ValueError, match="Authentication required"):
             asyncio.run(get_dhis2_user_info())
+
+
+@pytest.mark.integration
+def test_authentication_with_github_secrets(client: TestClient):
+    """Integration test: validate token against real DHIS2 instance using DHIS2_URL and DHIS2_TOKEN env vars.
+
+    This test uses GitHub secrets DHIS2_URL and DHIS2_TOKEN for real authentication testing.
+    It will be skipped if either environment variable is not set.
+    """
+    import os
+
+    dhis2_url = os.getenv("DHIS2_URL")
+    dhis2_token = os.getenv("DHIS2_TOKEN")
+
+    if not dhis2_url or not dhis2_token:
+        pytest.skip("DHIS2_URL and DHIS2_TOKEN environment variables not set")
+
+    response = client.post(
+        "/auth/validate-token",
+        json={"token": dhis2_token, "dhis2_url": dhis2_url},
+    )
+
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.json()}"
+    data = response.json()
+    assert "user" in data, "Response should contain user object"
+    assert data["user"]["id"] is not None, "User should have an id"
+    assert data["user"]["email"] is not None, "User should have an email"
+    assert data["user"]["username"] is not None, "User should have a username"
+    assert data["user"]["displayName"] is not None, "User should have a displayName"
