@@ -2,27 +2,21 @@ name: ETLHub Integration Tests
 run-name: ETLHub Integration Tests — ${{ github.ref_name }}
 
 on:
-  push:
-    paths:
-      - 'etlhub/tests/api/test_auth.py'
-      - '.github/workflows/etlhub-integration-tests.yml'
-  pull_request:
-    paths:
-      - 'etlhub/tests/api/test_auth.py'
-      - '.github/workflows/etlhub-integration-tests.yml'
   workflow_dispatch:
 
 concurrency:
-  group: etlhub-integration-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: etlhub-integration-tests-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   integration-tests:
     name: Integration tests (DHIS2 auth)
     runs-on: ubuntu-latest
+    environment: init_test
     permissions:
       contents: read
       checks: write
+    if: ${{ secrets.DHIS2_URL != '' && secrets.DHIS2_TOKEN != '' }}
 
     defaults:
       run:
