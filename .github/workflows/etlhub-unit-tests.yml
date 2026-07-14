@@ -5,14 +5,14 @@ on:
   push:
     paths:
       - 'etlhub/**'
-      - '.github/workflows/etlhub-tests.yml'
+      - '.github/workflows/etlhub-unit-tests.yml'
   pull_request:
     paths:
       - 'etlhub/**'
-      - '.github/workflows/etlhub-tests.yml'
+      - '.github/workflows/etlhub-unit-tests.yml'
 
 concurrency:
-  group: etlhub-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: etlhub-unit-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -53,7 +53,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          pytest tests -v \
+          pytest tests -v -m "not integration" \
             --junitxml=test-results/junit.xml \
             --cov=. \
             --cov-report=xml:test-results/coverage.xml \
