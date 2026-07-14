@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_db: int = 0
+    jwt_secret: str = "CHANGE_ME_IN_PRODUCTION"
+    frontend_url: str = "http://localhost:5173"
+    dhis2_url: str = ""
+    dhis2_client_id: str = ""
+    dhis2_client_secret: str = ""
+    dhis2_redirect_uri: str = "http://localhost:5173/login/callback"
+    dhis2_auth_timeout: float = 3.0
+    dhis2_allowed_hosts: str = ""
 
 
 @lru_cache

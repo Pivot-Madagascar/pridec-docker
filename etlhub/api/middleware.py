@@ -9,12 +9,14 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
 from etlhub.infrastructure.request_tracker import get_request_tracker
+from etlhub.core.config import get_settings
 
 
 def setup_cors(app):
+    settings = get_settings()
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://localhost:8111"],
+        allow_origins=[settings.frontend_url],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
