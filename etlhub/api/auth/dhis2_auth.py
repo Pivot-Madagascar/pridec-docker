@@ -58,7 +58,7 @@ async def get_dhis2_user_info(
     auth = None if token else httpx.BasicAuth(user, pwd)
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.get(
                 f"{base_url}/api/me.json",
                 headers=headers,
