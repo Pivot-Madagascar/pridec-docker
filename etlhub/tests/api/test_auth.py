@@ -210,8 +210,8 @@ def test_authentication_with_github_secrets(client: TestClient):
     """
     import os
 
-    dhis2_url = os.getenv("DHIS2_URL")
-    dhis2_token = os.getenv("DHIS2_TOKEN")
+    dhis2_url = os.getenv("DHIS_URL")
+    dhis2_token = os.getenv("DHIS_TOKEN")
 
     if not dhis2_url or not dhis2_token:
         pytest.skip("DHIS2_URL and DHIS2_TOKEN environment variables not set")
