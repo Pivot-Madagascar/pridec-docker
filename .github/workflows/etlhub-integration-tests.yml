@@ -10,11 +10,12 @@ concurrency:
 
 jobs:
   check-secrets:
-    name: Check DHIS2 secrets availability
+    name: Check DHIS2 secrets & connectivity
     runs-on: ubuntu-latest
     environment: init_test
     outputs:
       has_secrets: ${{ steps.check.outputs.has_secrets }}
+      dhis2_reachable: ${{ steps.ping.outputs.reachable }}
     steps:
       - name: Check secrets
         id: check
@@ -28,6 +29,21 @@ jobs:
             echo "has_secrets=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Ping DHIS2_URL
+        id: ping
+        if: steps.check.outputs.has_secrets == 'true'
+        env:
+          DHIS2_URL: ${{ secrets.DHIS2_URL }}
+        run: |
+          if curl --silent --show-error --fail --max-time 10 \
+              --output /dev/null --write-out "HTTP %{http_code}\n" \
+              "$DHIS2_URL/api/system/info"; then
+            echo "reachable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::DHIS2_URL ($DHIS2_URL) n'est pas joignable depuis le runner GitHub Actions."
+            echo "reachable=false" >> "$GITHUB_OUTPUT"
+          fi
+
   integration-tests:
     name: Integration tests (DHIS2 auth)
     runs-on: ubuntu-latest
@@ -36,7 +52,9 @@ jobs:
     permissions:
       contents: read
       checks: write
-    if: needs.check-secrets.outputs.has_secrets == 'true'
+    if: |
+      needs.check-secrets.outputs.has_secrets == 'true' &&
+      needs.check-secrets.outputs.dhis2_reachable == 'true'
 
     defaults:
       run:
