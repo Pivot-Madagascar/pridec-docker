@@ -9,14 +9,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-secrets:
+    name: Check DHIS2 secrets availability
+    runs-on: ubuntu-latest
+    environment: init_test
+    outputs:
+      has_secrets: ${{ steps.check.outputs.has_secrets }}
+    steps:
+      - name: Check secrets
+        id: check
+        env:
+          DHIS2_URL: ${{ secrets.DHIS2_URL }}
+          DHIS2_TOKEN: ${{ secrets.DHIS2_TOKEN }}
+        run: |
+          if [ -n "$DHIS2_URL" ] && [ -n "$DHIS2_TOKEN" ]; then
+            echo "has_secrets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_secrets=false" >> "$GITHUB_OUTPUT"
+          fi
+
   integration-tests:
     name: Integration tests (DHIS2 auth)
     runs-on: ubuntu-latest
     environment: init_test
+    needs: check-secrets
     permissions:
       contents: read
       checks: write
-    if: ${{ secrets.DHIS2_URL != '' && secrets.DHIS2_TOKEN != '' }}
+    if: needs.check-secrets.outputs.has_secrets == 'true'
 
     defaults:
       run:
