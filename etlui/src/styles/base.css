@@ -1,0 +1,620 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+body {
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+#app {
+  min-height: 100vh;
+  background-color: var(--color-gray-900);
+}
+
+/* Utility Classes */
+
+/* Typography */
+.text-xs {
+  @apply text-xs;
+}
+
+.text-sm {
+  @apply text-sm;
+}
+
+.text-lg {
+  @apply text-lg;
+}
+
+.text-4xl {
+  @apply text-4xl;
+}
+
+.font-semibold {
+  @apply font-semibold;
+}
+
+.font-medium {
+  @apply font-medium;
+}
+
+.font-bold {
+  @apply font-bold;
+}
+
+.font-mono {
+  @apply font-mono;
+}
+
+.text-white {
+  @apply text-white;
+}
+
+.text-gray-400 {
+  @apply text-gray-400;
+}
+
+.text-gray-500 {
+  @apply text-gray-500;
+}
+
+.text-gray-700 {
+  @apply text-gray-700;
+}
+
+.text-gray-900 {
+  @apply text-gray-900;
+}
+
+.text-gray-300 {
+  @apply text-gray-300;
+}
+
+.text-blue-800 {
+  @apply text-blue-800;
+}
+
+.text-blue-600 {
+  @apply text-blue-600;
+}
+
+.text-green-400 {
+  @apply text-green-400;
+}
+
+.text-green-600 {
+  @apply text-green-600;
+}
+
+.text-green-500 {
+  @apply text-green-500;
+}
+
+.text-red-800 {
+  @apply text-red-800;
+}
+
+.text-red-500 {
+  @apply text-red-500;
+}
+
+.text-yellow-500 {
+  @apply text-yellow-500;
+}
+
+.text-yellow-600 {
+  @apply text-yellow-600;
+}
+
+.text-gray-400 {
+  @apply text-gray-400;
+}
+
+.whitespace-pre-wrap {
+  @apply whitespace-pre-wrap;
+}
+
+.tracking-tight {
+  @apply tracking-tight;
+}
+
+/* Sizing */
+.w-3 {
+  @apply w-3;
+}
+
+.h-3 {
+  @apply h-3;
+}
+
+.w-10 {
+  @apply w-10;
+}
+
+.h-10 {
+  @apply h-10;
+}
+
+.h-full {
+  @apply h-full;
+}
+
+.max-w-2xl {
+  @apply max-w-2xl;
+}
+
+.max-w-7xl {
+  @apply max-w-7xl;
+}
+
+/* Borders & Radius */
+.rounded-full {
+  @apply rounded-full;
+}
+
+.rounded-lg {
+  @apply rounded-lg;
+}
+
+.rounded-md {
+  @apply rounded-md;
+}
+
+.rounded-xl {
+  @apply rounded-xl;
+}
+
+/* Border Colors */
+.border-gray-600 {
+  @apply border-gray-600;
+}
+
+.border-gray-800 {
+  @apply border-gray-800;
+}
+
+.border-blue-800 {
+  @apply border-blue-800;
+}
+
+.border-blue-200 {
+  @apply border-blue-200;
+}
+
+.border-gray-200 {
+  @apply border-gray-200;
+}
+
+.border-gray-700 {
+  @apply border-gray-700;
+}
+
+.border-gray-50 {
+  @apply border-gray-50;
+}
+
+.border-red-800 {
+  @apply border-red-800;
+}
+
+.border-red-200 {
+  @apply border-red-200;
+}
+
+/* Background Colors */
+.bg-gray-50 {
+  @apply bg-gray-50 dark:bg-gray-800;
+}
+
+.bg-blue-50 {
+  @apply bg-blue-50 dark:bg-blue-900/20;
+}
+
+.bg-red-50 {
+  @apply bg-red-50 dark:bg-red-900/20;
+}
+
+.bg-[#1a1a1a] {
+  background-color: #1a1a1a;
+}
+
+/* Component Styles */
+
+/* Section Header */
+.section-header {
+  @apply text-2xl font-bold text-[#131921] dark:text-white mb-4;
+}
+
+/* Heading Styles */
+.heading-primary {
+  @apply text-3xl font-bold text-[#131921] dark:text-white;
+}
+
+.heading-secondary {
+  @apply text-4xl font-bold mb-2;
+}
+
+/* Card/Container */
+.card-empty {
+  @apply text-center py-16 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800;
+}
+
+.icon-xl {
+  @apply h-16 w-16;
+}
+
+.card {
+  @apply bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden;
+}
+
+.card-padded {
+  @apply p-6;
+}
+
+.card-header {
+  @apply flex items-center space-x-3 mb-6;
+}
+
+.card-header-icon {
+  @apply w-10 h-10 from-purple-600 to-indigo-700 rounded-lg flex items-center justify-center text-white font-bold;
+}
+
+.card-header-icon svg {
+  @apply h-6 w-6;
+}
+
+.card-header-title {
+  @apply text-xl font-semibold text-gray-900 dark:text-white;
+}
+
+.card-description {
+  @apply text-gray-600 dark:text-gray-400 mb-6;
+}
+
+/* Form Elements */
+.form-label {
+  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1;
+}
+
+.form-input {
+  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-400 focus:border-transparent;
+}
+
+/* Buttons */
+.btn-primary {
+  @apply w-full md:w-auto px-6 py-3 from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center;
+}
+
+.btn-primary svg {
+  @apply h-5 w-5;
+}
+
+.btn-primary svg.animate-spin {
+  @apply -ml-1 mr-3;
+}
+
+.btn-secondary {
+  @apply flex items-center p-6 rounded-lg transition-colors shadow-md;
+}
+
+.btn-secondary-icon {
+  @apply h-8 w-8 mr-4;
+}
+
+.btn-secondary-text {
+  @apply text-left;
+}
+
+.btn-secondary-text-title {
+  @apply block text-lg font-bold;
+}
+
+.btn-secondary-text-subtitle {
+  @apply block text-sm opacity-80;
+}
+
+/* Disabled button variants */
+.btn-disabled:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* Fetch buttons (Climate, Disease, GeoJSON) */
+.btn-fetch {
+  @apply flex items-center p-6 bg-[#232F3E] text-white rounded-lg border border-gray-600 hover:bg-gray-700 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-fetch-icon-blue {
+  @apply h-8 w-8 mr-4 text-blue-400;
+}
+
+.btn-fetch-icon-green {
+  @apply h-8 w-8 mr-4 text-green-400;
+}
+
+.btn-fetch-icon-purple {
+  @apply h-8 w-8 mr-4 text-purple-400;
+}
+
+.btn-fetch-text {
+  @apply text-left;
+}
+
+.btn-fetch-text-title {
+  @apply block text-lg font-bold;
+}
+
+.btn-fetch-text-subtitle {
+  @apply block text-sm;
+}
+
+.btn-fetch-text-subtitle-default {
+  @apply text-gray-400;
+}
+
+.btn-fetch-text-subtitle-loading {
+  @apply text-yellow-400;
+}
+
+/* Forecast button (Yellow) */
+.btn-forecast {
+  @apply flex items-center p-6 bg-yellow-400 hover:bg-yellow-500 text-[#131921] rounded-lg transition-colors shadow-md;
+}
+
+.btn-forecast-icon {
+  @apply h-8 w-8 mr-4;
+}
+
+.btn-forecast-text {
+  @apply text-left;
+}
+
+.btn-forecast-text-title {
+  @apply block text-lg font-bold;
+}
+
+.btn-forecast-text-subtitle {
+  @apply block text-sm opacity-80;
+}
+
+/* ETL Pipeline buttons */
+.btn-etl {
+  @apply p-4 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md hover:border-yellow-400 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-etl-header {
+  @apply flex items-center justify-between mb-2;
+}
+
+.btn-etl-title {
+  @apply text-sm font-semibold text-gray-700;
+}
+
+.btn-etl-status-running {
+  @apply text-xs text-yellow-600 font-medium;
+}
+
+.btn-etl-status-done {
+  @apply text-xs text-green-600 font-medium;
+}
+
+.btn-etl-description {
+  @apply text-xs text-gray-500;
+}
+
+/* Status Button (Job Status) */
+.btn-status {
+  @apply px-4 py-2 bg-[#f0c14b] hover:bg-[#f7dfa5] text-[#131921] font-semibold rounded-md border border-yellow-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-status svg {
+  @apply h-4 w-4;
+}
+
+.btn-status svg.animate-spin {
+  @apply -ml-1 mr-2;
+}
+
+/* Icon Sizes */
+.icon-xs {
+  @apply h-4 w-4;
+}
+
+.icon-sm {
+  @apply h-5 w-5;
+}
+
+.icon-md {
+  @apply h-6 w-6;
+}
+
+.icon-lg {
+  @apply h-8 w-8;
+}
+
+/* Spinner Styles */
+.spinner-xs {
+  @apply animate-spin -ml-1 mr-2 h-4 w-4 inline;
+}
+
+.spinner-sm {
+  @apply animate-spin -ml-1 mr-3 h-5 w-5 text-white;
+}
+
+/* Notifications */
+.notification {
+  @apply rounded-lg p-4;
+}
+
+.notification-success {
+  @apply bg-green-50 border border-green-200 text-green-800;
+}
+
+.notification-error {
+  @apply bg-red-50 border border-red-200 text-red-800;
+}
+
+.notification-icon {
+  @apply h-5 w-5 mr-2;
+}
+
+.notification-message {
+  @apply font-medium;
+}
+
+/* Recent Activity */
+.activity-section {
+  @apply bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden;
+}
+
+.activity-divide {
+  @apply divide-y divide-gray-100 dark:divide-gray-800;
+}
+
+.activity-item {
+  @apply px-6 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors;
+}
+
+.activity-icon {
+  @apply w-2 h-2 rounded-full;
+}
+
+.activity-icon-success {
+  @apply bg-green-500;
+}
+
+.activity-icon-error {
+  @apply bg-red-500;
+}
+
+.activity-content {
+  @apply flex items-center space-x-3;
+}
+
+.activity-action {
+  @apply text-sm font-medium text-gray-900 dark:text-gray-100;
+}
+
+.activity-message {
+  @apply text-xs text-gray-500 dark:text-gray-400;
+}
+
+.activity-time {
+  @apply text-xs text-gray-400 dark:text-gray-500;
+}
+
+/* Grid Layouts */
+.grid-cols-1 {
+  @apply grid grid-cols-1;
+}
+
+.grid-cols-2-md {
+  @apply grid-cols-1 md:grid-cols-2;
+}
+
+.grid-cols-3-lg {
+  @apply grid-cols-1 md:grid-cols-2 lg:grid-cols-3;
+}
+
+.gap-4 {
+  @apply gap-4;
+}
+
+/* Flex Layouts */
+.flex-row-center-between {
+  @apply flex items-center justify-between;
+}
+
+.flex-row-center {
+  @apply flex items-center;
+}
+
+.flex-row-start {
+  @apply flex items-start;
+}
+
+.flex-col {
+  @apply flex flex-col;
+}
+
+/* Heading Styles */
+
+.flex-col {
+  @apply flex flex-col;
+}
+
+/* Heading Styles */
+
+.flex-col {
+  @apply flex flex-col;
+}
+
+/* Spacing Utilities */
+.mt-4 {
+  @apply mt-4;
+}
+
+.mb-6 {
+  @apply mb-6;
+}
+
+.mt-6 {
+  @apply mt-6;
+}
+
+.space-y-6 {
+  @apply space-y-6;
+}
+
+.py-16 {
+  @apply py-16;
+}
+
+.space-y-4 {
+  @apply space-y-4;
+}
+
+.space-y-8 {
+  @apply space-y-8;
+}
+
+.space-x-3 {
+  @apply space-x-3;
+}
+
+/* Button/Link Utilities */
+.btn-link {
+  @apply inline-flex items-center px-6 py-3 bg-yellow-400 hover:bg-yellow-500 text-[#131921] font-semibold rounded-lg transition-colors;
+}
+
+.btn-link-secondary {
+  @apply px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors;
+}
+
+/* Message Styling */
+.message-success {
+  @apply bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300;
+}
+
+.message-error {
+  @apply bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300;
+}
+
+/* Text Center */
+.text-center {
+  @apply text-center;
+}
+
+/* Transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}

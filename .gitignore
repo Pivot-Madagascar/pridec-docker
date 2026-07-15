@@ -17,12 +17,15 @@
 .venv/
 venv/
 */.env*
-*/.venv/
 */venv/
 **/__pycache__/
 test-venv/
-**__pychache__/
+etlhub_env/
+__pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
 client_secret.json
 .gee-private-key.json
 */.gee-private-key.json
@@ -43,4 +46,10 @@ input/
 */input/
 logs/
 
+# Node modules
 */node_modules
+
+# Redis Database backup
+dump.rdb
+
+etlui/dist/

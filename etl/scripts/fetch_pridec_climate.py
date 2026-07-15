@@ -1,4 +1,7 @@
-import argparse
+from pivot_dhis_tools import pridec_fetch_climate
+import os
+import json
+import logging
 
 def print_help():
     print(f"""
@@ -12,45 +15,50 @@ Notes:
     Fokontany = 6. CSB = 5.
 """)
 
-parser = argparse.ArgumentParser(add_help=False)  # disable default help
-parser.add_argument("--help", "-h", action="store_true")
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False) # disable default help
+    parser.add_argument("--help", "-h", action="store_true")
+    return parser.parse_args()
 
-args = parser.parse_args()
+def fetch_climate():
+    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PARENT_OU, OU_LEVEL, setup_logging, check_envvars
 
-if args.help:
-    print_help()
-    exit(0)
+    setup_logging()
 
-from config import DHIS_TOKEN, DHIS_URL, PARENT_OU, OU_LEVEL, setup_logging, check_envvars
-from pivot_dhis_tools import pridec_fetch_climate
-import os
-import json
+    logger = logging.getLogger("fetch_climate")
 
-import logging
+    logger.info("Fetching PRIDEC Climate data from %s", DHIS_URL)
 
-setup_logging()
+    input_dir = os.path.join(os.getcwd(), 'input')
+    os.makedirs(input_dir, exist_ok=True)
 
-logger = logging.getLogger("fetch_climate")
+    try:
+        os.chmod(input_dir, 0o755)
+    except PermissionError:
+        pass
 
-logger.info("Fetching PRIDEC Climate data from %s", DHIS_URL)
+    check_envvars(required_vars={
+        'DHIS_TOKEN': DHIS_TOKEN,
+        'DHIS_URL': DHIS_URL,
+        'PARENT_OU': PARENT_OU,
+        'OU_LEVEL': OU_LEVEL,
+    })
 
-if not os.path.isdir('input'):
-    raise NotADirectoryError("Directory 'input' not found.")
+    data_out = pridec_fetch_climate(dhis_url = DHIS_URL, ou_level = OU_LEVEL,
+                         ou_parent =  PARENT_OU,
+                         token=DHIS_TOKEN, past_years = 8)
 
-#check envvars
-check_envvars(required_vars={
-    'DHIS_TOKEN': DHIS_TOKEN,
-    'DHIS_URL': DHIS_URL,
-    'PARENT_OU': PARENT_OU,
-    'OU_LEVEL': OU_LEVEL,
-})
+    output_path = os.path.join(input_dir, "climate_data.json")
+    with open(output_path, "w") as f:
+        json.dump({"dataValues": data_out}, f, indent=2)
 
-data_out = pridec_fetch_climate(dhis_url = DHIS_URL, ou_level = OU_LEVEL, 
-                     ou_parent =  PARENT_OU,
-                     token=DHIS_TOKEN, past_years = 8)
+    logger.info("Saved all PRIDE-C climate variables to input/climate_data.json")
 
-with open("input/climate_data.json", "w") as f:
-    json.dump({"dataValues": data_out}, f, indent=2)
-
-logger.info("Saved all PRIDE-C climate variables to input/climate_data.json")
+if __name__ == "__main__":
+    args = parse_args()
+    if args.help:
+        print_help()
+        exit(0)
+    fetch_climate()
 

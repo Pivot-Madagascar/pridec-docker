@@ -1,4 +1,3 @@
-from config import setup_logging
 from typing import Any
 from dataclasses import dataclass
 from datetime import date
@@ -33,7 +32,6 @@ class ValidationResult:
 def missing_columns(input_data: pd.DataFrame, column_names: list[str]) -> list[str]:
     """Return the names of required columns that are absent from *input_data*."""
     return [c for c in column_names if c not in input_data.columns]
-
 
 
 def load_inputs(args):
@@ -74,7 +72,7 @@ Notes:
         * ``month_assess``     – int
         * ``month_lag``        – int (defaults to 3)
         * ``forecast_start``   – date string in ``YYYYMM`` format (defaults to
-                                  current month)
+                                current month)
     disease_data.json:
         DataFrame with columns ``orgUnit``, ``period``, ``dataElement``,
         ``value``.
@@ -390,7 +388,7 @@ def validate_inputs(
     
 
 if __name__ == "__main__":
-
+    from config import setup_logging
     setup_logging()
     logger = logging.getLogger("validate_inputs")
 
