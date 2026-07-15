@@ -220,6 +220,10 @@ def test_authentication_with_github_secrets(client: TestClient):
         json={"token": dhis2_token, "dhis2_url": dhis2_url},
     )
 
+    if response.status_code != 200:
+        print(f"Response status: {response.status_code}")
+        print(f"Response body: {response.text}")
+
     assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.json()}"
     data = response.json()
     assert "user" in data, "Response should contain user object"
