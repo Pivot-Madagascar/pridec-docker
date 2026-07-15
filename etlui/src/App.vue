@@ -15,34 +15,21 @@
           </div>
         </router-link>
 
-        <nav v-if="isAuthenticated" class="app-nav">
-          <router-link
-            to="/tracking"
-            class="nav-link"
+        <div class="header-right">
+          <button
+            class="hamburger-btn"
+            @click="isDrawerOpen = true"
           >
-            Tracking
-          </router-link>
-          <router-link
-            to="/logs"
-            class="nav-link"
-          >
-            Logs
-          </router-link>
-          <router-link
-            to="/forecast"
-            class="nav-link"
-          >
-            Forecast
-          </router-link>
-          <router-link
-             to="/parameters"
-             class="nav-link"
-          >
-             Parameters
-           </router-link>
-        </nav>
+            <Icon :path="ICONS.menu" class="icon-md" />
+          </button>
 
-        <div v-if="isAuthenticated" class="flex-row-center space-x-3">
+          <Drawer
+            v-model="isDrawerOpen"
+            side="right"
+            :items="navItems"
+            :api-base-url="apiBaseUrl"
+          />
+
           <span class="app-badge">ETL Hub v1.0</span>
           <a
             :href="`${apiBaseUrl}/docs`"
@@ -59,11 +46,6 @@
     <main class="main-content">
       <router-view />
     </main>
-
-    <!-- Footer -->
-    <!-- <footer class="app-footer">
-      <p class="footer-text">© 2026 PRIDE-C ETL Hub. All rights reserved.</p>
-    </footer> -->
   </div>
 </template>
 
@@ -113,22 +95,17 @@
   color: #9ca3af;
 }
 
-.app-nav {
-  @apply hidden md:flex items-center space-x-1;
-}
-
-.nav-link {
-  @apply px-4 py-2 rounded-md text-sm font-medium transition-colors;
-  text-decoration: none;
+.hamburger-btn {
+  @apply p-2 rounded-md transition-colors;
   color: #d1d5db;
 }
 
-.app-nav .nav-link:hover {
+.hamburger-btn:hover {
   @apply bg-gray-700 text-white;
 }
 
-.app-nav .nav-link.router-link-active {
-  @apply bg-[#232F3E] text-[#febd69];
+.header-right {
+  @apply flex items-center space-x-3;
 }
 
 .app-badge {
@@ -138,7 +115,7 @@
 }
 
 .nav-link-secondary {
-  @apply px-3 py-1.5 text-xs font-medium rounded-md transition-colors;
+  @apply hidden lg:inline-flex px-3 py-1.5 text-xs font-medium rounded-md transition-colors;
   text-decoration: none;
   background-color: #232F3E;
   border: 1px solid #4b5563;
@@ -152,23 +129,20 @@
 .main-content {
   @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8;
 }
-
-.app-footer {
-  @apply text-center py-6 mt-auto;
-  background-color: #131921;
-  color: #9ca3af;
-}
-
-.footer-text {
-  @apply text-sm;
-}
 </style>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useAuthStore } from '@/stores/auth'
+import { computed, ref } from 'vue'
+import Icon, { ICONS } from '@/components/Icons'
+import Drawer from '@/components/Drawer.vue'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8111'
-const authStore = useAuthStore()
-const isAuthenticated = computed(() => authStore.isAuthenticated)
+const isDrawerOpen = ref(false)
+
+const navItems = computed(() => [
+  { to: '/tracking', label: 'Tracking' },
+  { to: '/logs', label: 'Logs' },
+  { to: '/forecast', label: 'Forecast' },
+  { to: '/parameters', label: 'Parameters' }
+])
 </script>
