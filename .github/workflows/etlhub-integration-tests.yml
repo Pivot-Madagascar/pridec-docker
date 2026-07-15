@@ -2,10 +2,12 @@ name: ETLHub Integration Tests
 run-name: ETLHub Integration Tests — ${{ github.ref_name }}
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 concurrency:
-  group: etlhub-integration-tests-${{ github.workflow }}-${{ github.ref }}
+  group: etlhub-integration-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -35,12 +37,13 @@ jobs:
         env:
           DHIS2_URL: ${{ secrets.DHIS2_URL }}
         run: |
+          # Never log the token here, only testing host reachability.
           if curl --silent --show-error --fail --max-time 10 \
               --output /dev/null --write-out "HTTP %{http_code}\n" \
               "$DHIS2_URL/api/system/info"; then
             echo "reachable=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::DHIS2_URL ($DHIS2_URL) n'est pas joignable depuis le runner GitHub Actions."
+            echo "::warning::DHIS2_URL ($DHIS2_URL) is not reachable from the GitHub Actions runner."
             echo "reachable=false" >> "$GITHUB_OUTPUT"
           fi
 
