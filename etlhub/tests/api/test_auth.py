@@ -204,8 +204,9 @@ def test_no_credentials_raises_error():
 def test_authentication_with_github_secrets(client: TestClient):
     """Integration test: validate token against real DHIS2 instance using DHIS2_URL and DHIS2_TOKEN env vars.
 
-    This test uses GitHub secrets DHIS2_URL and DHIS2_TOKEN for real authentication testing.
+    This test uses GitHub secrets (DHIS2_URL and DHIS2_TOKEN) for real authentication testing.
     It will be skipped if either environment variable is not set.
+    The env vars are populated from GitHub repository secrets during CI runs.
     """
     import os
 
@@ -215,6 +216,9 @@ def test_authentication_with_github_secrets(client: TestClient):
     if not dhis2_url or not dhis2_token:
         pytest.skip("DHIS2_URL and DHIS2_TOKEN environment variables not set")
 
+    assert dhis2_url.startswith("http"), f"DHIS2_URL should be a valid HTTP URL, got: {dhis2_url}"
+    assert len(dhis2_token) > 10, "DHIS2_TOKEN appears invalid (too short)"
+
     response = client.post(
         "/auth/validate-token",
         json={"token": dhis2_token, "dhis2_url": dhis2_url},
@@ -223,6 +227,7 @@ def test_authentication_with_github_secrets(client: TestClient):
     if response.status_code != 200:
         print(f"Response status: {response.status_code}")
         print(f"Response body: {response.text}")
+        print(f"URL used: {dhis2_url}")
 
     assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.json()}"
     data = response.json()
