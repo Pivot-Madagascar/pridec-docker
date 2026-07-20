@@ -17,7 +17,7 @@ describe('Router Guard', () => {
           path: '/',
           name: 'Landing',
           component: () => ({ template: '<div>Landing</div>' }),
-          meta: { title: 'Landing', public: true }
+          meta: { title: 'Landing' }
         },
         {
           path: '/tracking',
@@ -59,14 +59,43 @@ describe('Router Guard', () => {
     await router.push('/tracking')
     await router.isReady()
 
-    expect(router.currentRoute.value.name).toBe('Login')
-  })
+expect(router.currentRoute.value.name).toBe('Login')
+   })
 
-  it('should redirect authenticated users to Landing when accessing Login', async () => {
+   it('should redirect unauthenticated users to Login for dashboard route', async () => {
     const router = createRouter({
       history: createWebHistory(),
       routes: [
-        { path: '/', name: 'Landing', component: () => ({ template: '<div>Landing</div>' }), meta: { public: true } },
+        { path: '/', name: 'Landing', component: () => ({ template: '<div>Landing</div>' }), meta: { title: 'Landing' } },
+        { path: '/login', name: 'Login', component: () => ({ template: '<div>Login</div>' }), meta: { public: true } },
+      ]
+    })
+
+    router.beforeEach((to, _from, next) => {
+      const authStore = useAuthStore()
+      const isPublic = to.meta.public === true
+      const authenticated = authStore.isAuthenticated
+
+      if (authenticated && to.name === 'Login') {
+        next({ name: 'Landing' })
+      } else if (!isPublic && !authenticated) {
+        next({ name: 'Login' })
+      } else {
+        next()
+      }
+    })
+
+    await router.push('/')
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('Login')
+  })
+
+   it('should redirect authenticated users to Landing when accessing Login', async () => {
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [
+        { path: '/', name: 'Landing', component: () => ({ template: '<div>Landing</div>' }), meta: { title: 'Landing' } },
         { path: '/tracking', name: 'Tracking', component: () => ({ template: '<div>Tracking</div>' }) },
         { path: '/login', name: 'Login', component: () => ({ template: '<div>Login</div>' }), meta: { title: 'Login', public: true } },
       ]
@@ -99,7 +128,7 @@ describe('Router Guard', () => {
     const router = createRouter({
       history: createWebHistory(),
       routes: [
-        { path: '/', name: 'Landing', component: () => ({ template: '<div>Landing</div>' }), meta: { public: true } },
+        { path: '/', name: 'Landing', component: () => ({ template: '<div>Landing</div>' }), meta: { title: 'Landing' } },
         { path: '/tracking', name: 'Tracking', component: () => ({ template: '<div>Tracking</div>' }) },
         { path: '/login', name: 'Login', component: () => ({ template: '<div>Login</div>' }), meta: { public: true } },
       ]
