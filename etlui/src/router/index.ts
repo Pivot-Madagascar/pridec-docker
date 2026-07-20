@@ -8,7 +8,7 @@ const router = createRouter({
       path: '/',
       name: 'Landing',
       component: () => import('@/views/LandingPage/LandingPage.vue'),
-      meta: { title: 'ETL UI - Dashboard', public: true }
+      meta: { title: 'ETL UI - Dashboard' }
     },
     {
       path: '/tracking',
