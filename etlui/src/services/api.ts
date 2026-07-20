@@ -65,8 +65,10 @@ export interface ServiceCallLog {
 }
 
 export const trackingApi = {
-  listRequests(limit = 50) {
-    return api.get('api/tracking/requests', { params: { limit } })
+  listRequests(limit = 50, endpoint?: string) {
+    const params: Record<string, any> = { limit }
+    if (endpoint) params.endpoint = endpoint
+    return api.get('api/tracking/requests', { params })
   },
   getRequest(requestId: string) {
     return api.get(`api/tracking/requests/${encodeURIComponent(requestId)}`)

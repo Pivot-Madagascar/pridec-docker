@@ -38,3 +38,14 @@ def test_get_etl_logs_not_found_returns_404(override_dependencies):
 
         response = client.get("/api/tracking/etl-logs/abc123")
         assert response.status_code in [404, 500]
+
+
+def test_list_requests_filters_by_endpoint(override_dependencies):
+    from etlhub.main import app
+    client = TestClient(app)
+    with patch("etlhub.application.use_cases.tracking_service.TrackingService.list_requests") as mock_list:
+        mock_list.return_value = []
+
+        response = client.get("/api/tracking/requests?endpoint=/api/ingest")
+        assert response.status_code == 200
+        mock_list.assert_called_once_with(50, "/api/ingest")

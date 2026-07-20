@@ -2,6 +2,7 @@ import uuid
 import threading
 import time
 from contextlib import contextmanager
+from urllib.parse import urlparse
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -10,6 +11,20 @@ from starlette.responses import Response
 
 from etlhub.infrastructure.request_tracker import get_request_tracker
 from etlhub.core.config import get_settings
+
+
+def _should_track_request(url: str) -> bool:
+    settings = get_settings()
+    if not settings.tracked_endpoints:
+        return True
+    tracked = [e.strip() for e in settings.tracked_endpoints.split(",") if e.strip()]
+    try:
+        path = urlparse(url).path
+        if path.startswith("/api/tracking"):
+            return False
+        return any(path.startswith(ep) for ep in tracked)
+    except Exception:
+        return True
 
 
 def setup_cors(app):
@@ -54,20 +69,22 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
         _tracker_local.request_id = request_id
 
         request.state.request_id = request_id
+
         response: Response = await call_next(request)
 
-        duration = round((time.perf_counter() - start) * 1000, 2)
-        log = {
-            "request_id": request_id,
-            "method": request.method,
-            "url": str(request.url),
-            "status_code": response.status_code,
-            "duration_ms": duration,
-            "client_host": request.client.host if request.client else None,
-            "services": _tracker_local.calls,
-            "error": None,
-        }
-        get_request_tracker().save(log)
+        if _should_track_request(str(request.url)):
+            duration = round((time.perf_counter() - start) * 1000, 2)
+            log = {
+                "request_id": request_id,
+                "method": request.method,
+                "url": str(request.url),
+                "status_code": response.status_code,
+                "duration_ms": duration,
+                "client_host": request.client.host if request.client else None,
+                "services": _tracker_local.calls,
+                "error": None,
+            }
+            get_request_tracker().save(log)
         _tracker_local.calls = []
         _tracker_local.stack = []
         response.headers["X-Request-ID"] = request_id

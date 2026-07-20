@@ -48,10 +48,12 @@ def mock_job_repository():
 @pytest.fixture
 def mock_request_tracker():
     class MockRequestTracker:
-        def list_recent(self, limit: int = 50):
+        def list_recent(self, limit: int = 50, endpoint: str | None = None):
             return []
         def get(self, request_id: str):
             return None
+        def save(self, log: dict):
+            pass
     return MockRequestTracker()
 
 

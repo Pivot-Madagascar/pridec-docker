@@ -9,8 +9,12 @@ router = APIRouter(prefix="/api/tracking", tags=["Tracking"])
 
 
 @router.get("/requests", response_model=list[RequestLog])
-async def list_requests(limit: int = 50, service: TrackingService = Depends(get_tracking_service)):
-    return service.list_requests(limit)
+async def list_requests(
+    limit: int = 50,
+    endpoint: str | None = None,
+    service: TrackingService = Depends(get_tracking_service),
+):
+    return service.list_requests(limit, endpoint)
 
 
 @router.get("/requests/{request_id}", response_model=RequestLog)
