@@ -11,11 +11,11 @@ export const useTrackingStore = defineStore('tracking', () => {
 
   let timer: number | null = null
 
-  async function fetchRequests(limit = 50) {
+  async function fetchRequests(limit = 50, endpoint?: string) {
     loading.value = true
     error.value = ''
     try {
-      const { data } = await trackingApi.listRequests(limit)
+      const { data } = await trackingApi.listRequests(limit, endpoint)
       requests.value = data
     } catch (e: any) {
       error.value = e?.message || 'Failed to load tracking data'
@@ -37,10 +37,10 @@ export const useTrackingStore = defineStore('tracking', () => {
     }
   }
 
-  function startPolling(limit = 50) {
+  function startPolling(limit = 50, endpoint?: string) {
     stopPolling()
-    fetchRequests(limit)
-    timer = window.setInterval(() => fetchRequests(limit), 2000)
+    fetchRequests(limit, endpoint)
+    timer = window.setInterval(() => fetchRequests(limit, endpoint), 2000)
   }
 
   function stopPolling() {

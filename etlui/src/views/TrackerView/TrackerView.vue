@@ -1,14 +1,22 @@
 <template>
   <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex items-center justify-between gap-4">
       <h1 class="text-2xl font-bold text-gray-100">Request Tracking</h1>
-      <button
-        class="rounded-md px-4 py-1.5 text-sm bg-gray-800 text-gray-300 hover:bg-gray-700"
-        @click="refresh"
-        :disabled="loading"
-      >
-        {{ loading ? 'Loading...' : 'Refresh' }}
-      </button>
+      <div class="flex items-center gap-2">
+        <input
+          v-model="endpointFilter"
+          type="text"
+          placeholder="Filter by endpoint (e.g. /api/ingest)"
+          class="rounded-md border border-gray-600 bg-gray-800 px-2 py-1 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+        />
+        <button
+          class="rounded-md px-4 py-1.5 text-sm bg-gray-800 text-gray-300 hover:bg-gray-700"
+          @click="refresh"
+          :disabled="loading"
+        >
+          {{ loading ? 'Loading...' : 'Refresh' }}
+        </button>
+      </div>
     </div>
 
     <div v-if="error" class="rounded-lg border border-red-900 bg-red-950 p-3 text-sm text-red-300">
@@ -49,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTrackingStore } from '@/stores/useTrackingStore'
 import type { RequestLog } from '@/services/api'
 import RequestTable from './components/RequestTable.vue'
@@ -60,6 +68,7 @@ const selectedRequest = ref<RequestLog | null>(null)
 const showModal = ref(false)
 const page = ref(0)
 const pageSize = 10
+const endpointFilter = ref('')
 
 const requests = store.requests
 const error = store.error
@@ -76,14 +85,19 @@ onUnmounted(() => {
 function refresh() {
   store.stopPolling()
   const limit = (page.value + 1) * pageSize
-  store.fetchRequests(limit)
+  store.fetchRequests(limit, endpointFilter.value || undefined)
 }
 
 function onPageChange(p: number) {
   page.value = p
   const limit = (page.value + 1) * pageSize
-  store.fetchRequests(limit)
+  store.fetchRequests(limit, endpointFilter.value || undefined)
 }
+
+watch(endpointFilter, () => {
+  page.value = 0
+  refresh()
+})
 
 async function handleSelect(requestId: string) {
   await store.fetchRequest(requestId)

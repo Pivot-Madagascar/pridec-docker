@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     host_pwd: str = "."
     logs_dir: str = "logs"
+    tracked_endpoints: str = ""
     data_dir: str = "."
     redis_host: str = "localhost"
     redis_port: int = 6379

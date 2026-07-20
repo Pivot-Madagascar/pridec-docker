@@ -9,8 +9,11 @@ class TrackingService:
         self._request_tracker = request_tracker
         self._job_repo = job_repo
 
-    def list_requests(self, limit: int = 50) -> list[RequestLog]:
-        return [RequestLog(**log) for log in self._request_tracker.list_recent(limit)]
+    def list_requests(self, limit: int = 50, endpoint: str | None = None) -> list[RequestLog]:
+        return [
+            RequestLog(**log)
+            for log in self._request_tracker.list_recent(limit, endpoint)
+        ]
 
     def get_request(self, request_id: str) -> RequestLog:
         log = self._request_tracker.get(request_id)

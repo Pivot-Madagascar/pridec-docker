@@ -63,16 +63,20 @@ class RequestTracker:
                 pass
         return None
 
-    def list_recent(self, limit: int = 50) -> list[dict]:
+    def list_recent(self, limit: int = 50, endpoint: str | None = None) -> list[dict]:
         try:
             path = self._logs_path()
             if not path.exists():
                 return []
             files = sorted(path.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
             results = []
-            for f in files[:limit]:
+            for f in files:
+                if len(results) >= limit:
+                    break
                 try:
-                    results.append(json.loads(f.read_text()))
+                    log = json.loads(f.read_text())
+                    if endpoint is None or endpoint in log.get("url", ""):
+                        results.append(log)
                 except Exception:
                     continue
             return results
