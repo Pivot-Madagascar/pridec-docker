@@ -53,3 +53,4 @@ logs/
 dump.rdb
 
 etlui/dist/
+local-docs/
