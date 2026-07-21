@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from etlhub.core.config import get_settings
+from etl.scripts.config import get_dhis_url
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +43,9 @@ async def get_dhis2_user_info(
     dhis2_url: Optional[str] = None,
 ) -> Optional[dict]:
     settings = get_settings()
-    base_url = (dhis2_url or settings.dhis2_url).rstrip('/')
+    base_url = (dhis2_url or get_dhis_url()).rstrip('/') if (dhis2_url or get_dhis_url()) else None
     if not base_url:
+        logger.warning("get_dhis2_user_info: DHIS2 URL not configured")
         return None
 
     if not token and not (user and pwd):

@@ -23,7 +23,12 @@ def parse_args():
     return parser.parse_args()
 
 def fetch_geojson():
-    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, OU_LEVEL, PARENT_OU, setup_logging, check_envvars
+    from etl.scripts.config import get_dhis_token, get_dhis_url, get_ou_level, get_parent_ou, setup_logging, check_envvars
+
+    DHIS_TOKEN = get_dhis_token()
+    DHIS_URL = get_dhis_url()
+    OU_LEVEL = get_ou_level()
+    PARENT_OU = get_parent_ou()
 
     setup_logging()
 
@@ -64,4 +69,3 @@ if __name__ == "__main__":
         print_help()
         exit(0)
     fetch_geojson()
-

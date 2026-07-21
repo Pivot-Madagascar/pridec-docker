@@ -39,15 +39,15 @@ def test_valid_token_authenticates_user(client: TestClient):
 
     with patch("httpx.AsyncClient") as mock_client_cls:
         mock_client_cls.return_value.__aenter__.return_value = mock_client
-        with patch("etlhub.core.config.get_settings") as mock_settings:
-            mock_settings.return_value.dhis2_url = "http://localhost:8080"
-            mock_settings.return_value.dhis2_allowed_hosts = ""
-            mock_settings.return_value.dhis2_auth_timeout = 3.0
+        with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value="http://localhost:8080"):
+            with patch("etlhub.core.config.get_settings") as mock_settings:
+                mock_settings.return_value.dhis2_allowed_hosts = ""
+                mock_settings.return_value.dhis2_auth_timeout = 3.0
 
-            response = client.get(
-                "/auth/me",
-                headers={"Authorization": "Bearer valid-token"},
-            )
+                response = client.get(
+                    "/auth/me",
+                    headers={"Authorization": "Bearer valid-token"},
+                )
 
     assert response.status_code == 200
     data = response.json()
@@ -64,15 +64,15 @@ def test_invalid_token_returns_401(client: TestClient):
 
     with patch("httpx.AsyncClient") as mock_client_cls:
         mock_client_cls.return_value.__aenter__.return_value = mock_client
-        with patch("etlhub.core.config.get_settings") as mock_settings:
-            mock_settings.return_value.dhis2_url = "http://localhost:8080"
-            mock_settings.return_value.dhis2_allowed_hosts = ""
-            mock_settings.return_value.dhis2_auth_timeout = 3.0
+        with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value="http://localhost:8080"):
+            with patch("etlhub.core.config.get_settings") as mock_settings:
+                mock_settings.return_value.dhis2_allowed_hosts = ""
+                mock_settings.return_value.dhis2_auth_timeout = 3.0
 
-            response = client.get(
-                "/auth/me",
-                headers={"Authorization": "Bearer invalid-token"},
-            )
+                response = client.get(
+                    "/auth/me",
+                    headers={"Authorization": "Bearer invalid-token"},
+                )
 
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid or expired DHIS2 token"
@@ -87,15 +87,15 @@ def test_dhis2_unreachable_returns_401(client: TestClient):
 
     with patch("httpx.AsyncClient") as mock_client_cls:
         mock_client_cls.return_value.__aenter__.return_value = mock_client
-        with patch("etlhub.core.config.get_settings") as mock_settings:
-            mock_settings.return_value.dhis2_url = "http://localhost:8080"
-            mock_settings.return_value.dhis2_allowed_hosts = ""
-            mock_settings.return_value.dhis2_auth_timeout = 3.0
+        with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value="http://localhost:8080"):
+            with patch("etlhub.core.config.get_settings") as mock_settings:
+                mock_settings.return_value.dhis2_allowed_hosts = ""
+                mock_settings.return_value.dhis2_auth_timeout = 3.0
 
-            response = client.get(
-                "/auth/me",
-                headers={"Authorization": "Bearer some-token"},
-            )
+                response = client.get(
+                    "/auth/me",
+                    headers={"Authorization": "Bearer some-token"},
+                )
 
     assert response.status_code == 401
 
@@ -111,8 +111,23 @@ def test_invalid_json_response_returns_401(client: TestClient):
 
     with patch("httpx.AsyncClient") as mock_client_cls:
         mock_client_cls.return_value.__aenter__.return_value = mock_client
+        with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value="http://localhost:8080"):
+            with patch("etlhub.core.config.get_settings") as mock_settings:
+                mock_settings.return_value.dhis2_allowed_hosts = ""
+                mock_settings.return_value.dhis2_auth_timeout = 3.0
+
+                response = client.get(
+                    "/auth/me",
+                    headers={"Authorization": "Bearer some-token"},
+                )
+
+    assert response.status_code == 401
+
+
+def test_token_missing_url_returns_401(client: TestClient):
+    """Test that missing DHIS2 URL in settings returns 401."""
+    with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value=""):
         with patch("etlhub.core.config.get_settings") as mock_settings:
-            mock_settings.return_value.dhis2_url = "http://localhost:8080"
             mock_settings.return_value.dhis2_allowed_hosts = ""
             mock_settings.return_value.dhis2_auth_timeout = 3.0
 
@@ -120,21 +135,6 @@ def test_invalid_json_response_returns_401(client: TestClient):
                 "/auth/me",
                 headers={"Authorization": "Bearer some-token"},
             )
-
-    assert response.status_code == 401
-
-
-def test_token_missing_url_returns_401(client: TestClient):
-    """Test that missing DHIS2 URL in settings returns 401."""
-    with patch("etlhub.core.config.get_settings") as mock_settings:
-        mock_settings.return_value.dhis2_url = ""
-        mock_settings.return_value.dhis2_allowed_hosts = ""
-        mock_settings.return_value.dhis2_auth_timeout = 3.0
-
-        response = client.get(
-            "/auth/me",
-            headers={"Authorization": "Bearer some-token"},
-        )
 
     assert response.status_code == 401
 
@@ -155,15 +155,15 @@ def test_validate_token_endpoint_with_custom_url_returns_user(client: TestClient
 
     with patch("httpx.AsyncClient") as mock_client_cls:
         mock_client_cls.return_value.__aenter__.return_value = mock_client
-        with patch("etlhub.core.config.get_settings") as mock_settings:
-            mock_settings.return_value.dhis2_url = ""
-            mock_settings.return_value.dhis2_allowed_hosts = "localhost:8082"
-            mock_settings.return_value.dhis2_auth_timeout = 3.0
+        with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value=None):
+            with patch("etlhub.core.config.get_settings") as mock_settings:
+                mock_settings.return_value.dhis2_allowed_hosts = "localhost:8082"
+                mock_settings.return_value.dhis2_auth_timeout = 3.0
 
-            response = client.post(
-                "/auth/validate-token",
-                json={"token": "valid-token", "dhis2_url": "http://localhost:8082"},
-            )
+                response = client.post(
+                    "/auth/validate-token",
+                    json={"token": "valid-token", "dhis2_url": "http://localhost:8082"},
+                )
 
     assert response.status_code == 200
     data = response.json()
@@ -173,15 +173,15 @@ def test_validate_token_endpoint_with_custom_url_returns_user(client: TestClient
 
 def test_validate_token_endpoint_disallowed_url_returns_400(client: TestClient):
     """Test that validate-token rejects disallowed dhis2_url."""
-    with patch("etlhub.core.config.get_settings") as mock_settings:
-        mock_settings.return_value.dhis2_url = ""
-        mock_settings.return_value.dhis2_allowed_hosts = "trusted.dhis2.com"
-        mock_settings.return_value.dhis2_auth_timeout = 3.0
+    with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value=None):
+        with patch("etlhub.core.config.get_settings") as mock_settings:
+            mock_settings.return_value.dhis2_allowed_hosts = "trusted.dhis2.com"
+            mock_settings.return_value.dhis2_auth_timeout = 3.0
 
-        response = client.post(
-            "/auth/validate-token",
-            json={"token": "valid-token", "dhis2_url": "http://localhost:8082"},
-        )
+            response = client.post(
+                "/auth/validate-token",
+                json={"token": "valid-token", "dhis2_url": "http://localhost:8082"},
+            )
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid or disallowed DHIS2 URL"
@@ -192,12 +192,12 @@ def test_no_credentials_raises_error():
     from etlhub.api.auth.dhis2_auth import get_dhis2_user_info
 
     import asyncio
-    with patch("etlhub.api.auth.dhis2_auth.get_settings") as mock_settings:
-        mock_settings.return_value.dhis2_url = "http://localhost:8080"
-        mock_settings.return_value.dhis2_auth_timeout = 3.0
+    with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value="http://localhost:8080"):
+        with patch("etlhub.core.config.get_settings") as mock_settings:
+            mock_settings.return_value.dhis2_auth_timeout = 3.0
 
-        with pytest.raises(ValueError, match="Authentication required"):
-            asyncio.run(get_dhis2_user_info())
+            with pytest.raises(ValueError, match="Authentication required"):
+                asyncio.run(get_dhis2_user_info())
 
 
 @pytest.mark.integration
@@ -214,7 +214,7 @@ def test_authentication_with_github_secrets(client: TestClient):
     dhis2_token = os.getenv("DHIS_TOKEN")
 
     if not dhis2_url or not dhis2_token:
-        pytest.skip("DHIS2_URL and DHIS2_TOKEN environment variables not set")
+        pytest.skip("DHIS_URL and DHIS_TOKEN environment variables not set")
 
     assert dhis2_url.startswith("http"), f"DHIS2_URL should be a valid HTTP URL, got: {dhis2_url}"
     assert len(dhis2_token) > 10, "DHIS2_TOKEN appears invalid (too short)"

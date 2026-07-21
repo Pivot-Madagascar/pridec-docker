@@ -2,16 +2,49 @@ import subprocess
 import os
 import json
 import stat
+import tempfile
 from pathlib import Path
 from datetime import datetime
 
 from etlhub.infrastructure.job_store import JobStore
+from etlhub.infrastructure.config_store import ConfigStore
 
 
 def _get_output_dir() -> str:
     """Get the output directory path."""
     settings = __import__('etlhub.core.config', fromlist=['get_settings']).get_settings()
     return os.path.join(settings.data_dir, "output")
+
+
+def _build_dynamic_env_file(host_pwd: str, job_id: str) -> str:
+    """Merge the project's root .env file with Redis-based overrides into a
+    temporary file, to be used with `docker run --env-file`."""
+    base_env_path = os.path.join(host_pwd, '.env')
+    with open(base_env_path) as f:
+        base_lines = f.readlines()
+
+    overrides = ConfigStore().get_all()
+    
+    # Filter lines from the original .env that will be overridden
+    override_keys = set(overrides.keys())
+    filtered_base = []
+    for line in base_lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith('#'):
+            key = stripped.split('=')[0].split(';')[0]  # handle KEY=value and KEY;export
+            if key not in override_keys:
+                filtered_base.append(line)
+        else:
+            filtered_base.append(line)
+
+    env_path = os.path.join(tempfile.gettempdir(), f"forecast_{job_id}.env")
+    with open(env_path, 'w') as f:
+        f.writelines(filtered_base)
+        if overrides:
+            f.write("\n")
+            for k, v in overrides.items():
+                f.write(f"{k}={v}\n")
+    return env_path
 
 
 def generate_signature() -> str:
@@ -52,7 +85,7 @@ def run_rscript(job_id, params, job_store: JobStore):
     job_store.set(job_id, status)
 
     host_pwd = os.getenv('HOST_PWD', '.')
-    env_file = os.path.join(host_pwd, '.env')
+    env_file = _build_dynamic_env_file(host_pwd, job_id)
 
     input_vol = f"{host_pwd}/input:/app/input:ro"
     output_vol = f"{host_pwd}/output:/app/output:rw"
@@ -93,6 +126,11 @@ def run_rscript(job_id, params, job_store: JobStore):
             "completed": datetime.now().isoformat(),
             "message": str(e)
         })
+    finally:
+        try:
+            os.remove(env_file)
+        except OSError:
+            pass
 
     # Generate signature and chown output directory to allow API deletion
     try:

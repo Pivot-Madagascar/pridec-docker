@@ -24,7 +24,11 @@ def parse_args():
     return parser.parse_args()
 
 def import_pivot_csb():
-    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PIVOT_URL, PIVOT_TOKEN, dryRun, setup_logging, check_envvars
+    from etl.scripts.config import get_dhis_url, get_dhis_token, get_dry_run, PIVOT_URL, PIVOT_TOKEN, setup_logging, check_envvars
+
+    DHIS_URL = get_dhis_url()
+    DHIS_TOKEN = get_dhis_token()
+    DRYRUN = get_dry_run()
 
     setup_logging()
     logger = logging.getLogger("import_pivot_CSB")
@@ -39,13 +43,13 @@ def import_pivot_csb():
 
     logger.info("Importing CSB Case Data from %s into %s", PIVOT_URL, DHIS_URL)
 
-    if dryRun:
+    if DRYRUN:
         logger.info("DRY RUN — no changes will be made")
     else:
         logger.info("NORMAL RUN - data will be imported into instance")
 
     period_list = create_period_range(start = (date.today()-relativedelta(months=8)))
-    
+
     # ------------------CSB Data --------------------
     csb_ids = [
         "D9UWDj19ljP", "U1YeJp3NDNV", "DDR2w1c1GyE", "uWoBok9YyvB",
@@ -55,25 +59,25 @@ def import_pivot_csb():
         "WCqkkkKNJEi", "EE6WwIMgQ0F", "M38BJM8ju1A", "ZPvH8UsgwYv",
         "QHPyq70qulM"
     ]
-    
+
     csb_org_query = f"ou:{';'.join(csb_ids)}"
-    
+
     ##  -------------------Malaria --------
     # wuwA8DT9h7c (Numerator) - RDT + at CSB for 2-11 months 
     # PVu7GgpuJNV (Numerator) - RDT + at CSB for 1-5 years
     
     palu_1y = get_dataElements(dhis_url = PIVOT_URL,
-                          token = PIVOT_TOKEN,
-                          dx_query =  "dx:wuwA8DT9h7c",
-                          pe_query = period_list,
-                          ou_query = csb_org_query,
-                          includeNumDen=True)
+                        token = PIVOT_TOKEN,
+                        dx_query =  "dx:wuwA8DT9h7c",
+                        pe_query = period_list,
+                        ou_query = csb_org_query,
+                        includeNumDen=True)
     palu_5y = get_dataElements(dhis_url = PIVOT_URL,
-                          token = PIVOT_TOKEN,
-                          dx_query =  "dx:PVu7GgpuJNV",
-                          pe_query = period_list,
-                          ou_query = csb_org_query,
-                          includeNumDen=True)
+                        token = PIVOT_TOKEN,
+                        dx_query =  "dx:PVu7GgpuJNV",
+                        pe_query = period_list,
+                        ou_query = csb_org_query,
+                        includeNumDen=True)
     palu_all = (
         pd.concat([palu_1y, palu_5y], ignore_index=True)
         .rename(columns={
@@ -85,16 +89,16 @@ def import_pivot_csb():
         .assign(dataElement = 'pridec_historic_CSBMalaria')
         .assign(categoryOptioncombo = 'pridec_COC_u5')
     )
-    
+
     logger.info("pridec_historic_CSBMalaria has the following characteristics: %s", check_dhis_value(palu_all))
-    
+
     CSBMalaria_json = {
         "dataValues": palu_all.to_dict(orient="records")
     }
-    
-    logger.info(f"Importing pridec_historic_CSBMalaria into PRIDE-C instance with dryRun = %s", dryRun)
-    
-    resp = post_dataElements(dhis_url = DHIS_URL, payload = CSBMalaria_json, token = DHIS_TOKEN, dryRun = dryRun)
+
+    logger.info(f"Importing pridec_historic_CSBMalaria into PRIDE-C instance with dryRun = %s", DRYRUN)
+
+    resp = post_dataElements(dhis_url = DHIS_URL, payload = CSBMalaria_json, token = DHIS_TOKEN, dryRun = DRYRUN)
     if resp.ok:
         logger.info("Imported pridec_historic_CSBMalaria")
         logger.debug("Response: %s", resp.text)
@@ -108,12 +112,12 @@ def import_pivot_csb():
     ira_co = "co:HIsTqXVmDdV;TJlRzxBqiqG;ncBrGeQ9w2g;YAxDQLsxeT0;fEAWzG9dj98;yprE1T7gBUw;lwrX7wJqjhW;DSaVQguA6v6"
     
     ira_csb = get_dataElements(dhis_url = PIVOT_URL,
-                          token = PIVOT_TOKEN,
-                          dx_query =  "dx:eHrqdPNZW6m;E4KUPwZuLrG",
-                          pe_query = period_list,
-                          ou_query = csb_org_query,
-                          co_query = ira_co,
-                          includeNumDen=False)
+                        token = PIVOT_TOKEN,
+                        dx_query =  "dx:eHrqdPNZW6m;E4KUPwZuLrG",
+                        pe_query = period_list,
+                        ou_query = csb_org_query,
+                        co_query = ira_co,
+                        includeNumDen=False)
     
     ira_all = (
         ira_csb
@@ -128,15 +132,15 @@ def import_pivot_csb():
     )
     
     logger.info("pridec_historic_CSBRespinf has the following characteristics: %s", check_dhis_value(ira_all))
-    
+
     
     CSBRespinf_json = {
         "dataValues": ira_all.to_dict(orient="records")
     }
     
-    logger.info("Importing pridec_historic_CSBRespinf into PRIDE-C instance with dryRun = %s", dryRun)
-    
-    resp = post_dataElements(dhis_url = DHIS_URL, payload = CSBRespinf_json, token = DHIS_TOKEN, dryRun = dryRun)
+    logger.info("Importing pridec_historic_CSBRespinf into PRIDE-C instance with dryRun = %s", DRYRUN)
+
+    resp = post_dataElements(dhis_url = DHIS_URL, payload = CSBRespinf_json, token = DHIS_TOKEN, dryRun = DRYRUN)
     if resp.ok:
         logger.info("Imported pridec_historic_CSBRespinf")
         logger.debug("Response: %s", resp.text)
@@ -148,13 +152,13 @@ def import_pivot_csb():
     # uses same co as ira
     
     diar_csb = get_dataElements(dhis_url = PIVOT_URL,
-                          token = PIVOT_TOKEN,
-                          dx_query =   "dx:uw5yUgtSYfQ;kvoIFhX5RMA;NG2mlKX2D6C",
-                          pe_query = period_list,
-                          ou_query = csb_org_query,
-                          co_query = ira_co,
-                          includeNumDen=False)
-    
+                        token = PIVOT_TOKEN,
+                        dx_query =   "dx:uw5yUgtSYfQ;kvoIFhX5RMA;NG2mlKX2D6C",
+                        pe_query = period_list,
+                        ou_query = csb_org_query,
+                        co_query = ira_co,
+                        includeNumDen=False)
+
     diar_all = (
         diar_csb
         .rename(columns={
@@ -167,16 +171,17 @@ def import_pivot_csb():
         .assign(categoryOptioncombo = 'pridec_COC_u5')
     )
     
-    
+
     logger.info("pridec_historic_CSBDiarrhea has the following characteristics: %s", check_dhis_value(diar_all))
     
     CSBDiarrhea_json = {
         "dataValues": diar_all.to_dict(orient="records")
     }
-    
-    logger.info("Importing pridec_historic_CSBDiarrhea into PRIDE-C instance with dryRun = %s", dryRun)
-    
-    resp = post_dataElements(dhis_url = DHIS_URL, payload = CSBDiarrhea_json, token = DHIS_TOKEN, dryRun = dryRun)
+
+    logger.info("Importing pridec_historic_CSBDiarrhea into PRIDE-C instance with dryRun = %s", DRYRUN)
+
+    resp = post_dataElements(dhis_url = DHIS_URL, payload = CSBDiarrhea_json, token = DHIS_TOKEN, dryRun = DRYRUN)
+
     if resp.ok:
         logger.info("Imported pridec_historic_CSBDiarrhea")
         logger.debug("Response: %s", resp.text)

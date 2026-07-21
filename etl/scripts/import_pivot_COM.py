@@ -24,7 +24,11 @@ def parse_args():
     return parser.parse_args()
 
 def import_pivot_com():
-    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PIVOT_URL, PIVOT_TOKEN, dryRun, setup_logging, check_envvars
+    from etl.scripts.config import get_dhis_url, get_dhis_token, get_dry_run, PIVOT_URL, PIVOT_TOKEN, setup_logging, check_envvars
+
+    DHIS_URL = get_dhis_url()
+    DHIS_TOKEN = get_dhis_token()
+    DRYRUN = get_dry_run()
 
     setup_logging()
 
@@ -40,7 +44,7 @@ def import_pivot_com():
 
     logger.info("Importing COM Case Data from %s into %s", PIVOT_URL, DHIS_URL)
 
-    if dryRun:
+    if DRYRUN:
         logger.info("DRY RUN — no changes will be made")
     else:
         logger.info("NORMAL RUN - data will be imported into instance")
@@ -74,7 +78,7 @@ def import_pivot_com():
                         dx_query =  "dx:lq38tLcfEi7",
                         pe_query = period_list,
                         ou_query = com_org_query,
-                            includeNumDen=False)
+                        includeNumDen=False)
     com_all = (
             com_get
             .rename(columns={
@@ -96,11 +100,11 @@ def import_pivot_com():
     logger.info("Getting pridec_historic_COMMalaria")
     
     mal_get = get_dataElements(dhis_url = PIVOT_URL,
-                            token = PIVOT_TOKEN,
-                            dx_query =  "dx:vduU8d1GZbW",
-                            pe_query = period_list,
-                            ou_query = com_org_query,
-                            includeNumDen=False)
+                        token = PIVOT_TOKEN,
+                        dx_query =  "dx:vduU8d1GZbW",
+                        pe_query = period_list,
+                        ou_query = com_org_query,
+                        includeNumDen=False)
     
     mal_all = (
         mal_get
@@ -124,9 +128,9 @@ def import_pivot_com():
         "dataValues": mal_all.to_dict(orient="records")
     }
     
-    logger.info("Importing pridec_historic_COMMalaria into PRIDE-C instance with dryRun = %s", dryRun)
+    logger.info("Importing pridec_historic_COMMalaria into PRIDE-C instance with dryRun = %s", dry_run)
     
-    resp = post_dataElements(dhis_url = DHIS_URL, payload = COMMalaria_json, token = DHIS_TOKEN, dryRun = dryRun)
+    resp = post_dataElements(dhis_url = DHIS_URL, payload = COMMalaria_json, token = DHIS_TOKEN, dryRun = dry_run)
     if resp.ok:
         logger.info(f"Imported pridec_historic_COMMalaria")
         logger.debug("Response: %s", resp.text)
@@ -141,11 +145,11 @@ def import_pivot_com():
     logger.info("Getting pridec_historic_COMRespinf")
     
     ira_get = get_dataElements(dhis_url = PIVOT_URL,
-                        token = PIVOT_TOKEN,
-                        dx_query =  "dx:hJ5pa6wO4nJ;CmDXCmmywrj",
-                        pe_query = period_list,
-                        ou_query = com_org_query,
-                        includeNumDen=False)
+                            token = PIVOT_TOKEN,
+                            dx_query =  "dx:hJ5pa6wO4nJ;CmDXCmmywrj",
+                            pe_query = period_list,
+                            ou_query = com_org_query,
+                            includeNumDen=False)
     
     ira_all = (
         ira_get
@@ -170,9 +174,9 @@ def import_pivot_com():
         "dataValues": ira_all.to_dict(orient="records")
     }
     
-    logger.info("Importing pridec_historic_COMRespinf into PRIDE-C instance with dryRun = %s", dryRun)
+    logger.info("Importing pridec_historic_COMRespinf into PRIDE-C instance with dryRun = %s", DRYRUN)
     
-    resp = post_dataElements(dhis_url = DHIS_URL, payload = COMRespinf_json, token = DHIS_TOKEN, dryRun = dryRun)
+    resp = post_dataElements(dhis_url = DHIS_URL, payload = COMRespinf_json, token = DHIS_TOKEN, dryRun = DRYRUN)
     
     if resp.ok:
         logger.info(f"Imported pridec_historic_COMRespinf")
@@ -189,11 +193,11 @@ def import_pivot_com():
     logger.info("Getting pridec_historic_COMDiarrhea")
     
     diar_get = get_dataElements(dhis_url = PIVOT_URL,
-                        token = PIVOT_TOKEN,
-                        dx_query =  "dx:DjsQEzPDAoN;f4hrhsiz49l",
-                        pe_query = period_list,
-                        ou_query = com_org_query,
-                        includeNumDen=False)
+                            token = PIVOT_TOKEN,
+                            dx_query =  "dx:DjsQEzPDAoN;f4hrhsiz49l",
+                            pe_query = period_list,
+                            ou_query = com_org_query,
+                            includeNumDen=False)
     
     diar_all = (
         diar_get
@@ -218,9 +222,9 @@ def import_pivot_com():
         "dataValues": diar_all.to_dict(orient="records")
     }
     
-    logger.info("Importing pridec_historic_COMDiarrhea into PRIDE-C Instance with dryRun = %s", dryRun)
+    logger.info("Importing pridec_historic_COMDiarrhea into PRIDE-C Instance with dryRun = %s", DRYRUN)
     
-    resp = post_dataElements(dhis_url = DHIS_URL, payload = COMDiarrhea_json, token = DHIS_TOKEN, dryRun = dryRun)
+    resp = post_dataElements(dhis_url = DHIS_URL, payload = COMDiarrhea_json, token = DHIS_TOKEN, dryRun = DRYRUN)
     
     if resp.ok:
         logger.info(f"Imported pridec_historic_COMDiarrhea")

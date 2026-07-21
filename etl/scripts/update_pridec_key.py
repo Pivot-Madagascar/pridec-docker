@@ -9,7 +9,7 @@ Task: update_pridec_key
 
 Usage:
 -   Updates a PRIDE-C key in teh datastore that is used to signal a local cache to re-download data.
-           
+            
 Notes:
 -   Should be run after a monthly update
 """)
@@ -21,7 +21,11 @@ def parse_args():
     return parser.parse_args()
 
 def update_key():
-    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, dryRun, setup_logging, check_envvars
+    from etl.scripts.config import get_dhis_token, get_dhis_url, get_dry_run, setup_logging, check_envvars
+
+    DHIS_TOKEN = get_dhis_token()
+    DHIS_URL = get_dhis_url()
+    DRYRUN = get_dry_run()
 
     setup_logging()
 
@@ -33,7 +37,7 @@ def update_key():
 
     logger.info("Updating PRIDE-C key on %s", DHIS_URL)
 
-    pridec_update_key(dhis_url=DHIS_URL, token = DHIS_TOKEN, dryRun=dryRun)
+    pridec_update_key(dhis_url=DHIS_URL, token = DHIS_TOKEN, dryRun=DRYRUN)
 
 if __name__ == "__main__":
     args = parse_args()

@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from etlhub.api.auth.dhis2_auth import get_current_user, get_dhis2_user_info
+from etl.scripts.config import get_dhis_url
 
 auth_router = APIRouter()
 
@@ -31,13 +32,13 @@ async def validate_token(
     from etlhub.core.config import get_settings
 
     settings = get_settings()
-    if not settings.dhis2_url and not dhis2_url:
+    url = dhis2_url or get_dhis_url()
+    if not url:
         raise HTTPException(
             status_code=500,
             detail="DHIS2 URL not configured",
         )
 
-    url = dhis2_url or settings.dhis2_url
     if not _validate_dhis2_url(url, settings):
         raise HTTPException(
             status_code=400,
@@ -61,14 +62,15 @@ async def dhis2_login():
     from etlhub.core.config import get_settings
 
     settings = get_settings()
-    if not settings.dhis2_url or not settings.dhis2_client_id:
+    base_url = get_dhis_url()
+    if not base_url or not settings.dhis2_client_id:
         raise HTTPException(
             status_code=500,
             detail="DHIS2 OAuth not configured",
         )
 
     auth_url = (
-        f"{settings.dhis2_url.rstrip('/')}/oauth/authorize?"
+        f"{base_url.rstrip('/')}/oauth/authorize?"
         f"client_id={settings.dhis2_client_id}&"
         f"response_type=code&"
         f"redirect_uri={settings.dhis2_redirect_uri}"
@@ -82,7 +84,8 @@ async def dhis2_callback(code: str):
     from etlhub.core.config import get_settings
 
     settings = get_settings()
-    if not settings.dhis2_url or not settings.dhis2_client_id or not settings.dhis2_client_secret:
+    base_url = get_dhis_url()
+    if not base_url or not settings.dhis2_client_id or not settings.dhis2_client_secret:
         raise HTTPException(
             status_code=500,
             detail="DHIS2 OAuth not configured",
@@ -91,7 +94,7 @@ async def dhis2_callback(code: str):
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{settings.dhis2_url.rstrip('/')}/oauth/token",
+                f"{base_url.rstrip('/')}/oauth/token",
                 data={
                     "grant_type": "authorization_code",
                     "code": code,
