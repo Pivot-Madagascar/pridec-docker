@@ -1,6 +1,6 @@
-from pridec_gee import AVAILABLE_VARIABLES
-
 def print_help():
+    from etl.scripts.config import get_gee_variables
+    available = get_gee_variables()
     print(f"""
 Task: import_gee
 
@@ -13,7 +13,7 @@ Notes:
     Example: `GEE_VARIABLES='pridec_climate_temperatureMean,pridec_climate_mndwi'`
 
 The available variables are:
-{chr(10).join(f'  - {v}' for v in AVAILABLE_VARIABLES)}
+{chr(10).join(f'  - {v}' for v in available)}
 """)
 
 def parse_args():
@@ -23,7 +23,14 @@ def parse_args():
     return parser.parse_args()
 
 def import_gee():
-    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PARENT_OU, GEE_SERVICE_ACCOUNT, GEE_VARIABLES, dryRun, setup_logging, check_envvars
+    from etl.scripts.config import get_dhis_url, get_dhis_token, get_parent_ou, get_dry_run, GEE_SERVICE_ACCOUNT, get_gee_variables, setup_logging, check_envvars
+
+    DHIS_URL = get_dhis_url()
+    DHIS_TOKEN = get_dhis_token()
+    PARENT_OU = get_parent_ou()
+    DRYRUN = get_dry_run()
+    GEE_VARIABLES = get_gee_variables()
+
     import json
     import ee
     import os
@@ -68,7 +75,7 @@ def import_gee():
     import_pridec_climate(dhis_url=DHIS_URL,  dhis_token=DHIS_TOKEN, date_range=date_range, 
                           orgUnit=None, parent_ou=PARENT_OU, ou_level=ou_level, #download from instance
                           variables= GEE_VARIABLES,
-                          rice_features=rice_fields, dryRun=dryRun)
+                          rice_features=rice_fields, dryRun=DRYRUN)
 
 if __name__ == "__main__":
     args = parse_args()

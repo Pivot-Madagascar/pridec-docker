@@ -144,6 +144,7 @@ const navItems = computed(() => [
   { to: '/tracking', label: 'Tracking' },
   { to: '/logs', label: 'Logs' },
   { to: '/forecast', label: 'Forecast' },
-  { to: '/parameters', label: 'Parameters' }
+  { to: '/parameters', label: 'Parameters' },
+  { to: '/admin/config', label: 'Admin Config' }
 ])
 </script>

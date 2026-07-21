@@ -39,6 +39,12 @@ const router = createRouter({
       name: 'Parameters',
       component: () => import('@/views/Auth/ParametersPage.vue'),
       meta: { title: 'Parameters' }
+    },
+    {
+      path: '/admin/config',
+      name: 'AdminConfig',
+      component: () => import('@/views/Admin/ConfigView.vue'),
+      meta: { title: 'Admin Configuration' }
     }
   ]
 })

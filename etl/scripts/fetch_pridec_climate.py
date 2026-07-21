@@ -22,7 +22,12 @@ def parse_args():
     return parser.parse_args()
 
 def fetch_climate():
-    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, PARENT_OU, OU_LEVEL, setup_logging, check_envvars
+    from etl.scripts.config import get_dhis_token, get_dhis_url, get_parent_ou, get_ou_level, setup_logging, check_envvars
+
+    DHIS_TOKEN = get_dhis_token()
+    DHIS_URL = get_dhis_url()
+    PARENT_OU = get_parent_ou()
+    OU_LEVEL = get_ou_level()
 
     setup_logging()
 
@@ -61,4 +66,3 @@ if __name__ == "__main__":
         print_help()
         exit(0)
     fetch_climate()
-

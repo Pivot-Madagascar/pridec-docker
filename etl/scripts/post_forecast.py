@@ -21,7 +21,11 @@ def parse_args():
     return parser.parse_args()
 
 def post_forecast():
-    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, dryRun, setup_logging, check_envvars
+    from etl.scripts.config import get_dhis_token, get_dhis_url, get_dry_run, setup_logging, check_envvars
+
+    DHIS_TOKEN = get_dhis_token()
+    DHIS_URL = get_dhis_url()
+    DRYRUN = get_dry_run()
 
     setup_logging()
 
@@ -49,7 +53,7 @@ def post_forecast():
             raise e
 
     post_dataElements(dhis_url = DHIS_URL, payload = json_payload,
-                       token= DHIS_TOKEN, dryRun=dryRun)
+                       token= DHIS_TOKEN, dryRun=DRYRUN)
 
 if __name__ == "__main__":
     args = parse_args()
@@ -57,4 +61,3 @@ if __name__ == "__main__":
         print_help()
         exit(0)
     post_forecast()
-

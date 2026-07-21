@@ -9,7 +9,7 @@ Task: calc_CSB_alerts
 
 Usage:
 -   Estimates the number of health facilities expecting more usage than average of prior three years and
-          posts this information to the PRIDE-C instance
+        posts this information to the PRIDE-C instance
 
 Notes:
 -   This currently runs only on the Pivot PRIDE-C instance due to specific configurations.
@@ -22,7 +22,11 @@ def parse_args():
     return parser.parse_args()
 
 def calc_csb_alerts():
-    from etl.scripts.config import DHIS_TOKEN, DHIS_URL, dryRun, setup_logging, check_envvars
+    from etl.scripts.config import get_dhis_token, get_dhis_url, get_dry_run, setup_logging, check_envvars
+
+    DHIS_TOKEN = get_dhis_token()
+    DHIS_URL = get_dhis_url()
+    DRYRUN = get_dry_run()
 
     setup_logging()
 
@@ -39,7 +43,7 @@ def calc_csb_alerts():
                                     token = DHIS_TOKEN)
 
     post_dataElements(dhis_url = DHIS_URL, payload = json_alert,
-                       token= DHIS_TOKEN, dryRun=dryRun)
+                       token= DHIS_TOKEN, dryRun=DRYRUN)
 
 if __name__ == "__main__":
     args = parse_args()
