@@ -8,47 +8,12 @@ services:
     build:
       context: ./etl
       dockerfile: Dockerfile
-    image: mvevans89/pridec_etl:0.1.0
-    # network_mode: "host"
-    # volumes:
-    #  - type: bind
-    #    source: ./input
-    #    target: /app/input
-    #    bind:
-    #       create_host_path: true
-    #    read_only: false
-    #  - type: bind
-    #    source: ./output
-    #    target: /app/output
-    #    bind:
-    #       create_host_path: true
-    #    read_only: false
-    #  - type: bind
-    #    source: ./.gee-private-key.json
-    #    target: /app/.gee-private-key.json
-    #    bind:
-    #       create_host_path: false
-    #    read_only: true
+    image: mvevans89/pridec_etl:0.1.1
 
   forecast:
     build: 
       context: ./forecast
       dockerfile: Dockerfile
-    image: mvevans89/pridec_forecast:0.1.0
-    # network_mode: "host"
-    # cap_add:
-    #   - SYS_NICE  
-    # volumes:
-    #  - type: bind
-    #    source: ./input
-    #    target: /app/input
-    #    bind:
-    #       create_host_path: true
-    #    read_only: true
-    #  - type: bind
-    #    source: ./output
-    #    target: /app/output
-    #    bind:
-    #       create_host_path: true
-    #    read_only: false
+    image: mvevans89/pridec_forecast:0.1.1
+
 

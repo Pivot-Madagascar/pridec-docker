@@ -17,6 +17,20 @@ Building and pushing to Docker Hub (both images at once)
 docker compose -f compose-build.yaml build --no-cache && docker compose -f compose-build.yaml push
 ```
 
+Update image version and github release:
+
+```
+# on main branch
+# update version in compose-build.yaml
+git commit -m "update version to X.X.X"
+git push
+
+git tag vX.X.X
+git push origin vX.X.X
+#manually add relase on github
+```
+
+
 ## 2026-06-25
 
 Updated the images to using explicit versioning, beginning with 0.1.0, to help with conflicts from local vs. built images. This is realted to issue #9.
