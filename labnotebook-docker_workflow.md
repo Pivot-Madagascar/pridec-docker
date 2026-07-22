@@ -28,6 +28,7 @@ git push
 git tag vX.X.X
 git push origin vX.X.X
 #manually add relase on github
+#build and push do Docker Hub
 ```
 
 ## 2026-07-22
