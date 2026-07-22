@@ -30,6 +30,14 @@ git push origin vX.X.X
 #manually add relase on github
 ```
 
+## 2026-07-22
+
+Finalized local_CSB calculation and have updated the image to v0.1.2.
+
+## 2026-07-21
+
+Working on updating the CSB calculation to use local images
+
 
 ## 2026-06-25
 

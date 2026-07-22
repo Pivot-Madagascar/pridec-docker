@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-COMMAND="$1"
+TASK="$1"
 shift || true  
 
 # Function to print usage/help
@@ -19,9 +19,10 @@ print_usage() {
     echo "  validate_inputs      - Validate input files for forecasting in input/ folder. "
     echo "                         Saves validated inputs as input/config_valid.json, input/input_valid.json, and input/polygon_valid.geojson."
     echo "                         See 'docker compose run etl validate_inputs --help' for available arguments."
+    echo "  calc_CSB_alerts      - Calculate the number of CSB on alert for this month and post to PRIDE-C instance."
+    echo "  calc_orgUnit_alerts  - Calculate the number of orgUnits on alert and save as output/alerts.json. More generalizable version of calc_CSB_alerts."
     echo "  post_forecast        - Post forecast to PRIDE-C instance."
     echo "  build_analytics      - Build the analytics table on PRIDE-C instance. This can take 10-15 minutes."
-    echo "  calc_CSB_alerts      - Calculate the number of CSB on alert for this month and post to PRIDE-C instance."
     echo "  update_key           - Update the datastore key used to trigger PRIDE-C cache reset every month." 
     echo "                         Run at the end of all updates."
     echo ""
@@ -37,12 +38,12 @@ print_usage() {
 }
 
 # Show help if no command or -h/--help
-if [ -z "$COMMAND" ] || [ "$COMMAND" = "-h" ] || [ "$COMMAND" = "--help" ]; then
+if [ -z "$TASK" ] || [ "$TASK" = "-h" ] || [ "$TASK" = "--help" ]; then
     print_usage
     exit 0
 fi
 
-case "$COMMAND" in
+case "$TASK" in
 import_gee)
     python scripts/import_gee.py "$@"
     ;;
@@ -83,12 +84,16 @@ calc_CSB_alerts)
     python scripts/calc_CSB_alerts.py "$@"
     ;;
 
+calc_orgUnit_alerts)
+    python scripts/calc_orgUnit_alerts.py "$@"
+    ;;
+
 update_key)
     python scripts/update_pridec_key.py "$@"
     ;;
 
 *)
-    echo "Unknown command: $COMMAND"
+    echo "Unknown etl task: $TASK"
     echo ""
     print_usage
     exit 1
