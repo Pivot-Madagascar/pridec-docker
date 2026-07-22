@@ -17,6 +17,14 @@ Building and pushing to Docker Hub (both images at once)
 docker compose -f compose-build.yaml build --no-cache && docker compose -f compose-build.yaml push
 ```
 
+## 2026-07-22
+
+Finalized local_CSB calculation and have updated the image to v0.1.2.
+
+## 2026-07-21
+
+Working on updating the CSB calculation to use local images
+
 ## 2026-06-25
 
 Updated the images to using explicit versioning, beginning with 0.1.0, to help with conflicts from local vs. built images. This is realted to issue #9.

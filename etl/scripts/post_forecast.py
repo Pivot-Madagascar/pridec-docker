@@ -6,6 +6,7 @@ Task: post_forecast
 
 Usage:
 -   POSTs a forecast in the form of output/forecast.json to the PRIDE-C instance
+-   POSTs calculated PRIDE-C Alerts from output/alerts.json to the PRIDE-C instance
 
 Notes:
 -   None
@@ -38,13 +39,29 @@ check_envvars(required_vars = {
 
 logger.info("Posting forecasts to %s", DHIS_URL)
 
+forecast_payload = None
+alert_payload = None
+
 try:
     with open('output/forecast.json', 'r') as file:
-        json_payload = json.load(file)
-except FileNotFoundError as e:
-        logger.error("The file 'output/forecast.json' was not found. Run the forecast step first.")
-        raise SystemExit(1) from e
+        forecast_payload = json.load(file)
+except FileNotFoundError:
+        logger.warning("The file 'output/forecast.json' was not found and will not be posted. Run the forecast step first.")
 
-post_dataElements(dhis_url = DHIS_URL, payload = json_payload,
-                   token= DHIS_TOKEN, dryRun=dryRun)
+if forecast_payload is not None: 
+    post_dataElements(dhis_url = DHIS_URL, payload = forecast_payload,
+                    token= DHIS_TOKEN, dryRun=dryRun)
+
+logger.info("Posting alerts to %s", DHIS_URL)
+
+try:
+    with open('output/alerts.json', 'r') as file:
+        alert_payload = json.load(file)
+except FileNotFoundError:
+        logger.warning("The file 'output/alerts.json' was not found and will not be posted. Run the calc_orgUnit_alerts step first")
+
+if alert_payload is not None: 
+    post_dataElements(dhis_url = DHIS_URL, payload = alert_payload,
+                    token= DHIS_TOKEN, dryRun=dryRun)
+
 
