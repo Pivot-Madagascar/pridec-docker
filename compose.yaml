@@ -9,7 +9,7 @@ name: pridec
 services:
 
   etl:
-    image: mvevans89/pridec_etl:0.1.0
+    image: mvevans89/pridec_etl:0.1.1
     network_mode: "host"
     env_file:
     - path: ${HOST_PWD:-.}/.env
@@ -35,7 +35,7 @@ services:
        read_only: true
 
   forecast:
-    image: mvevans89/pridec_forecast:0.1.0
+    image: mvevans89/pridec_forecast:0.1.1
     network_mode: "host"
     env_file:
     - path: ${HOST_PWD:-.}/.env
