@@ -44,8 +44,9 @@ case "$TASK" in
     exec Rscript /app/03_create-report.R "$@"
     ;;
   *)
-    echo "Error: Unknown forecast task '$TASK'"
-    echo "Usage: $0 {validate_inputs|forecast|report_only} [args...]"
+    echo "Error: Unknown forecast task: '$TASK'"
+    echo ""
+    print_usage
     exit 1
     ;;
 esac
