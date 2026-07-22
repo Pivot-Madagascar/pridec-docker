@@ -84,6 +84,10 @@ calc_CSB_alerts)
     python scripts/calc_CSB_alerts.py "$@"
     ;;
 
+calc_orgUnit_alerts)
+    python scripts/calc_orgUnit_alerts.py "$@"
+    ;;
+
 update_key)
     python scripts/update_pridec_key.py "$@"
     ;;
