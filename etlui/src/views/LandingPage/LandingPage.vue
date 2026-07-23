@@ -6,7 +6,11 @@
       <h2 class="section-header">ETL Pipeline</h2>
       <p class="section-subtitle">Follow the workflow step by step</p>
 
-      <StepperCarousel :steps="pipelineSteps" :initial-step="0" @action-click="handleActionClick" />
+      <StepperCarousel :steps="pipelineSteps" :initial-step="0" @action-click="handleActionClick" @step-change="handleStepChange">
+       <template #step-2>
+         <ForecastConfigForm />
+       </template>
+     </StepperCarousel>
     </section>
 
     <Notifications 
@@ -36,10 +40,16 @@ import RecentActivity from './components/RecentActivity.vue'
 import StepperCarousel from './components/StepperCarousel.vue'
 import ForecastModal from './components/ForecastModal.vue'
 import ForecastReportModal from './components/ForecastReportModal.vue'
+import ForecastConfigForm from './components/ForecastConfigForm.vue'
 import { ICONS } from '@/components/Icons'
+import { storeToRefs } from 'pinia'
+import { useForecastConfigStore } from '@/stores/forecastConfig'
 
 const showForecastModal = ref(false)
 const showReportModal = ref(false)
+
+const forecastConfig = useForecastConfigStore()
+const { isValid: configIsValid } = storeToRefs(forecastConfig)
 
 interface ActivityEntry {
   id: number
@@ -121,6 +131,10 @@ onMounted(() => {
   checkForecastReportExists()
 })
 
+const handleStepChange = (_stepIndex: number) => {
+  // Step change tracking - can be extended for future needs
+}
+
 const pipelineSteps = computed(() => [
   {
     id: 'step-1',
@@ -178,6 +192,12 @@ const pipelineSteps = computed(() => [
   },
   {
     id: 'step-2',
+    title: 'Configuration',
+    type: 'custom',
+    canProceed: configIsValid.value
+  },
+  {
+    id: 'step-3',
     title: 'Data Retrieval',
     actions: [
       {
@@ -231,7 +251,7 @@ const pipelineSteps = computed(() => [
     ]
   },
   {
-    id: 'step-3',
+    id: 'step-4',
     title: 'Forecast',
     actions: [
       {
@@ -244,7 +264,7 @@ const pipelineSteps = computed(() => [
     ]
   },
   {
-    id: 'step-4',
+    id: 'step-5',
     title: 'Approve Forecast',
     actions: [
       {
@@ -261,7 +281,7 @@ const pipelineSteps = computed(() => [
     onReset: resetReports
   },
   {
-    id: 'step-5',
+    id: 'step-6',
     title: 'Finalization',
     actions: [
       {
@@ -403,7 +423,10 @@ const fetchDisease = async () => {
   loadingDisease.value = true
   diseaseSuccess.value = false
   try {
-    const response = await api.post('/fetch_disease')
+    const response = await api.post('/fetch_disease', {
+      disease_code: forecastConfig.diseaseCode,
+      ou_level: forecastConfig.ouLevel
+    })
     const jobId = response.data?.job_id || ''
     if (jobId) lastJobId.value = jobId
     showNotification('Disease data retrieved', 'success')
@@ -469,7 +492,12 @@ const validateInputs = async () => {
   loading.validate_inputs = true
   results.validate_inputs = false
   try {
-    const response = await api.post('/validate_inputs')
+    const response = await api.post('/validate_inputs', {
+      disease_code: forecastConfig.diseaseCode,
+      ou_level: forecastConfig.ouLevel,
+      forecast_start: forecastConfig.forecastStart,
+      test: forecastConfig.test
+    })
     const jobId = response.data?.job_id || ''
     if (jobId) lastJobId.value = jobId
     results.validate_inputs = true
