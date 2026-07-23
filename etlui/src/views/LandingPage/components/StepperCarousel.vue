@@ -41,7 +41,7 @@
               <span class="step-card-badge">Step {{ currentStep + 1 }}</span>
             </div>
           </div>
-          <div class="action-grid" :class="{ gapless: steps[currentStep].actions.length <= 2 }">
+          <div class="action-grid" v-if="steps[currentStep].type !== 'custom' && steps[currentStep].actions?.length" :class="{ gapless: (steps[currentStep].actions?.length || 0) <= 2 }">
             <button
               v-for="action in steps[currentStep].actions"
               :key="action.key"
@@ -70,6 +70,7 @@
               </div>
             </button>
           </div>
+          <slot :name="steps[currentStep].id" :step="steps[currentStep]" />
         </div>
       </transition>
     </div>
@@ -79,7 +80,7 @@
         <Icon :path="ICONS.prev" />
         <span>Previous</span>
       </button>
-      <button class="control-btn control-next" :disabled="currentStep === steps.length - 1" @click="nextStep">
+      <button class="control-btn control-next" :disabled="!canProceedNext" @click="nextStep">
         <span>Next</span>
         <Icon :path="ICONS.next" />
       </button>
@@ -88,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import Icon from '@/components/Icons'
 import { ICONS } from '@/components/Icons'
 
@@ -112,7 +113,9 @@ interface Action {
 interface Step {
   id: string
   title: string
-  actions: Action[]
+  actions?: Action[]
+  type?: 'actions' | 'custom'
+  canProceed?: boolean
   onRefresh?: () => void
   onReset?: () => void
 }
@@ -122,8 +125,9 @@ const props = defineProps<{
   initialStep?: number
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   'action-click': [key: string]
+  'step-change': [index: number]
 }>()
 
 const currentStep = ref(props.initialStep || 0)
@@ -140,15 +144,27 @@ const getStepStatusClass = (index: number) => {
 
 const goToStep = (index: number) => {
   currentStep.value = index
+  emit('step-change', index)
 }
 
 const prevStep = () => {
-  if (currentStep.value > 0) currentStep.value -= 1
+  if (currentStep.value > 0) {
+    currentStep.value -= 1
+    emit('step-change', currentStep.value)
+  }
 }
 
 const nextStep = () => {
-  if (currentStep.value < props.steps.length - 1) currentStep.value += 1
+  if (currentStep.value < props.steps.length - 1) {
+    currentStep.value += 1
+    emit('step-change', currentStep.value)
+  }
 }
+
+const canProceedNext = computed(() => {
+  const currentStepData = props.steps[currentStep.value]
+  return currentStep.value < props.steps.length - 1 && currentStepData.canProceed !== false
+})
 </script>
 
 <style scoped>
