@@ -320,3 +320,7 @@ To rebuild full docker compose image from scratch (takes 15 minutes)
 ```
 docker compose build --no-cache
 ```
+
+# Funding
+
+This work is funded by a Wellcome Trust Digital Technology Award (No. 226064/Z/22/Z).
