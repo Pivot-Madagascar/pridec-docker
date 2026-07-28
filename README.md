@@ -106,6 +106,8 @@ pridec etl import_pivot_csb -e DRYRUN=true
 #run analytics table before fetching
 pridec etl build_analytics 
 
+# begin forecasting step -----------------------
+
 pridec etl fetch_climate
 pridec etl fetch_disease
 pridec etl fetch_geojson
@@ -122,14 +124,13 @@ pridec forecast forecast
 #YOU SHOULD INSPECT output/forecast_report.html NOW
 
 #PAY ATTENTION HERE AS THIS WILL CHANGE YOUR INSTANCE. update DRYRUN as needed
+pridec etl calc_orgUnit_alerts
 pridec etl post_forecast -e DRYRUN=True
 
+#done after all forecasts are completed -------------
 #to run analytics table
-pridec etl build_analytics
-#update key and CSB on alert
-pridec etl calc_CSB_alerts -e DRYRUN='True'
+pridec etl build_analytics #optional
 pridec etl update_key
-pridec etl build_analytics
 
 pridec down 
 ```
@@ -220,6 +221,7 @@ The `forecast` task is located in the `forecast` service. It requires the valida
 
 ```
 docker compose run --rm forecast forecast 
+docker compose run --em etl calc_orgUnit_alerts
 ```
 
 You should now inspect the model validation report in `output/forecast_report.html`. If everything seems okay, proceed to step `2.4` to import the forecast into the PRIDE-C instance.

@@ -21,10 +21,12 @@ if PIVOT_URL is not None:
     PIVOT_URL = PIVOT_URL.rstrip('/')
 PIVOT_TOKEN = os.environ.get('PIVOT_TOKEN')
 
-PARENT_OU = os.environ.get('PARENT_OU')
-OU_LEVEL = os.environ.get('OU_LEVEL')
 DISEASE_CODE = os.environ.get('DISEASE_CODE')
+PARENT_OU = os.environ.get('PARENT_OU') #eventually add something to webUI to source this from a dataStore dict
+OU_LEVEL = os.environ.get('OU_LEVEL')
 ALERT_NAME = os.environ.get('ALERT_NAME')
+if ALERT_NAME is None:
+    ALERT_NAME=f"pridec_alert_{DISEASE_CODE.replace("pridec_historic_", "")}"
 
 #gee info
 GEE_PROJECT = os.environ.get('GEE_PROJECT')
