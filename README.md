@@ -238,29 +238,19 @@ docker compose run --env-from-file .env --rm etl post_forecast
 
 Once all the forecasts have been posted, there are several steps to update the rest of the PRIDE-C system. They are all run via one line commands to the `etl` image.
 
-1. Calculate and post the number of health centers on alert
-2. Build the analytics tables
-3. Update the PRIDE-C dataStore key
+1. Build the analytics tables (optional)
+2. Update the PRIDE-C dataStore key
 
-#### 3.1. Calcuate the CSB on alert
 
-Thie estimates the number of health centers expected to see more cases than the three year average for that season for each disease. It queries the `analytics` endpoint and so requries the analytics tables to be built first.
+#### 3.1. Build the analytics tables
 
-```
-docker compose run --env-from-file .env --env DRYRUN="false" --rm etl build_analytics
-#wait until this has completed before calculating the health centers on alert
-docker compose run --env-from-file .env --env DRYRUN="false" --rm etl calc_CSB_alerts
-```
-
-#### 3.2. Build the analytics tables
-
-Because the PRIDE-C app accessed data via a call to analytics, the tables must be built for the updated data to be available:
+Because the PRIDE-C app accessed data via a call to analytics, the tables must be built for the updated data to be available. Some instances will have this run on a daily schedule, in which case it is not necessary to manually run.
 
 ```
 docker compose run --env-from-file .env --env DRYRUN="false" --rm etl build_analytics
 ```
 
-#### 3.3. Update the PRIDE-C dataStore key
+#### 3.2. Update the PRIDE-C dataStore key
 
 This key is used by the application cache to trigger an update of data in a user's cache after the monthly update:
 
