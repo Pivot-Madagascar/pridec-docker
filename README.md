@@ -216,7 +216,7 @@ docker compose run etl validate_inputs
 
 #### 2.3. `forecast` to create predictions.
 
-The `forecast` task is located in the `forecast` service. It requires the validate inputs output by the `validate_inputs` task. By default, it will use the default file paths corresponding to the inputs above, but they can be specified by other arguments.
+The `forecast` task is located in the `forecast` service. It requires the validated inputs output by the `validate_inputs` task. By default, it will use the default file paths corresponding to the inputs above, but they can be specified by other arguments.
 
 
 ```

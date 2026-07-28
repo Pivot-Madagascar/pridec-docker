@@ -86,18 +86,22 @@ This step is run for every `dataElement` that you would like to forecast. For th
 ### subtasks
 
 **Fetch Inputs**
+
 `docker compose run etl fetch_disease`
 `docker compose run etl fetch_climate`
 `docker compose run etl fetch_geojson`
 
 **Validate Inputs**
+
 `docker compose run etl validate_inputs`
 
 **Forecast**
+
 `docker compose run forecast forecast`
 `docker compose run etl calc_orgUnit_alerts`
 
 **Post Forecast**
+
 `docker compose run etl post_forecast`
 
 ## UPDATE
@@ -106,13 +110,10 @@ Once all of the forecasts have been posted, the application key can be updated s
 
 This does not require any additional configurations.
 
-`docker compose run etl build_analytics`
-`docker compose run etl update_key`
-
-
-
-
-
+```
+docker compose run etl build_analytics #optional
+docker compose run etl update_key
+```
 
 ## Notes
 
