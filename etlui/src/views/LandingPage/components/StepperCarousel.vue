@@ -42,33 +42,12 @@
             </div>
           </div>
           <div class="action-grid" v-if="steps[currentStep].type !== 'custom' && steps[currentStep].actions?.length" :class="{ gapless: (steps[currentStep].actions?.length || 0) <= 2 }">
-            <button
+            <ActionCard
               v-for="action in steps[currentStep].actions"
               :key="action.key"
-              :disabled="action.inactive || action.loading"
-              class="action-card"
-              :class="[
-                action.class,
-                { 'card-success': action.success }
-              ]"
-              @click="action.onClick ? action.onClick() : $emit('action-click', action.key)"
-            >
-              <div class="card-icon" :class="action.iconClass">
-                <Icon v-if="action.icon" :path="action.icon" class="icon-svg" />
-              </div>
-              <div class="card-content">
-                <span class="card-title">{{ action.label }}</span>
-                <span v-if="action.subtitle" class="card-subtitle">{{ action.subtitle }}</span>
-                <span v-if="action.statusText" class="card-status" :class="action.statusClass">
-                  <span v-if="action.loading" class="status-running">
-                    <span class="spinner"></span>
-                    {{ action.loadingText }}
-                  </span>
-                  <span v-else-if="action.success" class="status-done">{{ action.successText }}</span>
-                  <span v-else class="status-pending">{{ action.statusText }}</span>
-                </span>
-              </div>
-            </button>
+              :action="action"
+              @action-click="handleActionClick"
+            />
           </div>
           <slot :name="steps[currentStep].id" :step="steps[currentStep]" />
         </div>
@@ -92,6 +71,7 @@
 import { ref, computed } from 'vue'
 import Icon from '@/components/Icons'
 import { ICONS } from '@/components/Icons'
+import ActionCard from './ActionCard.vue'
 
 interface Action {
   key: string
@@ -165,6 +145,16 @@ const canProceedNext = computed(() => {
   const currentStepData = props.steps[currentStep.value]
   return currentStep.value < props.steps.length - 1 && currentStepData.canProceed !== false
 })
+
+const handleActionClick = (key: string) => {
+  const currentStepActions = props.steps[currentStep.value]?.actions
+  const action = currentStepActions?.find(a => a.key === key)
+  if (action?.onClick) {
+    action.onClick()
+  } else {
+    emit('action-click', key)
+  }
+}
 </script>
 
 <style scoped>
@@ -357,149 +347,6 @@ const canProceedNext = computed(() => {
 .action-grid.gapless {
   grid-template-columns: repeat(2, 1fr);
   max-width: calc(66.666% + 1rem);
-}
-
-.action-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-  padding: 1.25rem;
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0.75rem;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  cursor: pointer;
-  text-align: left;
-  width: 100%;
-  position: relative;
-  overflow: hidden;
-}
-
-.action-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at top left, rgba(99, 102, 241, 0.1), transparent 60%);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.action-card:hover:not(:disabled)::before {
-  opacity: 1;
-}
-
-.action-card:hover:not(:disabled) {
-  border-color: rgba(99, 102, 241, 0.5);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(99, 102, 241, 0.1);
-  transform: translateY(-4px);
-}
-
-.action-card:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-  filter: grayscale(0.5);
-}
-
-.action-card.card-success {
-  border-color: #10b981;
-  background: rgba(16, 185, 129, 0.15);
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
-}
-
-.card-icon {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 0.625rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-}
-
-.icon-svg {
-  width: 1.25rem;
-  height: 1.25rem;
-  color: white;
-}
-
-.card-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  flex: 1;
-  min-width: 0;
-}
-
-.card-title {
-  font-weight: 600;
-  font-size: 0.9375rem;
-  color: #f1f5f9;
-  display: block;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
-.card-subtitle {
-  font-size: 0.8125rem;
-  color: #94a3b8;
-  display: block;
-}
-
-.card-status {
-  font-size: 0.75rem;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  margin-top: 0.25rem;
-}
-
-.status-running {
-  color: #fbbf24;
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-.status-done {
-  color: #34d399;
-  font-weight: 600;
-}
-
-.status-pending {
-  color: #64748b;
-}
-
-.spinner {
-  width: 0.75rem;
-  height: 0.75rem;
-  border: 2px solid #fbbf24;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.fade-slide-enter-from {
-  opacity: 0;
-  transform: translateX(40px);
-}
-
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateX(-40px);
 }
 
 /* ===== Carousel Controls ===== */

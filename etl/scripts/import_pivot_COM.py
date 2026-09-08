@@ -128,9 +128,9 @@ def import_pivot_com():
         "dataValues": mal_all.to_dict(orient="records")
     }
     
-    logger.info("Importing pridec_historic_COMMalaria into PRIDE-C instance with dryRun = %s", dry_run)
+    logger.info("Importing pridec_historic_COMMalaria into PRIDE-C instance with dryRun = %s", DRYRUN)
     
-    resp = post_dataElements(dhis_url = DHIS_URL, payload = COMMalaria_json, token = DHIS_TOKEN, dryRun = dry_run)
+    resp = post_dataElements(dhis_url = DHIS_URL, payload = COMMalaria_json, token = DHIS_TOKEN, dryRun = DRYRUN)
     if resp.ok:
         logger.info(f"Imported pridec_historic_COMMalaria")
         logger.debug("Response: %s", resp.text)
