@@ -63,11 +63,11 @@ This means the Celery worker is ready to process tasks.
 
 ## 5. Start the FastAPI Server
 
-Start the FastAPI application (Uvicorn server) from the project root in the virtual environment:
+Start the FastAPI application (Uvicorn server) from the etlhub directory in the virtual environment:
 
 ```bash
 # From the project root (in the virtual environment)
-python -m run_server
+cd etlhub && python -m run_server
 ```
 
 The server should start on `http://localhost:8000` by default.
@@ -96,7 +96,7 @@ Start the development server:
 
 ```bash
 # From the etlui directory
-yarn start
+yarn dev
 ```
 
 The frontend server should start and display the local address where it is listening (usually `http://localhost:3000`).
