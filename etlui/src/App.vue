@@ -1,4 +1,5 @@
 <template>
+  <Toaster />
   <div class="app-container">
     <!-- Top Navbar -->
     <header class="app-header">
@@ -133,6 +134,7 @@
 import { computed, ref } from 'vue'
 import Icon, { ICONS } from '@/components/Icons'
 import Drawer from '@/components/Drawer.vue'
+import { Toaster } from 'vue3-hot-toast'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8111'
 const isDrawerOpen = ref(false)
