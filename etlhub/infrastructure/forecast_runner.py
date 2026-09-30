@@ -178,3 +178,5 @@ def run_rscript(job_id, params, job_store: JobStore):
             get_etl_event_manager().publish_status(job_id, status.get("status"), status.get("message"))
         except Exception:
             pass
+
+    return status

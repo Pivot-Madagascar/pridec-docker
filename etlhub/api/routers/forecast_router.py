@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from etlhub.application.use_cases.forecast_service import ForecastService
 from etlhub.domain.schemas import ETLResponse, ForecastParams, JobStatus
@@ -16,7 +16,8 @@ router = APIRouter(prefix="/forecast", tags=["Forecast"])
         "Starts a new R forecast pipeline inside a Docker container "
         "(`mvevans89/pridec_forecast:latest`). The container is configured "
         "via `ForecastParams` input paths and Docker volume bindings. "
-        "Runs asynchronously in the background."
+        "Runs asynchronously in the background. "
+        "Pass `webhook_url` to be notified when the job completes."
     ),
     response_description="Forecast pipeline accepted and started in background.",
     responses={
@@ -27,13 +28,15 @@ router = APIRouter(prefix="/forecast", tags=["Forecast"])
 )
 async def api_forecast(
     params: ForecastParams,
+    webhook_url: str | None = Query(None),
     service: ForecastService = Depends(get_forecast_service),
 ):
-    job_id = service.launch(params)
+    job_id = service.launch(params, webhook_url)
     return ETLResponse(
         status="accepted",
         message="Forecast started",
         job_id=job_id,
+        webhook_url=webhook_url,
     )
 
 

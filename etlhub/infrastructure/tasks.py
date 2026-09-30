@@ -3,9 +3,9 @@ import traceback
 import urllib.request
 import urllib.error
 from datetime import datetime
-from celery import current_task
 
 from etlhub.core.celery_app import celery_app
+from etlhub.domain.exceptions import ETLException
 from etlhub.application.use_cases.etl_use_cases import (
     run_import_gee,
     run_import_pivot_com,
@@ -41,11 +41,8 @@ def _send_webhook(webhook_url: str, job_id: str, status: str, message: str, logs
 
 
 def _update_task_status(job_store: JobStore, job_id: str, status: str, message: str = None, logs: str = None):
-    task_status = {
-        "status": status,
-        "started": current_task.request.time_started if hasattr(current_task.request, 'time_started') else datetime.now().isoformat(),
-        "job_id": job_id,
-    }
+    task_status = job_store.get(job_id) or {"job_id": job_id, "started": datetime.now().isoformat()}
+    task_status["status"] = status
     if message:
         task_status["message"] = message
     if logs:
@@ -147,7 +144,9 @@ def task_forecast(self, job_id: str, params: dict, webhook_url: str | None = Non
     job_store = JobStore()
     _update_task_status(job_store, job_id, "running", "Starting forecast pipeline")
     try:
-        run_rscript(job_id, params, job_store)
+        result = run_rscript(job_id, params, job_store)
+        if result.get("status") != "success":
+            raise ETLException(result.get("message") or "Forecast container failed")
         _update_task_status(job_store, job_id, "success", "Forecast pipeline completed")
         if webhook_url:
             _send_webhook(
