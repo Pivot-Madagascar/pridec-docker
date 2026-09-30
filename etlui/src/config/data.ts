@@ -62,6 +62,63 @@ export const buildDataImportActions = (deps: {
   ])
 }
 
+export const buildSystemUpdate = (deps: {
+  loading: { post_forecast: boolean; build_analytics: boolean; calc_csb_alerts: boolean; update_key: boolean }
+  results: { post_forecast: boolean; build_analytics: boolean; calc_csb_alerts: boolean; update_key: boolean }
+}) => {
+  const { loading, results } = deps
+  return computed(() => [
+    {
+      key: 'post_forecast',
+      label: 'Post Forecast',
+      icon: commonIcon.upload,
+      iconClass: 'icon-rose',
+      loading: loading.post_forecast,
+      success: results.post_forecast,
+      statusText: 'Submit results',
+      statusClass: 'status-pending',
+      loadingText: 'Publishing...',
+      successText: '✓ Published'
+    },
+    {
+      key: 'build_analytics',
+      label: 'Build Analytics',
+      icon: commonIcon.chartPie,
+      iconClass: 'icon-emerald',
+      loading: loading.build_analytics,
+      success: results.build_analytics,
+      statusText: 'Analytics tables',
+      statusClass: 'status-pending',
+      loadingText: 'Computing...',
+      successText: '✓ Ready'
+    },
+    {
+      key: 'calc_csb_alerts',
+      label: 'CSB Alerts',
+      icon: commonIcon.bell,
+      iconClass: 'icon-amber',
+      loading: loading.calc_csb_alerts,
+      success: results.calc_csb_alerts,
+      statusText: 'Alert thresholds',
+      statusClass: 'status-pending',
+      loadingText: 'Processing...',
+      successText: '✓ Done'
+    },
+    {
+      key: 'update_key',
+      label: 'Update Key',
+      icon: commonIcon.key,
+      iconClass: 'icon-slate',
+      loading: loading.update_key,
+      success: results.update_key,
+      statusText: 'API keys',
+      statusClass: 'status-pending',
+      loadingText: 'Updating...',
+      successText: '✓ Updated'
+    }
+  ])
+}
+
 export const buildPipelineSteps = (deps: {
   configIsValid: boolean
   loadingClimate: boolean
@@ -75,8 +132,6 @@ export const buildPipelineSteps = (deps: {
   forecastReportExists: boolean
   checkForecastReportExists: () => Promise<boolean>
   resetReports: () => Promise<void>
-  loading: { post_forecast: boolean; build_analytics: boolean; calc_csb_alerts: boolean; update_key: boolean }
-  results: { post_forecast: boolean; build_analytics: boolean; calc_csb_alerts: boolean; update_key: boolean }
 }) => {
   const {
     configIsValid,
@@ -90,9 +145,7 @@ export const buildPipelineSteps = (deps: {
     validateInputsSuccess,
     forecastReportExists,
     checkForecastReportExists,
-    resetReports,
-    loading,
-    results
+    resetReports
   } = deps
 
   return computed(() => [
@@ -173,72 +226,18 @@ export const buildPipelineSteps = (deps: {
       id: 'step-4',
       title: 'Approve Forecast',
       actions: [
-{
-        key: 'view_forecast_report',
-        label: 'View Report',
-        icon: commonIcon.eye,
-        iconClass: 'icon-blue',
-        inactive: !forecastReportExists,
-        statusText: forecastReportExists ? 'View forecast report' : 'Report unavailable',
-        statusClass: forecastReportExists ? 'status-pending' : 'status-inactive'
-      }
+        {
+          key: 'view_forecast_report',
+          label: 'View Report',
+          icon: commonIcon.eye,
+          iconClass: 'icon-blue',
+          inactive: !forecastReportExists,
+          statusText: forecastReportExists ? 'View forecast report' : 'Report unavailable',
+          statusClass: forecastReportExists ? 'status-pending' : 'status-inactive'
+        }
       ],
       onRefresh: checkForecastReportExists,
       onReset: resetReports
-    },
-    {
-      id: 'step-5',
-      title: 'Finalization',
-      actions: [
-        {
-          key: 'post_forecast',
-          label: 'Post Forecast',
-          icon: commonIcon.upload,
-          iconClass: 'icon-rose',
-          loading: loading.post_forecast,
-          success: results.post_forecast,
-          statusText: 'Submit results',
-          statusClass: 'status-pending',
-          loadingText: 'Publishing...',
-          successText: '✓ Published'
-        },
-        {
-          key: 'build_analytics',
-          label: 'Build Analytics',
-          icon: commonIcon.chartPie,
-          iconClass: 'icon-emerald',
-          loading: loading.build_analytics,
-          success: results.build_analytics,
-          statusText: 'Analytics tables',
-          statusClass: 'status-pending',
-          loadingText: 'Computing...',
-          successText: '✓ Ready'
-        },
-        {
-          key: 'calc_csb_alerts',
-          label: 'CSB Alerts',
-          icon: commonIcon.bell,
-          iconClass: 'icon-amber',
-          loading: loading.calc_csb_alerts,
-          success: results.calc_csb_alerts,
-          statusText: 'Alert thresholds',
-          statusClass: 'status-pending',
-          loadingText: 'Processing...',
-          successText: '✓ Done'
-        },
-        {
-          key: 'update_key',
-          label: 'Update Key',
-          icon: commonIcon.key,
-          iconClass: 'icon-slate',
-          loading: loading.update_key,
-          success: results.update_key,
-          statusText: 'API keys',
-          statusClass: 'status-pending',
-          loadingText: 'Updating...',
-          successText: '✓ Updated'
-        }
-      ]
     }
   ])
 }
