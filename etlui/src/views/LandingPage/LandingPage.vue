@@ -6,23 +6,43 @@
       <h2 class="section-header">ETL Pipeline</h2>
       <p class="section-subtitle">Follow the workflow step by step</p>
 
-      <div class="data-import-section">
-        <h3 class="data-import-title">Data Import</h3>
-        <div class="action-grid" :class="{ gapless: dataImportActions.length <= 2 }">
-          <ActionCard
-            v-for="action in dataImportActions"
-            :key="action.key"
-            :action="action"
-            @action-click="handleActionClick"
-          />
-        </div>
-      </div>
-
-      <StepperCarousel :steps="pipelineSteps" :initial-step="0" @action-click="handleActionClick" @step-change="handleStepChange">
-        <template #step-1>
-          <ForecastConfigForm />
+      <Accordion :items="accordionItems" :default-open="['dataImport', 'forecastCreation', 'systemUpdate']">
+        <template #content-dataImport>
+          <div class="data-import-section">
+            <div class="action-grid" :class="{ gapless: dataImportActions.length <= 2 }">
+              <ActionCard
+                v-for="action in dataImportActions"
+                :key="action.key"
+                :action="action"
+                @action-click="handleActionClick"
+              />
+            </div>
+          </div>
         </template>
-      </StepperCarousel>
+
+        <template #content-forecastCreation>
+          <div class="forecast-creation-section">
+            <StepperCarousel :steps="pipelineSteps" :initial-step="0" @action-click="handleActionClick" @step-change="handleStepChange">
+              <template #step-1>
+                <ForecastConfigForm />
+              </template>
+            </StepperCarousel>
+          </div>
+        </template>
+
+        <template #content-systemUpdate>
+          <div class="system-update-section">
+            <div class="action-grid" :class="{ gapless: systemUpdateActions.length <= 2 }">
+              <ActionCard
+                v-for="action in systemUpdateActions"
+                :key="action.key"
+                :action="action"
+                @action-click="handleActionClick"
+              />
+            </div>
+          </div>
+        </template>
+      </Accordion>
     </section>
 
     <Notifications 
@@ -42,9 +62,11 @@
     />
   </div>
 </template>
+
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 
+import Accordion from './components/Accordion.vue'
 import Notifications from './components/Notifications.vue'
 import RecentActivity from './components/RecentActivity.vue'
 import StepperCarousel from './components/StepperCarousel.vue'
@@ -57,7 +79,7 @@ import { useNotification } from '@/composables/useNotification'
 import { useActivityLog } from '@/composables/useActivityLog'
 import { useEtlPipeline } from '@/composables/useEtlPipeline'
 import { useForecastConfigStore } from '@/stores/forecastConfig'
-import { buildDataImportActions, buildPipelineSteps } from '@/config/data'
+import { buildDataImportActions, buildPipelineSteps, buildSystemUpdate } from '@/config/data'
 
 // Composables
 const { notification, notificationType, showNotification } = useNotification()
@@ -93,6 +115,9 @@ const configIsValid = computed(() => forecastConfig.isValid)
 // Factory for data import actions
 const dataImportActions = buildDataImportActions({ loading, results })
 
+// Factory for system update actions
+const systemUpdateActions = buildSystemUpdate({ loading, results })
+
 // Factory for pipeline steps
 const pipelineSteps = buildPipelineSteps({
   configIsValid: configIsValid.value,
@@ -106,10 +131,14 @@ const pipelineSteps = buildPipelineSteps({
   validateInputsSuccess: results.validate_inputs,
   forecastReportExists: forecastReportExists.value,
   checkForecastReportExists,
-  resetReports,
-  loading,
-  results
+  resetReports
 })
+
+const accordionItems = [
+  { id: 'dataImport', title: 'Data Import' },
+  { id: 'forecastCreation', title: 'Forecast Creation' },
+  { id: 'systemUpdate', title: 'System Update' }
+]
 
 const handleActionClick = async (key: string) => {
   if (key === 'navigate_to_forecast') {
@@ -194,12 +223,16 @@ onMounted(() => {
   margin-bottom: 2rem;
 }
 
-/* ===== Data Import Section ===== */
-.data-import-section {
+/* ===== Section Styles ===== */
+.data-import-section,
+.forecast-creation-section,
+.system-update-section {
   margin-bottom: 2rem;
 }
 
-.data-import-title {
+.data-import-title,
+.forecast-creation-title,
+.system-update-title {
   font-size: 1.125rem;
   font-weight: 600;
   color: #e2e8f0;
@@ -236,7 +269,7 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
   .action-grid.gapless {
-    grid-template-columns: 1fr;
+    max-width: 100%;
   }
 }
 </style>
