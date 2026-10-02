@@ -45,6 +45,8 @@ Intended direction: `api` → `application`, `core` · `application` → `domain
 
 Actual deviations: `application` and `infrastructure` import `etlhub.api.etl_events` (the `EventPublisher` port is never injected); `core` has a dead import towards `api`; `api` uses `ConfigStore` and `get_request_tracker` without injection; `api` calls `etl.scripts` (`get_dhis_url`). Above all, the coupling with the rest of the repository is **circular**: `etlhub` imports `etl.scripts.*`, and `etl/scripts/config.py` imports `etlhub.infrastructure.config_store`. This relies on `sys.path` and on `os.chdir` (`main.py`).
 
+Outside the written rule but widespread: `api` → `domain` (DTOs), `infrastructure` and `application` → `core` (configuration), `core/dependencies.py` as composition root, `application` → `etl.scripts` (wrappers). The team must say whether they are tolerated. The domain imports only `typing` and `pydantic`. Measurements and method rules: `DEVELOPMENT.md`.
+
 ## 4. Job lifecycle
 
 1. `POST /<job>?webhook_url=…` → the service generates `job_id = <type>_<8 hex>` and calls `TaskLauncher.launch` → **202** response `{status, message, job_id, webhook_url}`.
@@ -108,21 +110,7 @@ Concurrency: no lock and no deduplication. Two simultaneous `fetch_*`, `validate
 ## 9. Operations
 
 - **Start**: see section 2, plus `GETTING_STARTED.md`. The real port is 8111 (some files say 8000).
-- **Test**: `cd etlhub && ../test-venv/bin/python -m pytest tests -m "not integration"`. 31 tests, Redis and GEE mocked. `etlhub/pytest.ini` is ignored (its header is `[tool:pytest]`).
+- **Test**: `cd etlhub && ../test-venv/bin/python -m pytest tests -m "not integration"`. 31 tests, Redis and GEE mocked, source coverage 58 % (infrastructure 37 %). Each run writes about 119 files into `logs/requests/`. `etlhub/pytest.ini` is ignored (its header is `[tool:pytest]`).
 - **CI**: `etlhub-unit-tests.yml` (push and PR on `etlhub/**`), `etlhub-integration-tests.yml` (PR, DHIS2 secrets).
 - **Observe**: `GET /api/tracking/*`, `logs/`. There is no logging configuration in `etlhub/`.
 - **Purge**: nothing is automatic (`logs/`, `logs/requests/`, `input/`, `output/`). `dump.rdb` and `logs/` are ignored by git.
-
-## 10. Architecture decisions
-
-Commits are a single line and give no reasons. The dates below are commit dates; **the reasons are for the team to fill in**.
-
-| Date | Choice | Reason |
-|---|---|---|
-| 2026-05-22 | FastAPI + Dockerfile (`c885da6`) | to be filled in |
-| 2026-06-01 | "Clean" layered architecture (`f009ccf`) | to be filled in |
-| 2026-06-15 | Rename `hubcenter` → `etlhub` | to be filled in |
-| 2026-06-18 | Celery for background tasks (`928b799`) | to be filled in |
-| 2026-06-29 | Statuses published on Redis (`8b9e33e`) | to be filled in |
-| 2026-07-10 | `output/` reset by signature (`e333ca0`) | to be filled in |
-| 2026-07-21 | Dynamic config in Redis (`75e18ef`) | to be filled in |

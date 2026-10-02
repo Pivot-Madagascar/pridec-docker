@@ -173,4 +173,5 @@ Note: `"http://hook"` would be rejected by the webhook validator (M4) if the tes
 - Prefer `app.dependency_overrides[...]` for anything injected with `Depends`.
 - `etlhub.core.config.get_settings` is imported by name in several modules (e.g. `dhis2_auth.py`). Patching the source module has no effect there; patch the importing module.
 - `get_settings()` is `lru_cache`d: clear it (`get_settings.cache_clear()`) when a test changes env vars.
+- With Redis mocked, `RequestTracker` falls back to files: each test run writes about 119 `logs/requests/*.json` under the repository root (git-ignored). A fixture that points `LOGS_DIR` to `tmp_path` and calls `get_settings.cache_clear()` would stop it. Not implemented and not tested: a suggestion.
 - `_token_cache` in `dhis2_auth.py` is module-global. Clear it in a fixture or tests become order-dependent (see M6 in `migrations.md`).

@@ -139,7 +139,7 @@ Also in `conftest.py`: `sys.modules['earthengine_api']` is the pip package name,
 
 ## m6 — Fix the failing test and the token cache key
 
-**Problem.** `tests/api/test_auth.py::test_validate_token_endpoint_with_custom_url_returns_user` fails with `assert 'user123' == 'user456'`. **Probable cause (read from the code, not yet confirmed):** `_token_cache` (module-global in `dhis2_auth.py`) is keyed by token only, TTL 120 s, and ignores `dhis2_url`, so a previous test that cached `valid-token` → `user123` leaks into this one. **Confirm first**: run the failing test alone. If it passes alone and fails after `test_valid_token_authenticates_user`, the cache is the cause, and it is then a real bug (two DHIS2 instances sharing entries), not only a test problem.
+**Problem.** `tests/api/test_auth.py::test_validate_token_endpoint_with_custom_url_returns_user` fails with `assert 'user123' == 'user456'`. **Cause (confirmed: the test passes alone and fails after `test_valid_token_authenticates_user`, which caches the same `valid-token`, `test_auth.py:26,49`):** `_token_cache` (module-global in `dhis2_auth.py`) is keyed by token only, TTL 120 s, and ignores `dhis2_url`, so a previous test that cached `valid-token` → `user123` leaks into this one. So the test setup lacks isolation. Separately, the cache key ignoring `dhis2_url` is a real bug in the code (two DHIS2 instances share entries; read from the code).
 
 **Steps.**
 1. Key the cache on `(dhis2_url, token)`.

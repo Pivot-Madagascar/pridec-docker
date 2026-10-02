@@ -55,4 +55,7 @@ Should fix:
 
 - [ ] `cd etlhub && ../test-venv/bin/python -m pytest tests -m "not integration"` run, result reported (baseline: 29 pass, 1 known failure until m6, 1 deselected)
 - [ ] Only the files intended are changed (`git status --short`)
+- [ ] New or changed behaviour has a test in the same commit, asserting body or stored state and not only `status_code`
+- [ ] Coverage of the touched files is not below the baseline (`etlhub/docs/DEVELOPMENT.md` §3; keep `COVERAGE_FILE` outside the repository)
+- [ ] You said whether the test was written first or after; do not claim TDD without evidence
 - [ ] Anything you could not verify is said explicitly

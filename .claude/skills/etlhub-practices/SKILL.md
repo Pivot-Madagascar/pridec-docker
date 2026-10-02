@@ -5,7 +5,7 @@ description: "Conventions and best practices for the etlhub FastAPI + Celery + R
 
 # etlhub — conventions and best practices
 
-Companion to `etlhub/CLAUDE.md` (always-on rules) and to the `etlhub` skill (how the service is built: architecture, endpoint and config tables). Known problems with evidence are in `etlhub/docs/known-issues.md`. This skill answers two questions:
+Companion to `etlhub/CLAUDE.md` (always-on rules) and to the `etlhub` skill (how the service is built: architecture, endpoint and config tables). Known problems with evidence are in `etlhub/docs/known-issues.md`. The measured test, architecture and clean-code state, and the proposed rules for new code, are in `etlhub/docs/DEVELOPMENT.md`. This skill answers two questions:
 
 1. **How do I write code that matches what already exists?** → `references/templates.md`
 2. **Which good practices are missing, and how do I introduce them without breaking `etlui`?** → `references/migrations.md`
@@ -19,7 +19,7 @@ Line numbers in the references come from an inspection of the repository. Re-run
 1. **Read the template, copy the pattern.** Every job type follows the same five layers (service → use case → Celery task → registry → router). Do not invent a variant.
 2. **One concern per change.** A migration from `references/migrations.md` is its own change. Do not mix it with a feature.
 3. **Smallest diff.** The project has no linter and little test coverage: large refactors cannot be verified. Prefer additive changes.
-4. **Tests first for untested areas.** If you touch something listed as untested in `CLAUDE.md`, add a test in the same change.
+4. **Test with the change.** Behaviour and its test ship in the same commit. For a new endpoint, task, service or bug fix, write the failing test first (a proposed practice, see `etlhub/docs/DEVELOPMENT.md`): the history shows 0 of 22 source commits added a test first, so never claim TDD, say what you did. Touching an area listed as untested in `CLAUDE.md` requires a test in the same change.
 5. **Ask before deciding.** Items under "Decisions pending" are product or ops choices. Present the options and wait.
 
 ## Existing conventions to keep
