@@ -27,6 +27,8 @@ Findings from a read-only inspection of the repository. Nothing here has been fi
 
 The `EventPublisher` port exists in `domain/interfaces/` but is never injected. Proposed fix: move `ETLEventManager` to `infrastructure/` and inject it.
 
+Import audit (AST, 2026-10-02): the domain imports only `typing` and `pydantic`. Crossing the written rule but widespread: `api` → `domain` (5 files, DTOs), `infrastructure` → `core` (4), `application` → `core` (2, one deferred), `api` → `etl.scripts` (2), `application` → `etl.scripts` (`etl_use_cases.py` 10 imports, `validation_use_cases.py` 1), `core/dependencies.py` → everything (composition root). Whether these are tolerated is an open decision. Port bypasses: `JobStore()` (`tasks.py:59,144`), `_send_webhook()` (`tasks.py:65,85,152,162`), `get_request_tracker()` (`middleware.py:87`), `get_etl_event_manager()` (`etl_use_cases.py:49`, `tasks.py:53,80`, `forecast_runner.py:173,178`), `ConfigStore()` (`config_router.py:39,51,69,74`, `forecast_runner.py:26`, `etl/scripts/config.py:7`).
+
 ## 3. Behaviour worth knowing
 
 - `/post_forecast` and `/update_key` run synchronously in `async def` handlers (`analytics_service.py:22-47`).
@@ -62,7 +64,13 @@ The `EventPublisher` port exists in `domain/interfaces/` but is never injected. 
 - `etlhub/pytest.ini` uses `[tool:pytest]` (setup.cfg syntax): the whole file is ignored, which causes the `PytestUnknownMarkWarning` for `integration`. Fix: rename the header to `[pytest]`.
 - `test_tracking_router.py:10,22,34` and `test_auth.py` patch names that have no effect (already imported). They pass thanks to `override_dependencies`.
 - `conftest.py` does not mock `ee`.
-- No linter, formatter or type checker configured.
+- No linter, formatter or type checker configured, no git hook, no PR template, no CODEOWNERS.
+- The order-dependent failure is confirmed: `test_validate_token_endpoint_with_custom_url_returns_user` passes alone and fails after `test_valid_token_authenticates_user`, which caches the same `valid-token` (`test_auth.py:26,49`).
+- Coverage of the sources is 58 % (infrastructure 37 %, `forecast_runner` 12 %, WebSocket 17 %, `job_store` 25 %). 18 of 31 tests assert only `status_code`. No real dependency is used (no `tmp_path`, no `fakeredis`).
+- Each test run writes about 119 files into `logs/requests/` at the repository root: Redis is mocked, so `RequestTracker` falls back to files. They are git-ignored.
+- CI runs `pytest --cov` with no threshold and no linter. Branch protection is not visible in the repository.
+- `etlui`: one spec file (8 tests), no `test` script in `package.json`, no eslint, no prettier.
+- The 1f82acb refactor (+432 lines) shipped without tests; 16 of 22 source commits carry none. Details in `DEVELOPMENT.md`.
 
 ## 6. Documentation and config drift
 
@@ -72,6 +80,9 @@ The `EventPublisher` port exists in `domain/interfaces/` but is never injected. 
 - `.env.example`: lacks `LOGS_DIR`, `DATA_DIR`, `HOST_PWD`, `ENV_FILE`; writes `dryRun` while the code reads `DRYRUN`; has `GEE_PROJECT =` with a space. `.env` declares `DHIS_URL` twice.
 - Version drift: `pridec_gee` and `pivot_dhis_tools` differ between `etlhub/requirements.txt` and `etl/requirements.txt`.
 - The OpenAPI text of `/forecast/` says image `:latest`, the code uses `:0.1.0`.
+- `local-docs/` (git-ignored) contradicts the code in places: `AUTH_IMPLEMENTATION.md` says every router has `dependencies=[Depends(get_current_user)]` (only `config_router.py` and `/auth/me` do) and "27 tests"; `REDIS_USAGE.md` says all Redis operations have a file fallback (`ConfigStore` has none); `ARCHITECTURE.md` there puts `core/*.py` in the infrastructure layer, cites `etl/config.py` (it is `etl/scripts/config.py`) and omits `config_store`, `config_router`, `tracking_service`, `validation_use_cases`; `CONFIG_DYNAMIC.MD` (719 lines) lists 5 tests that do not exist and proposes `core/config_store.py` (the code has `infrastructure/config_store.py`).
+- `etlui/CLAUDE.md` currently contains etlhub text (its title is "ETLHub (Hub Center API)") and cites `tests/api/conftest.py`, which does not exist (the file is `tests/conftest.py`). It looks like an etlhub file placed in the wrong folder, possibly over the original etlui file.
+- `etlhub/CLAUDE.MD` is in upper case; the root `CLAUDE.md` points to `etlhub/CLAUDE.md`.
 - `compose.yaml` has no etlhub, no Redis. No etlhub Dockerfile. `hubcenter.egg-info/` has no source `setup.py`/`pyproject.toml`.
 
 ## 7. Open questions
@@ -85,4 +96,8 @@ The `EventPublisher` port exists in `domain/interfaces/` but is never injected. 
 - `DRYRUN` and `LOG_LEVEL` are read from Redis by the scripts but cannot be edited through `/api/config`. Intended?
 - In which working directory does the worker run in practice, and with which Celery pool? This decides where `input/` and `output/` land.
 - `README.md` mentions `compose-prod.yaml`, which is not in the repository. Is there a production setup elsewhere?
-- The reasons for the architecture choices are not recorded in commits. `local-docs/` (not versioned) was not read.
+- The reasons for the architecture choices are not recorded in commits. `local-docs/` was read: it records one reason, in `CONFIG_DYNAMIC.MD` ("`lru_cache` prevents updating settings in memory", listed as a limitation).
+- Does the order-dependent test failure also occur in CI? The Actions JUnit report would show it.
+- Is the main branch protected on GitHub (required CI, review)? Not visible in the repository.
+- Which of the tolerated imports (`api` → `domain`, `*` → `core`, `application` → `etl.scripts`) become official? See `DEVELOPMENT.md`.
+- Test-first for all new code, or only "test in the same commit"? See `DEVELOPMENT.md`.

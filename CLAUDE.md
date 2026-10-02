@@ -21,6 +21,6 @@ Multi-service repo. Each service owns its details; this file only holds the map 
 ## Where things are documented
 
 - `etlhub/CLAUDE.md` — rules and gotchas for the API service
-- `etlhub/docs/` — `ARCHITECTURE.md`, `known-issues.md`
+- `etlhub/docs/` — `ARCHITECTURE.md`, `known-issues.md`, `DEVELOPMENT.md` (test, architecture and clean-code state, proposed rules)
 - `.claude/skills/etlhub/` — how etlhub is built (architecture, tables)
 - `.claude/skills/etlhub-practices/` — how to change etlhub well (templates, migrations, checklists)

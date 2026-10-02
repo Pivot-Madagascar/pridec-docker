@@ -23,7 +23,7 @@ Siblings in the repo:
 - **Never call real endpoints against a real DHIS2 or the host.** `/import_*`, `/build_analytics`, `/calc_csb_alerts`, `/post_forecast`, `/update_key` write to DHIS2. `/forecast/` runs `docker run`. `DELETE /output/reset` runs `rm -rf output/`. None of them is authenticated. Manual runs need `DRYRUN=true`. Tests use `app.dependency_overrides`, never a real Celery or Redis.
 - **Never print or copy secrets.** `.env`, `.env.debug` and `.gee-private-key.json` exist locally. Mention variable names only.
 - **The `etlui` contracts are frozen.** `ETLResponse` = `{status, message, job_id, webhook_url}`. `JobStatus` = `{status, job_id, started, completed, logs, message}`. `job_id` = `<task_type>_<uuid4 hex[:8]>`. WebSocket messages: `etl_log_history`, `job_status_update`, `etl_log_entry`, `etl_log_complete`, close code `4004`. Any change must be mirrored in `etlui/src/composables/useWebSocketLogger.ts` and `useEtlPipeline.ts` in the same change.
-- **Layering target**: `api` → `application`, `core` · `application` → `domain` · `infrastructure` → `domain`, `application` · `domain` → nothing. Do not add new violations. Existing ones are known debt (`etlhub/docs/known-issues.md`): do not refactor them unless asked.
+- **Layering target**: `api` → `application`, `core` · `application` → `domain` · `infrastructure` → `domain`, `application` · `domain` → nothing. Do not add new violations. Existing ones are known debt (`etlhub/docs/known-issues.md`): do not refactor them unless asked. Real violations to avoid: `application` or `infrastructure` importing `etlhub.api.*`, and `api` using `infrastructure` without injection. Tolerated in practice, pending the team's confirmation: `api` → `domain` DTOs, any layer → `core` settings, `core/dependencies.py` as composition root, `application` → `etl.scripts` wrappers.
 - **Adding a job type = 4 synchronized changes**: service method (generates the `job_id`, calls `task_launcher.launch`), `@celery_app.task` in `tasks.py` using `_run_task`, entry in `CeleryTaskLauncher._registry`, router returning 202 with `ETLResponse`. Use case wrappers go through `_execute_etl_job`.
 - **No new blocking work inside an `async def` handler.** Use Celery.
 - **Do not move or rename `etl/scripts` modules**, and do not touch the `os.chdir` (in `main.py` only) or the `sys.path` changes (`main.py` and `validation_use_cases.py`). Worker and API depend on them, and scripts write under `os.getcwd()/input|output`.
@@ -57,6 +57,14 @@ Python 3.12 (use `test-venv`; the system `python3` is 3.11). Run from the repo r
 - One file: `cd etlhub && ../test-venv/bin/python -m pytest tests/api/test_ingest_router.py`
 - Linter / formatter: none configured. Do not invent one.
 
+## Method for new code (proposed, see `etlhub/docs/DEVELOPMENT.md`)
+
+- Behaviour and its test ship in the same commit. For a new endpoint, task, service or bug fix, write the failing test first. History shows this has not been the practice so far (0 of 22 source commits added a test first), so say what you did instead of claiming TDD.
+- Assert behaviour, not only `status_code` (18 of 31 tests only check it).
+- New or changed functions: at most 50 lines and 4 parameters, annotated, no `except … pass`, no `print(`.
+- Coverage baseline 58 % (infrastructure 37 %): do not lower it for the files you touch.
+- Running the tests writes about 119 files into `logs/requests/` (git-ignored), because Redis is mocked and `RequestTracker` falls back to files. Do not delete them without asking.
+
 ## Required checks
 
 - `etlhub/pytest.ini` starts with `[tool:pytest]`, so pytest ignores it entirely. Always pass `tests` and `-m` explicitly.
@@ -69,6 +77,7 @@ Python 3.12 (use `test-venv`; the system `python3` is 3.11). Run from the repo r
 ## Where to look next
 
 - `etlhub/docs/ARCHITECTURE.md` — compact architecture: runtime topology, state, data pipeline order, decisions
+- `etlhub/docs/DEVELOPMENT.md` — measured test, architecture and clean-code state; proposed rules for new code
 - `etlhub/docs/known-issues.md` — security findings, layering violations, dead code, doc errors
 - `.claude/skills/etlhub/SKILL.md` — how etlhub is built: architecture, job lifecycle, endpoint and config tables, forecast pipeline
 - `.claude/skills/etlhub-practices/SKILL.md` — how to change it well: templates, missing best practices as small migrations, checklists
