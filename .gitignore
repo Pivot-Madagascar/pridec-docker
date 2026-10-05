@@ -54,3 +54,7 @@ dump.rdb
 
 etlui/dist/
 local-docs/
+
+# local graphify knowledge graph
+graphify/
+graphify-out/
