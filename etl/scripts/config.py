@@ -11,7 +11,7 @@ def _get(key: str, default=None) -> str | None:
     if key in _EDITABLE_KEYS:
         redis_config = _store.get_all()
         if key in redis_config:
-            return redis_config[key]
+            return redis_config[key].strip()
     return os.getenv(key, default)
 
 def get_dry_run() -> bool:

@@ -14,6 +14,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+@pytest.fixture(autouse=True)
+def _request_log_db(tmp_path, monkeypatch):
+    from etlhub.infrastructure import request_tracker
+    monkeypatch.setattr(request_tracker, "_request_tracker", request_tracker.RequestTracker(tmp_path / "etlhub.db"))
+
+
 @pytest.fixture
 def app():
     from etlhub.main import app

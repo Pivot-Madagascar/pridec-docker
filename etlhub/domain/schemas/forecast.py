@@ -1,19 +1,30 @@
-from pydantic import BaseModel, Field
+from pathlib import PurePosixPath
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class ForecastParams(BaseModel):
     config_valid_path: str = Field(
         default="input/config_valid.json",
-        examples=["input/config_valid.json", "data/config.json"]
+        examples=["input/config_valid.json", "input/run1/config_valid.json"]
     )
     input_valid_path: str = Field(
         default="input/input_valid.json",
-        examples=["input/input_valid.json", "data/input.json"]
+        examples=["input/input_valid.json", "input/run1/input_valid.json"]
     )
     polygon_valid_path: str = Field(
         default="input/polygon_valid.geojson",
-        examples=["input/polygon_valid.geojson", "data/boundaries.geojson"]
+        examples=["input/polygon_valid.geojson", "input/run1/polygon_valid.geojson"]
     )
+
+    @field_validator("config_valid_path", "input_valid_path", "polygon_valid_path")
+    @classmethod
+    def _inside_input_dir(cls, value: str) -> str:
+        # Only input/ is mounted in the forecast container; the value is also a docker argument.
+        parts = PurePosixPath(value).parts
+        if value.startswith("-") or len(parts) < 2 or parts[0] != "input" or ".." in parts:
+            raise ValueError("must be a file path under input/, e.g. input/config_valid.json")
+        return value
 
 
 class JobStatus(BaseModel):

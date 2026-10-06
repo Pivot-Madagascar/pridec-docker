@@ -2,7 +2,7 @@ import logging
 import os
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from dotenv import dotenv_values
 
 from etlhub.api.auth.dhis2_auth import get_current_user
@@ -14,6 +14,8 @@ router = APIRouter(prefix="/api/config", tags=["Configuration"])
 _RELOADABLE_KEYS = ["DHIS_URL", "DHIS_TOKEN", "PARENT_OU", "OU_LEVEL", "DISEASE_CODE"]
 
 class ConfigUpdate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     dhis_url: str | None = Field(None)
     dhis_token: str | None = Field(None)
     parent_ou: str | None = Field(None)
