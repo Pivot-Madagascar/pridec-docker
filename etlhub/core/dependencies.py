@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from fastapi import Depends
 
 from etlhub.infrastructure.job_store import JobStore
@@ -17,6 +18,8 @@ from etlhub.application.use_cases.analytics_service import AnalyticsService
 from etlhub.application.use_cases.validation_service import ValidationService
 from etlhub.application.use_cases.ingestion_service import IngestionService
 from etlhub.application.use_cases.tracking_service import TrackingService
+from etlhub.application.use_cases.input_upload_service import InputUploadService
+from etlhub.core.config import get_settings
 
 
 @lru_cache
@@ -71,3 +74,7 @@ def get_tracking_service(
     job_repo: JobRepository = Depends(get_job_repository),
 ) -> TrackingService:
     return TrackingService(request_tracker, job_repo)
+
+
+def get_input_upload_service() -> InputUploadService:
+    return InputUploadService(Path(get_settings().data_dir) / "input")
