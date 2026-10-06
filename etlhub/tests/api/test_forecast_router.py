@@ -43,3 +43,21 @@ def test_forecast_launch_forwards_webhook_url(app, mock_job_repository):
     assert response.status_code == 202
     assert response.json()["webhook_url"] == "http://hook"
     assert launched == [("forecast", "http://hook")]
+
+
+@pytest.mark.parametrize("field", ["config_valid_path", "input_valid_path", "polygon_valid_path"])
+@pytest.mark.parametrize("bad_path", ["../x.json", "input/../../x.json", "/etc/passwd", "--help", "output/x.json", "input/", ""])
+def test_forecast_rejects_paths_outside_input(override_dependencies, field, bad_path):
+    from fastapi.testclient import TestClient
+
+    response = TestClient(override_dependencies).post("/forecast/", json={field: bad_path})
+
+    assert response.status_code == 422
+
+
+def test_forecast_accepts_nested_input_path(override_dependencies):
+    from fastapi.testclient import TestClient
+
+    response = TestClient(override_dependencies).post("/forecast/", json={"input_valid_path": "input/run1/input_valid.json"})
+
+    assert response.status_code == 202

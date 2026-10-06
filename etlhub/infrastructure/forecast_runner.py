@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 
+from etlhub.core.config import get_settings
 from etlhub.infrastructure.job_store import JobStore
 from etlhub.infrastructure.config_store import ConfigStore
 
@@ -84,27 +85,27 @@ def run_rscript(job_id, params, job_store: JobStore):
     }
     job_store.set(job_id, status)
 
-    host_pwd = os.getenv('HOST_PWD', '.')
-    env_file = _build_dynamic_env_file(host_pwd, job_id)
+    host_pwd = get_settings().host_pwd
+    env_file = None
 
     input_vol = f"{host_pwd}/input:/app/input:ro"
     output_vol = f"{host_pwd}/output:/app/output:rw"
 
-    cmd = [
-        'docker', 'run', '--rm',
-        '--env-file', env_file,
-        '--network', 'host',
-        '--cap-add', 'SYS_NICE',
-        '-v', input_vol,
-        '-v', output_vol,
-        'mvevans89/pridec_forecast:0.1.0',
-        'forecast',
-        '--config_valid', params['config_valid_path'],
-        '--input_valid', params['input_valid_path'],
-        '--polygon_valid', params['polygon_valid_path']
-    ]
-
     try:
+        env_file = _build_dynamic_env_file(host_pwd, job_id)
+        cmd = [
+            'docker', 'run', '--rm',
+            '--env-file', env_file,
+            '--network', 'host',
+            '--cap-add', 'SYS_NICE',
+            '-v', input_vol,
+            '-v', output_vol,
+            'mvevans89/pridec_forecast:0.1.0',
+            'forecast',
+            '--config_valid', params['config_valid_path'],
+            '--input_valid', params['input_valid_path'],
+            '--polygon_valid', params['polygon_valid_path']
+        ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         completed = datetime.now().isoformat()
         if result.returncode == 0:
@@ -120,6 +121,12 @@ def run_rscript(job_id, params, job_store: JobStore):
                 "logs": result.stdout,
                 "message": result.stderr
             })
+    except FileNotFoundError as e:
+        status.update({
+            "status": "error",
+            "completed": datetime.now().isoformat(),
+            "message": f".env file not found: {e.filename} (check HOST_PWD)"
+        })
     except Exception as e:
         status.update({
             "status": "error",
@@ -127,10 +134,11 @@ def run_rscript(job_id, params, job_store: JobStore):
             "message": str(e)
         })
     finally:
-        try:
-            os.remove(env_file)
-        except OSError:
-            pass
+        if env_file:
+            try:
+                os.remove(env_file)
+            except OSError:
+                pass
 
     # Generate signature and chown output directory to allow API deletion
     try:

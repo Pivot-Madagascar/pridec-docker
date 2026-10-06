@@ -1,19 +1,34 @@
 import json
-from pathlib import Path
-from datetime import datetime
-from contextlib import contextmanager
-import time
+import logging
+import sqlite3
 import threading
+from contextlib import closing
+from pathlib import Path
 
 import redis
 from etlhub.core.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 _request_tracker = None
 _lock = threading.Lock()
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS request_log (
+    request_id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now')),
+    url TEXT NOT NULL,
+    data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_request_log_created_at ON request_log(created_at);
+"""
 
 
 class RequestTracker:
     _redis_client = None
+
+    def __init__(self, db_path: str | Path | None = None):
+        self._db_path = Path(db_path or Path(get_settings().logs_dir) / "etlhub.db")
 
     def _get_redis(self):
         if self._redis_client is None:
@@ -26,9 +41,13 @@ class RequestTracker:
             )
         return self._redis_client
 
-    def _logs_path(self):
-        settings = get_settings()
-        return Path(settings.logs_dir) / "requests"
+    def _connect(self) -> sqlite3.Connection:
+        # One short connection per call: safe across threads and Celery forks.
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(self._db_path, timeout=5)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.executescript(_SCHEMA)
+        return conn
 
     def save(self, log: dict) -> None:
         try:
@@ -41,11 +60,13 @@ class RequestTracker:
         except Exception:
             pass
         try:
-            path = self._logs_path() / f"{log['request_id']}.json"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(log, indent=2))
-        except Exception:
-            pass
+            with closing(self._connect()) as conn, conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO request_log (request_id, url, data) VALUES (?, ?, ?)",
+                    (log["request_id"], log.get("url", ""), json.dumps(log)),
+                )
+        except sqlite3.Error:
+            logger.warning("Could not store request log %s", log.get("request_id"), exc_info=True)
 
     def get(self, request_id: str) -> dict | None:
         try:
@@ -55,33 +76,21 @@ class RequestTracker:
                 return json.loads(data)
         except Exception:
             pass
-        path = self._logs_path() / f"{request_id}.json"
-        if path.exists():
-            try:
-                return json.loads(path.read_text())
-            except Exception:
-                pass
-        return None
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT data FROM request_log WHERE request_id = ?", (request_id,)
+            ).fetchone()
+        return json.loads(row[0]) if row else None
 
     def list_recent(self, limit: int = 50, endpoint: str | None = None) -> list[dict]:
-        try:
-            path = self._logs_path()
-            if not path.exists():
-                return []
-            files = sorted(path.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
-            results = []
-            for f in files:
-                if len(results) >= limit:
-                    break
-                try:
-                    log = json.loads(f.read_text())
-                    if endpoint is None or endpoint in log.get("url", ""):
-                        results.append(log)
-                except Exception:
-                    continue
-            return results
-        except Exception:
-            return []
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT data FROM request_log"
+                " WHERE :endpoint IS NULL OR instr(url, :endpoint) > 0"
+                " ORDER BY created_at DESC, rowid DESC LIMIT :limit",
+                {"endpoint": endpoint, "limit": limit},
+            ).fetchall()
+        return [json.loads(r[0]) for r in rows]
 
 
 def get_request_tracker() -> RequestTracker:
