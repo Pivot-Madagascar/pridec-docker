@@ -8,7 +8,7 @@ Findings from a read-only inspection of the repository. Nothing here has been fi
 2. **`DELETE /output/reset`** (`api/routers/forecast_report_router.py`): the "signature" only checks that `.output_sig` exists and is non-empty. Falls back to `sudo rm -rf`.
 3. **SSRF**: `/auth/validate-token` sends the token to any `dhis2_url` when `DHIS2_ALLOWED_HOSTS` is empty (the default). `webhook_url` lets the worker POST to any URL (`infrastructure/tasks.py`, host network).
 4. **`/validate_inputs`** takes free file paths in the query and writes `config_valid.json`, `input_valid.json`, `polygon_valid.geojson` into a free `input_dir`.
-5. **Forecast**: `ForecastParams` is passed as-is to `docker run`. A temp env file holds secrets for the whole run. No timeout.
+5. **Forecast**: `ForecastParams` paths are now validated (under `input/`, no `..`, no leading `-`). A temp env file holds secrets for the whole run. No timeout.
 6. **`GET /api/config/` returns `DHIS_TOKEN` in clear** (`ConfigResponse` has a `dhis_token` field). `etlui` puts it in a password input (`ConfigView.vue`), so it is hidden on screen but present in the DOM and the store.
 7. **Middleware logs the full URL, query string included** (`middleware.py:77-86`), to `logs/requests/*.json` and `req:{id}`. A secret in a query string (a `webhook_url` carrying a token, the OAuth `code` of `/auth/dhis2/callback`) is stored. No bodies and no headers are logged, so the `Authorization` token is not. `X-Request-ID` is accepted from the client and used as a file name (`request_tracker.py:44`): possible path traversal (read, not tested).
 8. **The log WebSocket and `/api/tracking/*` are open**, and `etlui` sends no token on the WebSocket (`useWebSocketLogger.ts:46-49`).
@@ -37,7 +37,6 @@ Import audit (AST, 2026-10-02): the domain imports only `typing` and `pydantic`.
 - Forecast status is written and published twice (`forecast_runner.py:163-178` and `tasks.py:150,160`). `task_forecast` duplicates `_run_task` instead of using it.
 - WebSocket (`api/websockets/etl_logs.py`): `pubsub.get_message()` defaults to `timeout=0.0`, so the `while True` loop busy-waits and the 30s `wait_for` never fires. If the job ends between the status read and `subscribe`, the client waits forever. Closes with `4004` if no history yet.
 - `middleware.py:41`: `threading.local` shared across asyncio requests.
-- `HOST_PWD` read via `os.getenv` in `forecast_runner.py:87` instead of `Settings.host_pwd`.
 - `forecast_runner._build_dynamic_env_file` opens `.env` without checking it exists.
 - *Unverified*: `Settings` reads `etlhub/.env`, which does not exist, and `load_dotenv()` in `etl/scripts/config.py` runs after the first cached `get_settings()`. The `REDIS_*` values of the root `.env` may therefore be ignored.
 

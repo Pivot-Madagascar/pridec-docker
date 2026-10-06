@@ -24,10 +24,15 @@ Re-check against the code before relying on a line number or a default.
 | POST | `/auth/dhis2/callback` | `auth_router` | DHIS2 | — |
 | GET | `/auth/me` | `auth_router` | DHIS2 call | **DHIS2** |
 | GET | `/output/forecast_report.html[/exists]` | `forecast_report_router` | File | — |
+| POST | `/input/files/{config\|external_data}` | `input_router` | Sync, multipart field `file` (≤ 10 MB) → replaces `input/config.json` or `input/external_data.csv`. 413 too big, 422 invalid JSON object / CSV without `orgUnit`,`period` / other name | — |
+| GET | `/input/files` | `input_router` | Sync. `{config, external_data}` → `{exists, size?, modified?}` | — |
+| GET | `/input/files/config/preview` | `input_router` | Sync, content of `input/config.json`. 404 absent, 422 not a JSON object | — |
+| GET | `/input/files/external_data/preview?limit=100` | `input_router` | Sync, `{columns, rows, total_rows, period_range, org_units}`: first `limit` (1–500) rows, summary over the whole file read line by line. 404 absent | — |
+| DELETE | `/input/files/{config\|external_data}` | `input_router` | Sync, deletes the file in `input/`. 404 absent, 422 other name | — |
 | DELETE | `/output/reset` | `forecast_report_router` | `rm -rf output/` | `.output_sig` exists (not real auth) |
 | GET | `/` | `main.py` | Static HTML | — |
 
-Router prefixes (`main.py`): `ingest`, `analytics`, `validation`, `auth` have none; `forecast` `/forecast`; `tracking` `/api/tracking`; `forecast_report` `/output`; `config` `/api/config`. `auth_router` has no OpenAPI tag.
+Router prefixes (`main.py`): `ingest`, `analytics`, `validation`, `auth` have none; `forecast` `/forecast`; `tracking` `/api/tracking`; `forecast_report` `/output`; `input` `/input`; `config` `/api/config`. `auth_router` has no OpenAPI tag.
 
 Known endpoint-level quirks:
 - `/validate_inputs` takes file paths and `input_dir` from the caller and writes `config_valid.json`, `input_valid.json`, `polygon_valid.geojson` there.
@@ -41,7 +46,7 @@ Known endpoint-level quirks:
 | `REDIS_HOST` / `REDIS_PORT` / `REDIS_DB` | `localhost` / `6379` / `0` | Every Redis connection |
 | `LOGS_DIR` | `logs` | Job and request logs |
 | `DATA_DIR` | `.` | Root of `output/` and `.output_sig` |
-| `HOST_PWD` | `.` | Host path for the forecast Docker volumes (read with `os.getenv` in `forecast_runner.py`) |
+| `HOST_PWD` | `.` | Host path for the forecast Docker volumes (read from `Settings.host_pwd`; must be exported in the worker's environment) |
 | `TRACKED_ENDPOINTS` | `""` (all) | Middleware tracing prefixes |
 | `FRONTEND_URL` | `http://localhost:5173` | CORS origin |
 | `DHIS2_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI` | — | DHIS2 OAuth2 |

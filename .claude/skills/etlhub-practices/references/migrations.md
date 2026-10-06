@@ -155,7 +155,7 @@ Also in `conftest.py`: `sys.modules['earthengine_api']` is the pip package name,
 
 **Options to present.** (a) document and require `ENV_FILE`; (b) point `_PROJECT_ROOT` at the repo root; (c) call `load_dotenv` before the first `get_settings()`. Do not pick one without asking.
 
-**Also:** `.env.example` lacks `LOGS_DIR`, `DATA_DIR`, `HOST_PWD`, `ENV_FILE`, and writes `dryRun` while the code reads `DRYRUN`. `forecast_runner.py` reads `HOST_PWD` with `os.getenv` instead of `Settings.host_pwd`.
+**Also:** `.env.example` lacks `LOGS_DIR`, `DATA_DIR`, `HOST_PWD`, `ENV_FILE`, and writes `dryRun` while the code reads `DRYRUN`.
 
 ---
 
