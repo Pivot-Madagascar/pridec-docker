@@ -133,111 +133,114 @@ export const buildPipelineSteps = (deps: {
   checkForecastReportExists: () => Promise<boolean>
   resetReports: () => Promise<void>
 }) => {
-  const {
-    configIsValid,
-    loadingClimate,
-    loadingDisease,
-    loadingGeoJSON,
-    loadingValidateInputs,
-    climateSuccess,
-    diseaseSuccess,
-    geojsonSuccess,
-    validateInputsSuccess,
-    forecastReportExists,
-    checkForecastReportExists,
-    resetReports
-  } = deps
+  // Read deps inside computed: with a reactive deps object, every field stays tracked.
+  return computed(() => {
+    const {
+      configIsValid,
+      loadingClimate,
+      loadingDisease,
+      loadingGeoJSON,
+      loadingValidateInputs,
+      climateSuccess,
+      diseaseSuccess,
+      geojsonSuccess,
+      validateInputsSuccess,
+      forecastReportExists,
+      checkForecastReportExists,
+      resetReports
+    } = deps
 
-  return computed(() => [
-    {
-      id: 'step-1',
-      title: 'Configuration',
-      type: 'custom' as const,
-      canProceed: configIsValid
-    },
-    {
-      id: 'step-2',
-      title: 'Data Retrieval',
-      actions: [
-        {
-          key: 'fetch_climate',
-          label: 'Fetch Climate',
-          icon: commonIcon.cloud,
-          iconClass: 'icon-sky',
-          loading: loadingClimate,
-          success: climateSuccess,
-          statusText: 'Weather & climate',
-          statusClass: 'status-pending',
-          loadingText: 'Loading...',
-          successText: '✓ Success'
-        },
-        {
-          key: 'fetch_disease',
-          label: 'Fetch Disease',
-          icon: commonIcon.beaker,
-          iconClass: 'icon-teal',
-          loading: loadingDisease,
-          success: diseaseSuccess,
-          statusText: 'Health data',
-          statusClass: 'status-pending',
-          loadingText: 'Loading...',
-          successText: '✓ Success'
-        },
-        {
-          key: 'fetch_geojson',
-          label: 'Fetch GeoJSON',
-          icon: commonIcon.map,
-          iconClass: 'icon-indigo',
-          loading: loadingGeoJSON,
-          success: geojsonSuccess,
-          statusText: 'Geospatial boundaries',
-          statusClass: 'status-pending',
-          loadingText: 'Loading...',
-          successText: '✓ Success'
-        },
-        {
-          key: 'validate_inputs',
-          label: 'Validate Inputs',
-          icon: commonIcon.checkCircle,
-          iconClass: 'icon-teal',
-          loading: loadingValidateInputs,
-          success: validateInputsSuccess,
-          statusText: 'Ready',
-          statusClass: 'status-pending',
-          loadingText: 'Processing...',
-          successText: '✓ Validated'
-        }
-      ]
-    },
-    {
-      id: 'step-3',
-      title: 'Forecast',
-      actions: [
-        {
-          key: 'navigate_to_forecast',
-          label: 'Run Forecast',
-          subtitle: 'ML forecasting pipeline',
-          icon: commonIcon.lightning,
-          iconClass: 'icon-orange'
-        }
-      ]
-    },
-    {
-      id: 'step-4',
-      title: 'Approve Forecast',
-      actions: [
-        {
-          key: 'view_forecast_report',
-          label: 'View Report',
-          icon: commonIcon.eye,
-          iconClass: 'icon-blue',
-          inactive: !forecastReportExists,
-          statusText: forecastReportExists ? 'View forecast report' : 'Report unavailable',
-          statusClass: forecastReportExists ? 'status-pending' : 'status-inactive'
-        }
-      ],
-      onRefresh: checkForecastReportExists,
-      onReset: resetReports
-    }
-  ])
+    return [
+      {
+        id: 'step-1',
+        title: 'Configuration',
+        type: 'custom' as const,
+        canProceed: configIsValid
+      },
+      {
+        id: 'step-2',
+        title: 'Data Retrieval',
+        actions: [
+          {
+            key: 'fetch_climate',
+            label: 'Fetch Climate',
+            icon: commonIcon.cloud,
+            iconClass: 'icon-sky',
+            loading: loadingClimate,
+            success: climateSuccess,
+            statusText: 'Weather & climate',
+            statusClass: 'status-pending',
+            loadingText: 'Loading...',
+            successText: '✓ Success'
+          },
+          {
+            key: 'fetch_disease',
+            label: 'Fetch Disease',
+            icon: commonIcon.beaker,
+            iconClass: 'icon-teal',
+            loading: loadingDisease,
+            success: diseaseSuccess,
+            statusText: 'Health data',
+            statusClass: 'status-pending',
+            loadingText: 'Loading...',
+            successText: '✓ Success'
+          },
+          {
+            key: 'fetch_geojson',
+            label: 'Fetch GeoJSON',
+            icon: commonIcon.map,
+            iconClass: 'icon-indigo',
+            loading: loadingGeoJSON,
+            success: geojsonSuccess,
+            statusText: 'Geospatial boundaries',
+            statusClass: 'status-pending',
+            loadingText: 'Loading...',
+            successText: '✓ Success'
+          },
+          {
+            key: 'validate_inputs',
+            label: 'Validate Inputs',
+            icon: commonIcon.checkCircle,
+            iconClass: 'icon-teal',
+            loading: loadingValidateInputs,
+            success: validateInputsSuccess,
+            statusText: 'Ready',
+            statusClass: 'status-pending',
+            loadingText: 'Processing...',
+            successText: '✓ Validated'
+          }
+        ]
+      },
+      {
+        id: 'step-3',
+        title: 'Forecast',
+        actions: [
+          {
+            key: 'navigate_to_forecast',
+            label: 'Run Forecast',
+            subtitle: 'ML forecasting pipeline',
+            icon: commonIcon.lightning,
+            iconClass: 'icon-orange'
+          }
+        ]
+      },
+      {
+        id: 'step-4',
+        title: 'Approve Forecast',
+        actions: [
+          {
+            key: 'view_forecast_report',
+            label: 'View Report',
+            icon: commonIcon.eye,
+            iconClass: 'icon-blue',
+            inactive: !forecastReportExists,
+            statusText: forecastReportExists ? 'View forecast report' : 'Report unavailable',
+            statusClass: forecastReportExists ? 'status-pending' : 'status-inactive'
+          }
+        ],
+        onRefresh: checkForecastReportExists,
+        onReset: resetReports
+      }
+    ]
+  })
 }

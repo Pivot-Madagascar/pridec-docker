@@ -116,7 +116,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, reactive, toRef, onMounted } from 'vue'
 
 import Accordion from '@/views/LandingPage/components/Accordion.vue'
 import Notifications from '@/views/LandingPage/components/Notifications.vue'
@@ -178,20 +178,21 @@ const dataImportActions = buildDataImportActions({ loading, results })
 const systemUpdateActions = buildSystemUpdate({ loading, results })
 
 // Factory for pipeline steps
-const pipelineSteps = buildPipelineSteps({
-  configIsValid: configIsValid.value,
-  loadingClimate: loadingClimate.value,
-  loadingDisease: loadingDisease.value,
-  loadingGeoJSON: loadingGeoJSON.value,
-  loadingValidateInputs: loading.validate_inputs,
-  climateSuccess: climateSuccess.value,
-  diseaseSuccess: diseaseSuccess.value,
-  geojsonSuccess: geojsonSuccess.value,
-  validateInputsSuccess: results.validate_inputs,
-  forecastReportExists: forecastReportExists.value,
+// reactive() unwraps the refs, so buildPipelineSteps sees live values, not a setup-time copy.
+const pipelineSteps = buildPipelineSteps(reactive({
+  configIsValid,
+  loadingClimate,
+  loadingDisease,
+  loadingGeoJSON,
+  loadingValidateInputs: toRef(loading, 'validate_inputs'),
+  climateSuccess,
+  diseaseSuccess,
+  geojsonSuccess,
+  validateInputsSuccess: toRef(results, 'validate_inputs'),
+  forecastReportExists,
   checkForecastReportExists,
   resetReports
-})
+}))
 
 const accordionItems = [
   { id: 'dataImport', title: 'Data Import' },
