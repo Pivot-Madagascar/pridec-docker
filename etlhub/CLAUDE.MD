@@ -38,7 +38,7 @@ Siblings in the repo:
 - On an ETL failure, `save_logs` replaces the job log (file and Redis) with the traceback only.
 - The WebSocket closes with `4004` when no log exists yet. For forecast, logs are written only at the end, so a WebSocket opened during the run always gets `4004` and `etlui` does not retry.
 - `etlui` sends a JSON body to `/fetch_disease` and `/validate_inputs`, but the backend reads query parameters only. The body is silently ignored.
-- Forecast: `HOST_PWD` is read with `os.getenv` (not `Settings`) and must be a **host** path containing `.env`. The worker needs the Docker socket. There is no timeout. A temp file `/tmp/forecast_{id}.env` holds secrets during the run. The image tag is `0.1.0` (the OpenAPI text says `latest`).
+- Forecast: `HOST_PWD` is read from `Settings.host_pwd`: it must be exported in the worker's environment (the root `.env` loaded later by `load_dotenv()` is not seen) and must be a **host** path containing `.env`. A missing `.env` marks the job `error`. Forecast paths must be under `input/` (422 otherwise). The worker needs the Docker socket. There is no timeout. A temp file `/tmp/forecast_{id}.env` holds secrets during the run. The image tag is `0.1.0` (the OpenAPI text says `latest`).
 - No timeout and no lock anywhere. A killed worker leaves `job:{id}` at `running` until the 24h TTL. Two simultaneous jobs can write the same `input/` and `output/` files.
 - `GET /api/config/` returns `DHIS_TOKEN` in clear, and the middleware logs full URLs: never put a secret in a query string.
 - Redis job state expires after 24h. Older jobs only exist in `logs/`.
