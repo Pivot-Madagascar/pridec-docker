@@ -20,6 +20,29 @@
           </div>
         </template>
 
+        <template #content-externalData>
+          <div class="external-data-section">
+            <p class="upload-intro">Each file is uploaded on its own: drop or browse a file, preview it, then upload it.</p>
+            <div class="upload-grid">
+              <FileDropzone
+                v-for="field in uploadFields"
+                :key="field.key"
+                v-model="uploadFiles[field.key]"
+                :label="field.label"
+                :description="field.description"
+                :accept="field.accept"
+                :server-file="serverFiles[field.key]"
+                :deleting="deleting === field.key"
+                :uploading="uploading === field.key"
+                @upload="file => handleUpload(field.key, file)"
+                @delete="pendingDelete = field"
+                @preview-local="file => openPreview(field.key, file)"
+                @preview-server="openPreview(field.key, 'server')"
+              />
+            </div>
+          </div>
+        </template>
+
         <template #content-forecastCreation>
           <div class="forecast-creation-section">
             <StepperCarousel :steps="pipelineSteps" :initial-step="0" @action-click="handleActionClick" @step-change="handleStepChange">
@@ -60,24 +83,60 @@
     <ForecastReportModal 
       v-model="showReportModal"
     />
+
+    <PreviewDialog
+      :open="previewCurrent !== null"
+      :title="previewCurrent ? fieldLabel(previewCurrent.name) : ''"
+      :source="previewCurrent?.source ?? 'server'"
+      :loading="previewLoading"
+      :error="previewError"
+      @close="closePreview"
+    >
+      <ConfigPreview v-if="previewConfig" :config="previewConfig" />
+      <CsvPreview v-else-if="previewCsv" :preview="previewCsv" />
+    </PreviewDialog>
+
+    <ConfirmDialog
+      :open="pendingDelete !== null"
+      :title="`Delete ${pendingDelete?.label ?? ''}?`"
+      confirm-label="Delete"
+      :busy="deleting !== null"
+      @confirm="confirmDelete"
+      @cancel="pendingDelete = null"
+    >
+      The file <strong>input/{{ pendingDelete?.label }}</strong> will be removed from the server. This cannot be undone.
+      <template v-if="pendingDelete?.key === 'config'">
+        "Validate inputs" will fail until a new config.json is uploaded.
+      </template>
+      <template v-else>
+        Run "Validate inputs" again so the forecast stops using it.
+      </template>
+    </ConfirmDialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 
-import Accordion from './components/Accordion.vue'
-import Notifications from './components/Notifications.vue'
-import RecentActivity from './components/RecentActivity.vue'
-import StepperCarousel from './components/StepperCarousel.vue'
-import ForecastModal from './components/ForecastModal.vue'
-import ForecastReportModal from './components/ForecastReportModal.vue'
-import ForecastConfigForm from './components/ForecastConfigForm.vue'
-import ActionCard from './components/ActionCard.vue'
+import Accordion from '@/views/LandingPage/components/Accordion.vue'
+import Notifications from '@/views/LandingPage/components/Notifications.vue'
+import RecentActivity from '@/views/LandingPage/components/RecentActivity.vue'
+import StepperCarousel from '@/views/LandingPage/components/StepperCarousel.vue'
+import ForecastModal from '@/views/LandingPage/components/ForecastModal.vue'
+import ForecastReportModal from '@/views/LandingPage/components/ForecastReportModal.vue'
+import ForecastConfigForm from '@/views/LandingPage/components/ForecastConfigForm.vue'
+import ActionCard from '@/views/LandingPage/components/ActionCard.vue'
+import FileDropzone from '@/views/LandingPage/components/FileDropzone.vue'
+import ConfirmDialog from '@/views/LandingPage/components/ConfirmDialog.vue'
+import PreviewDialog from '@/views/LandingPage/components/PreviewDialog.vue'
+import ConfigPreview from '@/views/LandingPage/components/ConfigPreview.vue'
+import CsvPreview from '@/views/LandingPage/components/CsvPreview.vue'
 
 import { useNotification } from '@/composables/useNotification'
 import { useActivityLog } from '@/composables/useActivityLog'
 import { useEtlPipeline } from '@/composables/useEtlPipeline'
+import { useInputUpload } from '@/composables/useInputUpload'
+import { useInputPreview } from '@/composables/useInputPreview'
 import { useForecastConfigStore } from '@/stores/forecastConfig'
 import { buildDataImportActions, buildPipelineSteps, buildSystemUpdate } from '@/config/data'
 
@@ -136,9 +195,45 @@ const pipelineSteps = buildPipelineSteps({
 
 const accordionItems = [
   { id: 'dataImport', title: 'Data Import' },
+  { id: 'externalData', title: 'Upload External Data' },
   { id: 'forecastCreation', title: 'Forecast Creation' },
   { id: 'systemUpdate', title: 'System Update' }
 ]
+
+const uploadFields = [
+  { key: 'config', label: 'config.json', description: 'Forecast configuration (JSON)', accept: '.json,application/json' },
+  { key: 'external_data', label: 'external_data.csv', description: 'External covariates (CSV)', accept: '.csv,text/csv' }
+] as const
+
+type UploadField = (typeof uploadFields)[number]
+
+const uploadFiles = ref<Partial<Record<UploadField['key'], File>>>({})
+
+const { uploading, deleting, serverFiles, refresh, upload, remove } = useInputUpload(addActivity)
+
+const handleUpload = async (key: UploadField['key'], file: File) => {
+  if (await upload(key, file)) uploadFiles.value[key] = undefined
+}
+
+const pendingDelete = ref<UploadField | null>(null)
+
+const {
+  current: previewCurrent,
+  loading: previewLoading,
+  error: previewError,
+  config: previewConfig,
+  csv: previewCsv,
+  open: openPreview,
+  close: closePreview
+} = useInputPreview()
+
+const fieldLabel = (key: UploadField['key']) => uploadFields.find(field => field.key === key)?.label ?? key
+
+const confirmDelete = async () => {
+  if (!pendingDelete.value) return
+  await remove(pendingDelete.value.key)
+  pendingDelete.value = null
+}
 
 const handleActionClick = async (key: string) => {
   if (key === 'navigate_to_forecast') {
@@ -187,6 +282,7 @@ const handleStepChange = (_stepIndex: number) => {
 
 onMounted(() => {
   checkForecastReportExists()
+  refresh()
 })
 </script>
 
@@ -225,6 +321,7 @@ onMounted(() => {
 
 /* ===== Section Styles ===== */
 .data-import-section,
+.external-data-section,
 .forecast-creation-section,
 .system-update-section {
   margin-bottom: 2rem;
@@ -242,6 +339,19 @@ onMounted(() => {
   gap: 0.5rem;
 }
 
+/* ===== External Data Upload ===== */
+.upload-intro {
+  color: #94a3b8;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
 /* ===== Action Grid (shared with StepperCarousel) ===== */
 .action-grid {
   display: grid;
@@ -256,6 +366,9 @@ onMounted(() => {
 
 /* ===== Responsive ===== */
 @media (max-width: 1024px) {
+  .upload-grid {
+    grid-template-columns: 1fr;
+  }
   .action-grid {
     grid-template-columns: repeat(2, 1fr);
   }
