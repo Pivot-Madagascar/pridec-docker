@@ -82,7 +82,7 @@ Docker image `mvevans89/pridec_forecast:0.1.0` (the OpenAPI text says `latest`),
 - `params` dict → `task_forecast`. `.env` merged with Redis overrides into a temp file `/tmp/forecast_{id}.env` that holds secrets while the container runs.
 - Volumes `{HOST_PWD}/input:/app/input:ro`, `{HOST_PWD}/output:/app/output:rw`. `HOST_PWD` is read from `Settings.host_pwd` (it must be exported in the worker's environment) and must be a **host** path containing `.env`; a missing `.env` marks the job `error` without running Docker. `ForecastParams` paths must be relative, under `input/`, without `..` or a leading `-` (422 otherwise).
 - No timeout on `subprocess.run`. The worker needs access to the Docker socket.
-- A `.output_sig` file is generated after a run. `DELETE /output/reset` only checks that it exists and is non-empty, then `rm -rf output/` (with a `sudo rm -rf` fallback). Treat it as no protection.
+- The container runs as the worker's user (`--user uid:gid`, `HOME=/tmp`) and the worker creates `output/` first, so output files are not root-owned. A `.output_sig` file is generated after a run. `DELETE /output/reset` needs the session, checks only that `.output_sig` exists, then `shutil.rmtree(output/)` (no `sudo`).
 
 ## Running and testing
 

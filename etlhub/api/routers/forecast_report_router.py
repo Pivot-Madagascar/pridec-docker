@@ -1,6 +1,5 @@
 import os
 import shutil
-import subprocess
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 
@@ -39,7 +38,8 @@ def _verify_signature() -> bool:
     summary="Delete output directory",
     description="Deletes the entire output directory and all its contents (requires valid signature).",
 )
-async def reset_output():
+def reset_output():
+    # Plain `def`: FastAPI runs it in a thread, so deleting large files does not block the event loop.
     if not _verify_signature():
         raise HTTPException(
             status_code=403,
@@ -52,17 +52,13 @@ async def reset_output():
         try:
             shutil.rmtree(output_dir)
         except PermissionError:
-            # Fall back to sudo if permission denied
-            result = subprocess.run(
-                ['sudo', 'rm', '-rf', output_dir],
-                capture_output=True,
-                text=True
+            # No sudo fallback: forecast containers run as the etlhub user, so output/
+            # is ours. Root-owned files come from runs made before that change.
+            raise HTTPException(
+                status_code=500,
+                detail="Some files in output/ belong to another user (forecast run as root before). "
+                       "Give them back to the etlhub user once: see GETTING_STARTED.md, 'output/ owned by root'.",
             )
-            if result.returncode != 0:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to delete output directory: {result.stderr or 'Permission denied'}"
-                )
         except Exception as e:
             raise HTTPException(
                 status_code=500,

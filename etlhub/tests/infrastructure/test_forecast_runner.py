@@ -31,3 +31,31 @@ def test_missing_env_file_marks_job_as_error_without_running_docker(tmp_path, mo
     assert status["status"] == "error"
     assert ".env" in status["message"] and str(tmp_path) in status["message"]
     assert job_store.records["forecast_noenv"]["status"] == "error"
+
+
+def test_forecast_container_runs_as_the_worker_user_and_output_exists_first(tmp_path, monkeypatch):
+    (tmp_path / ".env").write_text("OTHER=1\n")
+    settings = SimpleNamespace(host_pwd=str(tmp_path), data_dir=str(tmp_path), logs_dir=str(tmp_path / "logs"))
+    monkeypatch.setattr(forecast_runner, "get_settings", lambda: settings)
+    monkeypatch.setattr(forecast_runner, "_get_output_dir", lambda: str(tmp_path / "output"))
+    monkeypatch.setattr(forecast_runner, "generate_signature", lambda: "sig")
+    monkeypatch.setattr(forecast_runner.ConfigStore, "get_all", lambda self: {})
+    monkeypatch.setattr(forecast_runner.os, "getuid", lambda: 1000)
+    monkeypatch.setattr(forecast_runner.os, "getgid", lambda: 1000)
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        seen["output_existed"] = (tmp_path / "output").is_dir()
+        return SimpleNamespace(returncode=1, stdout="", stderr="stop here")
+
+    monkeypatch.setattr(forecast_runner.subprocess, "run", fake_run)
+
+    forecast_runner.run_rscript("forecast_user", {
+        "config_valid_path": "input/c.json", "input_valid_path": "input/i.json", "polygon_valid_path": "input/p.geojson",
+    }, _RecordingJobStore())
+
+    cmd = seen["cmd"]
+    assert cmd[cmd.index("--user") + 1] == "1000:1000"
+    assert "HOME=/tmp" in cmd
+    assert seen["output_existed"]

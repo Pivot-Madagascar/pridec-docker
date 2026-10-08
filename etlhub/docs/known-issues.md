@@ -1,103 +1,112 @@
 # etlhub — Known issues
 
-Findings from a read-only inspection of the repository. Nothing here has been fixed. Items marked *unverified* come from reading the code only.
+Checked against the code on 2026-10-08, after the DHIS2 login and route protection work (commit `9f66b09` and follow-ups). Items marked *unverified* come from reading the code only. Fixed items are listed at the end of each section so the history stays readable.
 
-## 1. Security (highest risk first)
+Priority scale: **P1** fix next (security or a broken feature), **P2** fix soon (wrong behaviour, data integrity), **P3** when convenient.
 
-1. *Fixed:* every router except `auth_router` requires the session (`main.py`, `dependencies=[Depends(get_current_user)]`), the log WebSocket included (origin check, close code `4401` without session). `tests/api/test_route_protection.py` fails if a route is left open. Still public: `GET /`, `/docs`, `/redoc`, `/openapi.json` (decision pending). A logged-in user can still call every endpoint: there are no roles.
-2. **`DELETE /output/reset`** (`api/routers/forecast_report_router.py`): the "signature" only checks that `.output_sig` exists and is non-empty. Falls back to `sudo rm -rf`.
-3. **SSRF**: `webhook_url` lets the worker POST to any URL (`infrastructure/tasks.py`, host network).
-4. **`/validate_inputs`** takes free file paths in the query and writes `config_valid.json`, `input_valid.json`, `polygon_valid.geojson` into a free `input_dir`.
-5. **Forecast**: `ForecastParams` paths are now validated (under `input/`, no `..`, no leading `-`). A temp env file holds secrets for the whole run. No timeout.
-6. *Fixed:* `GET /api/config/` no longer returns the DHIS2 token (`has_dhis_token` instead).
-7. **Middleware logs the full URL, query string included** (`middleware.py:77-86`), to `logs/requests/*.json` and `req:{id}`. A secret in a query string (a `webhook_url` carrying a token) is stored. No bodies and no headers are logged, so the `Authorization` token is not. `X-Request-ID` is accepted from the client and used as a file name (`request_tracker.py:44`): possible path traversal (read, not tested).
-8. *Fixed:* the log WebSocket and `/api/tracking/*` require the session (see 1).
-9. *Fixed:* the OAuth routes, `/auth/validate-token` and `JWT_SECRET` are removed; login is DHIS2 username/password (see `ARCHITECTURE.md`, Authentication).
-10. **Login state is only as safe as Redis.** The active DHIS2 token is stored in clear in Redis (`dhis2:credential`) and in its AOF/RDB files. `redis.conf` binds to localhost and requires a password; the data directory must stay `chmod 700`.
-11. **One DHIS2 identity at a time.** The credential is global: the last login decides which instance and account every job uses, and logs the previous session out. A job running when the token expires (24 h) or at logout fails on DHIS2 with 401.
+## 0. Priorities at a glance
+
+| # | Priority | Issue | Section |
+|---|---|---|---|
+| 1 | P3 | `DELETE /output/reset`: "signature" is only "file exists" (sudo fallback removed) | 1.1 |
+| 2 | P1 | `webhook_url`: SSRF from the worker (any URL, redirects followed) | 1.2 |
+| 3 | P1 | `/validate_inputs`: free file paths and `input_dir` | 1.3 |
+| 4 | P1 | Log WebSocket busy-waits (`get_message` without timeout) | 3 |
+| 5 | P1 | `/post_forecast`, `/update_key` block the event loop | 3 |
+| 6 | P2 | A login while a job runs revokes the token that job uses | 1.4 |
+| 7 | P2 | No roles: any DHIS2 user of an allowed host can log in and run anything | 1.5 |
+| 8 | P2 | No timeout, no reconciliation, no lock on jobs | 3 |
+| 9 | P2 | Full URL (query string) stored in request logs | 1.6 |
+| 10 | P2 | `etlui` marks a step `success` on the 202; forecast logs only at the end | 3 |
+| 11 | P3 | Everything else below | — |
+
+Order of work suggested: 2 → 3 (small, independent, each its own change), then 4 and 5 (they degrade the whole API), then 6 (needs a product decision).
+
+## 1. Security
+
+1. **P3 — `DELETE /output/reset`** (`api/routers/forecast_report_router.py`). Behind the session; the "signature" only checks that `.output_sig` exists and is non-empty. The `sudo rm -rf` fallback is gone (2026-10-08): forecast containers run as the worker's user (`forecast_runner._container_user`), `output/` is created by the worker before `docker run`, and the endpoint deletes with `shutil.rmtree` only. Files left root-owned by older runs must be handed back once (`GETTING_STARTED.md`, "output/ owned by root"). *Unverified:* the `PRIDEC` R package (not in the repo) is assumed to write only under `output/` and `HOME` (`/tmp`); a forecast run as non-root has not been executed yet.
+2. **P1 — SSRF through `webhook_url`** (`infrastructure/tasks.py:24-38`). Any logged-in user can make the worker (host network) POST to any URL: no scheme or host check, and `urllib.request.urlopen` follows redirects. Fix: one validator (allowed hosts, https), called at launch; see migration m4.
+3. **P1 — `/validate_inputs` takes free paths** (`api/routers/etl/validation_router.py:24-31`, `validation_use_cases.py:36`). File paths and `input_dir` come from the query; the use case writes `config_valid.json`, `input_valid.json`, `polygon_valid.geojson` into `input_dir`. Fix: reuse the `ForecastParams` path validator (under `input/`, no `..`, no leading `-`).
+4. **P2 — A login revokes the token of running jobs.** Scripts read the DHIS2 token once at start (`DHIS_TOKEN = get_dhis_token()`). A new login revokes it (`api/auth/router.py`, `_revoke_previous`), so a running import gets 401 from DHIS2 mid-way and stops half done. Same at logout and at the 24 h expiry. Decision needed: refuse login/logout while a DHIS2 job runs (409), or document it.
+5. **P2 — No roles.** Any user of a host in `DHIS2_ALLOWED_HOSTS` who can log in becomes the global DHIS2 identity for every job, and can call every endpoint (`DELETE /output/reset`, `/forecast/`, DHIS2 writes). Decision needed: require a DHIS2 authority or user group at login?
+6. **P2 — Request logs keep the full URL** (`api/middleware.py:94-107`, stored in SQLite `logs/etlhub.db` and Redis `req:{id}`). A secret in a query string (a `webhook_url` carrying a token) is stored. Bodies and headers are not logged, so the login password and cookies are not.
+7. **P3 — `X-Request-ID` is taken from the client** (`api/middleware.py:86`) and stored with `INSERT OR REPLACE` (`request_tracker.py:58`): a client can overwrite another request's log entry. No length limit. Fix: accept only a UUID. (The old path traversal risk is gone: the tracker no longer writes one file per request.)
+8. **P3 — The DHIS2 token is in clear in Redis** (`dhis2:credential`) and in its AOF/RDB files. Accepted: `redis.conf` binds to localhost, requires a password, and the data directory must stay `chmod 700`. The token lives 24 h and is revoked at logout.
+9. **P3 — Public pages to decide**: `GET /`, `/docs`, `/redoc`, `/openapi.json` (the full API map).
+10. **P3 — Forecast temp env file** `/tmp/forecast_{id}.env` holds the other `.env` secrets (`PIVOT_TOKEN`, GEE…) for the whole run and survives a SIGKILL. It no longer contains `DHIS_URL` / `DHIS_TOKEN`.
+
+Fixed (2026-10-08): every router except `auth_router` requires the session, the log WebSocket included (origin check, close `4401`), guarded by `tests/api/test_route_protection.py` · `GET /api/config/` no longer returns the DHIS2 token · OAuth routes, `/auth/validate-token` and `JWT_SECRET` removed · login sends credentials only to `DHIS2_ALLOWED_HOSTS` · failed login after revoking the previous token no longer leaves it active in Redis.
 
 ## 2. Layering violations
 
 | Violation | Where |
 |---|---|
-| application → api | `application/use_cases/etl_use_cases.py:40`, `validation_use_cases.py:30` (`etlhub.api.etl_events`) |
-| infrastructure → api | `infrastructure/tasks.py:52,79`, `forecast_runner.py:172,177` |
-| core → api | `core/dependencies.py:7` (unused import) |
-| api → infrastructure without DI | `api/routers/config_router.py:9`, `api/middleware.py:12` |
-| application → Redis (indirect) | `etl/scripts/config.py:3` imports `ConfigStore` |
-| application → pandas/geopandas | `validation_use_cases.py:9-10` |
+| application → api | `application/use_cases/etl_use_cases.py`, `validation_use_cases.py` (`etlhub.api.etl_events`) |
+| infrastructure → api | `infrastructure/tasks.py`, `forecast_runner.py` (`get_etl_event_manager`) |
+| core → api | `core/dependencies.py:8` (unused `get_etl_event_manager` import) |
+| api → infrastructure without DI | `api/routers/config_router.py:9-10`, `api/middleware.py`, and since the login work `api/auth/dhis2_auth.py:17`, `api/auth/router.py:21-22` (`auth_store`, `ConfigStore`) |
+| etl scripts → etlhub infrastructure | `etl/scripts/config.py:3-4` (`ConfigStore`, `auth_store`) |
+| application → pandas/geopandas | `validation_use_cases.py` |
 
-The `EventPublisher` port exists in `domain/interfaces/` but is never injected. Proposed fix: move `ETLEventManager` to `infrastructure/` and inject it.
-
-Import audit (AST, 2026-10-02): the domain imports only `typing` and `pydantic`. Crossing the written rule but widespread: `api` → `domain` (5 files, DTOs), `infrastructure` → `core` (4), `application` → `core` (2, one deferred), `api` → `etl.scripts` (2), `application` → `etl.scripts` (`etl_use_cases.py` 10 imports, `validation_use_cases.py` 1), `core/dependencies.py` → everything (composition root). Whether these are tolerated is an open decision. Port bypasses: `JobStore()` (`tasks.py:59,144`), `_send_webhook()` (`tasks.py:65,85,152,162`), `get_request_tracker()` (`middleware.py:87`), `get_etl_event_manager()` (`etl_use_cases.py:49`, `tasks.py:53,80`, `forecast_runner.py:173,178`), `ConfigStore()` (`config_router.py:39,51,69,74`, `forecast_runner.py:26`, `etl/scripts/config.py:7`).
+The `EventPublisher` port exists in `domain/interfaces/` but is never injected. Proposed fix: move `ETLEventManager` to `infrastructure/` and inject it. The auth code follows the existing `config_router` pattern (direct infrastructure calls); whether that is tolerated is the same open decision as the other imports (see `DEVELOPMENT.md`).
 
 ## 3. Behaviour worth knowing
 
-- `/post_forecast` and `/update_key` run synchronously in `async def` handlers (`analytics_service.py:22-47`).
-- `JobStore`, `RequestTracker` and pub/sub publishing swallow every exception.
-- ETL failure: `save_logs` overwrites the job log with the traceback (`tasks.py:75`, `job_store.py:59`).
-- Forecast status is written and published twice (`forecast_runner.py:163-178` and `tasks.py:150,160`). `task_forecast` duplicates `_run_task` instead of using it.
-- WebSocket (`api/websockets/etl_logs.py`): `pubsub.get_message()` defaults to `timeout=0.0`, so the `while True` loop busy-waits and the 30s `wait_for` never fires. If the job ends between the status read and `subscribe`, the client waits forever. Closes with `4004` if no history yet.
-- `middleware.py:41`: `threading.local` shared across asyncio requests.
-- `forecast_runner._build_dynamic_env_file` opens `.env` without checking it exists.
-- *Unverified*: `Settings` reads `etlhub/.env`, which does not exist, and `load_dotenv()` in `etl/scripts/config.py` runs after the first cached `get_settings()`. The `REDIS_*` values of the root `.env` may therefore be ignored.
+- **P1 — Log WebSocket busy-waits** (`api/websockets/etl_logs.py:130`): `pubsub.get_message()` is called with its default `timeout=0.0`, so the loop spins and the 30 s `wait_for` never fires. If the job ends between the status read and `subscribe`, the client waits forever. *Unverified at runtime.*
+- **P1 — `/post_forecast` and `/update_key` run inline** in `async def` handlers (`analytics_router.py:56,109` → `analytics_service.py:22,38`): the whole API, login and WebSockets included, is frozen while they run.
+- **P2 — No timeout, no reconciliation, no lock.** No Celery time limit, no timeout on the forecast `subprocess.run` (`forecast_runner.py:111`). A killed worker leaves `job:{id}` at `running` until the 24 h TTL. Two simultaneous `fetch_*`, `validate_inputs` or `forecast` runs write the same `input/` and `output/` files. Imports resend the same `dataValueSets` each time.
+- **P2 — `etlui` marks a step `success` on the 202** (`useEtlPipeline.ts`), and **forecast logs are written only at the end** (`forecast_runner.py`): a WebSocket opened during a forecast gets `4004`, a clean close that `etlui` does not retry.
+- **P2 — Swallowed errors**: `JobStore`, `RequestTracker.save` (Redis part) and pub/sub publishing catch every exception.
+- **P3** — ETL failure: `save_logs` overwrites the job log with the traceback (`tasks.py`, `job_store.py`).
+- **P3** — Forecast status written and published twice; `task_forecast` duplicates `_run_task`. `run_rscript` rewrites the job record with a new `started`.
+- **P3** — `api/middleware.py:61`: `threading.local` shared across asyncio requests.
+- **P3** — `forecast_runner._build_dynamic_env_file` opens `.env` without checking it exists (the job is marked `error` before Docker, see the test).
+- **P3** — `build_analytics` ignores `DRYRUN`. Whether `update_key` calls DHIS2 with `DRYRUN=true` depends on `pivot_dhis_tools` (not in the repo, *unverified*).
+- **P3** — Scripts write under `os.getcwd()/input|output`; the worker's cwd is *unverified*.
+- **P3** — `TaskLaunchError` has a handler (`main.py`) but nothing raises it.
+- **Verified 2026-10-08**: `Settings` reads only the file named by `ENV_FILE` (default `etlhub/.env`, which does not exist); the root `.env` is not read. The team keeps exporting `ENV_FILE` by hand (`GETTING_STARTED.md`). Values exported in the process environment (or loaded by `load_dotenv` before the first `get_settings()`) override the file.
 
-### More behaviour (from the architecture audit, read from the code)
-
-- **Forecast logs are written only at the end** (`forecast_runner.py:165-168`): a WebSocket opened during the run always gets `4004`, and `etlui` does not retry because the close is clean (`useWebSocketLogger.ts:81-89`). For ETL jobs the same happens if the WebSocket opens before the first `print`.
-- `run_rscript` rewrites the whole job record with a new `started` and no `message` (`forecast_runner.py:80-85`). The "started is kept" fix only holds for ETL tasks (`tasks.py:44`).
-- **No timeout and no reconciliation.** No Celery time limit, no timeout on the forecast `subprocess.run`. A killed worker leaves `job:{id}` at `running` until the 24h TTL, and the WebSocket stays open. `/tmp/forecast_{id}.env` is removed in a `finally`, not after a SIGKILL.
-- **No lock, no deduplication, no idempotence.** Two simultaneous `fetch_*`, `validate_inputs` or `forecast` runs write the same `input/` and `output/` files. Imports resend the same `dataValueSets` each time; deduplication depends on DHIS2.
-- `build_analytics` ignores `DRYRUN`. Whether `update_key` really calls DHIS2 when `DRYRUN=true` depends on the installed `pivot_dhis_tools`, which is not in the repository (unverified).
-- Scripts write under `os.getcwd()/input|output`. The API's cwd is the repo root (`main.py` `os.chdir`); the worker's cwd is unverified.
-- `list_recent` globs every file in `logs/requests/`, calls `stat()` on each, sorts by modification time, and reads until `limit` matches: with a rare `endpoint` filter it can read them all. 511 files at the time of the audit. Redis is never used for the list.
-- `JobStore` builds a Redis client per instance, so every task opens its own connection (`job_store.py:11-22`).
-- The `ValidationError` and `TaskLaunchError` handlers exist (`main.py:36-43`) but nothing raises these exceptions today.
-- `etlui` marks a step `success` as soon as it receives the 202 (`useEtlPipeline.ts:91,110,140,193`).
+Fixed: one shared Redis client per process (`infrastructure/redis_client.py`) replaces the per-instance clients · request tracking is stored in SQLite, so `list_recent` is one indexed query · `ValidationError` is now raised (input upload).
 
 ## 4. Dead code and duplication
 
-- Dead: `track_service` (middleware), `ValidationResponse`, `BaseSchema`, `get_request_tracker_repo`, `verify_signature` (`forecast_runner.py:63`), `get_etl_event_manager` import, `import uuid` in `validation_router.py`.
-- Duplicated: `_get_output_dir` and signature check (`forecast_runner.py` and `forecast_report_router.py`), five separate Redis clients, ten near-identical Celery tasks, `__import__(...)` used to call `get_settings`.
+- **P3** Dead: `track_service` (`api/middleware.py:65`), `ValidationResponse`, `BaseSchema`, `get_request_tracker_repo` (`core/dependencies.py:31`), `verify_signature` (`forecast_runner.py:66`), the `get_etl_event_manager` import in `core/dependencies.py`, `import uuid` in `validation_router.py`.
+- **P3** Duplicated: `_get_output_dir` and the signature check (`forecast_runner.py` and `forecast_report_router.py`), ten near-identical Celery tasks, `__import__(...)` used 4 times in `forecast_runner.py` to call `get_settings`.
+
+Fixed: the five separate Redis clients.
 
 ## 5. Tests
 
-- `etlhub/pytest.ini` uses `[tool:pytest]` (setup.cfg syntax): the whole file is ignored, which causes the `PytestUnknownMarkWarning` for `integration`. Fix: rename the header to `[pytest]`.
-- `test_tracking_router.py:10,22,34` and `test_auth.py` patch names that have no effect (already imported). They pass thanks to `override_dependencies`.
-- `conftest.py` does not mock `ee`.
-- No linter, formatter or type checker configured, no git hook, no PR template, no CODEOWNERS.
-- The order-dependent failure is confirmed: `test_validate_token_endpoint_with_custom_url_returns_user` passes alone and fails after `test_valid_token_authenticates_user`, which caches the same `valid-token` (`test_auth.py:26,49`).
-- Coverage of the sources is 58 % (infrastructure 37 %, `forecast_runner` 12 %, WebSocket 17 %, `job_store` 25 %). 18 of 31 tests assert only `status_code`. No real dependency is used (no `tmp_path`, no `fakeredis`).
-- Each test run writes about 119 files into `logs/requests/` at the repository root: Redis is mocked, so `RequestTracker` falls back to files. They are git-ignored.
-- CI runs `pytest --cov` with no threshold and no linter. Branch protection is not visible in the repository.
-- `etlui`: one spec file (8 tests), no `test` script in `package.json`, no eslint, no prettier.
-- The 1f82acb refactor (+432 lines) shipped without tests; 16 of 22 source commits carry none. Details in `DEVELOPMENT.md`.
+- 102 tests pass, 1 integration test deselected. Coverage of the sources (`api`, `application`, `core`, `domain`, `infrastructure`) is **70 %**; `infrastructure` 61 %, `etl_logs.py` 23 %, `job_store.py` 26 %, auth 83–95 %.
+- **P3** — `etlhub/pytest.ini` uses `[tool:pytest]`: the file is ignored, hence the `PytestUnknownMarkWarning` for `integration`. Fix: rename the header to `[pytest]`.
+- **P3** — `test_tracking_router.py:10,22,34` patch `etlhub.core.dependencies.get_tracking_service`, which has no effect; the tests pass thanks to `override_dependencies`.
+- **P3** — Redis is a global `MagicMock` in `conftest.py`; only the auth tests use an in-memory fake. A green test says nothing about real Redis behaviour (the auth store was checked once against a real Redis 7.0.15 by hand).
+- **P3** — `conftest.py` does not mock `ee`. No linter, formatter or type checker, no git hook. CI runs `pytest --cov` without threshold.
+- **P3** — `etlui`: 7 spec files, 44 tests, but no `test` script in `package.json` (run `npx vitest run`), no eslint.
+
+Fixed: the order-dependent `test_auth.py` failure (file rewritten) · tests no longer write into `logs/requests/` (SQLite in `tmp_path`); the 658 files still in `logs/requests/` are leftovers and can be deleted.
 
 ## 6. Documentation and config drift
 
-- `etlhub/docs/ARCHITECTURE.md` was rewritten on 2026-10-02. The old version said: 28 tests (there are 31); dynamic keys are forecast-only (false: `etl/scripts/config.py:7-15` reads them); `*.pyc` files are versioned (false: `git ls-files '*.pyc'` returns nothing, but `etlhub/hubcenter.egg-info/` is versioned despite `.gitignore:27`); `infrastructure/` is untested (a `task_forecast` test exists); about 2,600 lines (3,267 including tests).
-- `GETTING_STARTED.md:73` says port 8000. `run_server.py` uses 8111.
-- Two diverging versions of the skill: `etlhub/docs/SKILL.md` and `.claude/skills/etlhub/implementation.md`. A skill file must be named `SKILL.md` to be discovered, so `implementation.md` is probably not loaded.
-- `.env.example`: lacks `LOGS_DIR`, `DATA_DIR`, `HOST_PWD`, `ENV_FILE`; writes `dryRun` while the code reads `DRYRUN`; has `GEE_PROJECT =` with a space. `.env` declares `DHIS_URL` twice.
-- Version drift: `pridec_gee` and `pivot_dhis_tools` differ between `etlhub/requirements.txt` and `etl/requirements.txt`.
-- The OpenAPI text of `/forecast/` says image `:latest`, the code uses `:0.1.0`.
-- `local-docs/` (git-ignored) contradicts the code in places: `AUTH_IMPLEMENTATION.md` says every router has `dependencies=[Depends(get_current_user)]` (only `config_router.py` and `/auth/me` do) and "27 tests"; `REDIS_USAGE.md` says all Redis operations have a file fallback (`ConfigStore` has none); `ARCHITECTURE.md` there puts `core/*.py` in the infrastructure layer, cites `etl/config.py` (it is `etl/scripts/config.py`) and omits `config_store`, `config_router`, `tracking_service`, `validation_use_cases`; `CONFIG_DYNAMIC.MD` (719 lines) lists 5 tests that do not exist and proposes `core/config_store.py` (the code has `infrastructure/config_store.py`).
-- `etlui/CLAUDE.md` currently contains etlhub text (its title is "ETLHub (Hub Center API)") and cites `tests/api/conftest.py`, which does not exist (the file is `tests/conftest.py`). It looks like an etlhub file placed in the wrong folder, possibly over the original etlui file.
-- `etlhub/CLAUDE.MD` is in upper case; the root `CLAUDE.md` points to `etlhub/CLAUDE.md`.
-- `compose.yaml` has no etlhub, no Redis. No etlhub Dockerfile. `hubcenter.egg-info/` has no source `setup.py`/`pyproject.toml`.
+- **P3** — `GETTING_STARTED.md:90-94` says port 8000; `run_server.py` uses 8111. The "Complete Setup" section runs `yarn start`; the script is `dev`.
+- **P3** — `.env.example` lacks `LOGS_DIR`, `DATA_DIR`, `HOST_PWD`, `ENV_FILE`, and has `GEE_PROJECT =` with a space.
+- **P3** — `REDIS_PASSWORD` differs between the local `.env` and `.env.debug` (seen on 2026-10-08); only `.env.debug` matches `redis-secret.conf`.
+- **P3** — Two diverging versions of the skill: `etlhub/docs/SKILL.md` and `.claude/skills/etlhub/implementation.md` (probably not loaded: not named `SKILL.md`).
+- **P3** — Version drift: `pridec_gee` and `pivot_dhis_tools` differ between `etlhub/requirements.txt` and `etl/requirements.txt`. The OpenAPI text of `/forecast/` says `:latest`, the code uses `:0.1.0`.
+- **P3** — `etlhub/CLAUDE.MD` is in upper case; the root `CLAUDE.md` points to `etlhub/CLAUDE.md`.
+- **P3** — `compose.yaml` has no etlhub and no Redis; no etlhub Dockerfile; `hubcenter.egg-info/` has no `setup.py`/`pyproject.toml`.
+- **P3** — `local-docs/` (git-ignored) contradicts the code in many places (auth, Redis, tests); do not trust it.
+
+Fixed: `etlui/CLAUDE.md` now describes etlui · `.env.example` writes `DRYRUN` · the root `.env` declares `DHIS_URL` once.
 
 ## 7. Open questions
 
-- Does the rebuilt `mvevans89/pridec_etl` image still work? `etl/scripts/config.py:3` imports `etlhub`, but `etl/Dockerfile` only copies `scripts/` and `etl/requirements.txt` has no `redis`.
-- Does `etlui` reconnect after a `4004` right after launching a job?
-- Celery pool and concurrency in production (default prefork, no `--concurrency`)?
-- How is etlhub deployed?
+- Does a rebuilt `mvevans89/pridec_etl` image still work? `etl/scripts/config.py` imports `etlhub` (`ConfigStore`, `auth_store`), but `etl/Dockerfile` only copies `scripts/` and `etl/requirements.txt` has no `redis`. The CLI `.env` fallback (`DHIS_ENV_FALLBACK` in `compose.yaml`) depends on it.
+- Login during a running job (1.4) and roles (1.5): which behaviour do we want?
+- Celery pool and concurrency in production (default prefork)? How is etlhub deployed, and over http or https (`COOKIE_SECURE`)?
 - Front/back mismatch on JSON bodies for `/fetch_disease` and `/validate_inputs`: fix the front or the back?
 - `DRYRUN` and `LOG_LEVEL` are read from Redis by the scripts but cannot be edited through `/api/config`. Intended?
-- In which working directory does the worker run in practice, and with which Celery pool? This decides where `input/` and `output/` land.
-- `README.md` mentions `compose-prod.yaml`, which is not in the repository. Is there a production setup elsewhere?
-- The reasons for the architecture choices are not recorded in commits. `local-docs/` was read: it records one reason, in `CONFIG_DYNAMIC.MD` ("`lru_cache` prevents updating settings in memory", listed as a limitation).
-- Does the order-dependent test failure also occur in CI? The Actions JUnit report would show it.
-- Is the main branch protected on GitHub (required CI, review)? Not visible in the repository.
-- Which of the tolerated imports (`api` → `domain`, `*` → `core`, `application` → `etl.scripts`) become official? See `DEVELOPMENT.md`.
-- Test-first for all new code, or only "test in the same commit"? See `DEVELOPMENT.md`.
+- In which working directory does the worker run? This decides where `input/` and `output/` land.
+- `README.md` mentions `compose-prod.yaml`, which is not in the repository.
+- Which tolerated imports become official (section 2)? Test-first for all new code? See `DEVELOPMENT.md`.
+- Is the main branch protected on GitHub? Not visible in the repository.

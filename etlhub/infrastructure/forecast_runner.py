@@ -17,6 +17,18 @@ def _get_output_dir() -> str:
     return os.path.join(settings.data_dir, "output")
 
 
+def _container_user() -> list[str]:
+    """Run the container as the worker's user, not root.
+
+    Files the forecast writes in output/ then belong to the etlhub user, so
+    DELETE /output/reset can remove them without sudo. HOME points to a writable
+    directory because the image has no home for that user.
+    """
+    if os.getuid() == 0:
+        return []
+    return ['--user', f'{os.getuid()}:{os.getgid()}', '-e', 'HOME=/tmp']
+
+
 def _build_dynamic_env_file(host_pwd: str, job_id: str) -> str:
     """Merge the project's root .env file with Redis-based overrides into a
     temporary file, to be used with `docker run --env-file`."""
@@ -95,11 +107,15 @@ def run_rscript(job_id, params, job_store: JobStore):
 
     try:
         env_file = _build_dynamic_env_file(host_pwd, job_id)
+        # Create output/ ourselves: if it is missing, Docker creates the mount source as root
+        # and the container, running as our user, could not write into it.
+        os.makedirs(os.path.join(host_pwd, "output"), exist_ok=True)
         cmd = [
             'docker', 'run', '--rm',
             '--env-file', env_file,
             '--network', 'host',
             '--cap-add', 'SYS_NICE',
+            *_container_user(),
             '-v', input_vol,
             '-v', output_vol,
             'mvevans89/pridec_forecast:0.1.0',
