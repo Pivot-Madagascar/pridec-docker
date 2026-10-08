@@ -1,6 +1,6 @@
 import redis
 import logging
-from etlhub.core.config import get_settings
+from etlhub.infrastructure.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 
@@ -12,11 +12,7 @@ class ConfigStore:
 
     def _get_client(self) -> redis.Redis:
         if self._client is None:
-            s = get_settings()
-            self._client = redis.Redis(
-                host=s.redis_host, port=s.redis_port, db=s.redis_db,
-                decode_responses=True,
-            )
+            self._client = get_redis()
         return self._client
 
     def get_all(self) -> dict:

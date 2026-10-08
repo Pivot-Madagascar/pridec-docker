@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { handleTokenSubmit } from '@/services/auth'
+import { login } from '@/services/auth'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const token = ref('')
 const dhis2Url = ref(import.meta.env.VITE_DHIS2_URL || '')
+const username = ref('')
+const password = ref('')
 const error = ref('')
+const loading = ref(false)
 
 watch(
   () => authStore.isAuthenticated,
@@ -22,49 +24,66 @@ watch(
 
 const handleSubmit = async () => {
     error.value = ''
-    if (!token.value.trim()) {
-        error.value = 'Please enter a token'
+    if (!dhis2Url.value.trim() || !username.value.trim() || !password.value) {
+        error.value = 'Please fill in the DHIS2 URL, username and password'
         return
     }
+    loading.value = true
     try {
-        await handleTokenSubmit(token.value, dhis2Url.value)
-    } catch (e) {
-        error.value = 'Invalid DHIS2 token'
+        await login(dhis2Url.value.trim(), username.value.trim(), password.value)
+    } catch (e: any) {
+        error.value = e?.message || 'Login failed'
+    } finally {
+        // Never keep the password in memory longer than the request.
+        password.value = ''
+        loading.value = false
     }
 }
 </script>
 
 <template>
   <div class="login-container">
-    <div class="login-card">
-      <h2 class="form-title">Login with DHIS2 Token</h2>
+    <form class="login-card" @submit.prevent="handleSubmit">
+      <h2 class="form-title">Login with DHIS2</h2>
       <div v-if="error" class="error-message">{{ error }}</div>
       <p class="login-description">
-        Paste your DHIS2 Bearer token below to authenticate.
+        Use your account on the target DHIS2 instance.
       </p>
       <div class="form-group">
         <label for="dhis2Url">DHIS2 URL</label>
-        <input 
-          id="dhis2Url" 
-          v-model="dhis2Url" 
+        <input
+          id="dhis2Url"
+          v-model="dhis2Url"
           type="url"
+          autocomplete="url"
           placeholder="https://your-dhis2-instance.org"
+          required
         />
       </div>
       <div class="form-group">
-        <label for="token">DHIS2 Token</label>
-        <textarea 
-          id="token" 
-          v-model="token" 
-          placeholder="Paste your DHIS2 Bearer token here"
-          rows="3"
+        <label for="username">Username</label>
+        <input
+          id="username"
+          v-model="username"
+          type="text"
+          autocomplete="username"
           required
-        ></textarea>
+        />
       </div>
-      <button @click="handleSubmit" class="submit-btn">
-        Login
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input
+          id="password"
+          v-model="password"
+          type="password"
+          autocomplete="current-password"
+          required
+        />
+      </div>
+      <button type="submit" class="submit-btn" :disabled="loading">
+        {{ loading ? 'Logging in...' : 'Login' }}
       </button>
-    </div>
+    </form>
   </div>
 </template>
 
@@ -109,14 +128,6 @@ const handleSubmit = async () => {
   font-weight: 500;
 }
 
-.form-group textarea {
-   padding: 0.5rem;
-   border: 1px solid #ccc;
-   border-radius: 4px;
-   font-family: monospace;
-   resize: vertical;
-}
-
 .form-group input {
    padding: 0.5rem;
    border: 1px solid #ccc;
@@ -144,5 +155,10 @@ const handleSubmit = async () => {
 
 .submit-btn:hover {
   background: #2563eb;
+}
+
+.submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

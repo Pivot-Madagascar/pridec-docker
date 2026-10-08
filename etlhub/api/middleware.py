@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from etlhub.infrastructure.request_tracker import get_request_tracker
 from etlhub.core.config import get_settings
@@ -36,6 +36,26 @@ def setup_cors(app):
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+
+_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def is_allowed_origin(origin: str | None) -> bool:
+    """True when there is no Origin (not a browser) or it is the etlui origin.
+
+    The session cookie is SameSite=Strict, but every port of the same host (DHIS2 on
+    :8082, for instance) counts as the same site, so the origin is checked too.
+    Requests without Origin (curl, scripts) are left to the session check.
+    """
+    return not origin or origin.rstrip("/") == get_settings().frontend_url.rstrip("/")
+
+
+async def check_origin(request: Request, call_next):
+    """Refuse state-changing browser requests from another origin."""
+    if request.method in _UNSAFE_METHODS and not is_allowed_origin(request.headers.get("origin")):
+        return JSONResponse(status_code=403, content={"detail": "Origin not allowed"})
+    return await call_next(request)
 
 
 _tracker_local = threading.local()

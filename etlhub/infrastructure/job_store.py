@@ -3,8 +3,8 @@ import io
 from pathlib import Path
 import sys
 import contextlib
-import redis
 from etlhub.core.config import get_settings
+from etlhub.infrastructure.redis_client import get_redis
 
 
 class JobStore:
@@ -12,13 +12,7 @@ class JobStore:
 
     def _get_redis(self):
         if self._redis_client is None:
-            settings = get_settings()
-            self._redis_client = redis.Redis(
-                host=settings.redis_host,
-                port=settings.redis_port,
-                db=settings.redis_db,
-                decode_responses=True,
-            )
+            self._redis_client = get_redis()
         return self._redis_client
 
     def get(self, job_id: str) -> dict | None:

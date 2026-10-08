@@ -5,8 +5,8 @@ import threading
 from contextlib import closing
 from pathlib import Path
 
-import redis
 from etlhub.core.config import get_settings
+from etlhub.infrastructure.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +32,7 @@ class RequestTracker:
 
     def _get_redis(self):
         if self._redis_client is None:
-            settings = get_settings()
-            self._redis_client = redis.Redis(
-                host=settings.redis_host,
-                port=settings.redis_port,
-                db=settings.redis_db,
-                decode_responses=True,
-            )
+            self._redis_client = get_redis()
         return self._redis_client
 
     def _connect(self) -> sqlite3.Connection:

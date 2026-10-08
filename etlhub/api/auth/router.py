@@ -1,126 +1,147 @@
+import logging
+import time
+
 import httpx
-from typing import Optional
-from urllib.parse import urlparse
+import redis
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel, Field, SecretStr
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from etlhub.api.auth.dhis2_auth import (
+    SESSION_COOKIE,
+    TOKEN_LIFETIME_SECONDS,
+    DHIS2Error,
+    create_pat,
+    dhis2_client,
+    fetch_me,
+    get_current_user,
+    normalize_dhis2_url,
+    revoke_pat,
+)
+from etlhub.core.config import get_settings
+from etlhub.infrastructure import auth_store
+from etlhub.infrastructure.config_store import ConfigStore
 
-from etlhub.api.auth.dhis2_auth import get_current_user, get_dhis2_user_info
-from etl.scripts.config import get_dhis_url
+logger = logging.getLogger(__name__)
 
-auth_router = APIRouter()
+auth_router = APIRouter(tags=["Authentication"])
 
-
-def _validate_dhis2_url(url: str, settings) -> bool:
-    if not url:
-        return False
-    if not settings.dhis2_allowed_hosts:
-        return True
-    try:
-        host = urlparse(url).netloc
-        allowed = [h.strip() for h in settings.dhis2_allowed_hosts.split(",") if h.strip()]
-        return host in allowed
-    except Exception:
-        return False
-
-
-@auth_router.post("/auth/validate-token")
-async def validate_token(
-    token: str = Body(..., embed=True),
-    dhis2_url: Optional[str] = Body(None),
-):
-    """Validate a DHIS2 token and return user info."""
-    from etlhub.core.config import get_settings
-
-    settings = get_settings()
-    url = dhis2_url or get_dhis_url()
-    if not url:
-        raise HTTPException(
-            status_code=500,
-            detail="DHIS2 URL not configured",
-        )
-
-    if not _validate_dhis2_url(url, settings):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid or disallowed DHIS2 URL",
-        )
-
-    user_info = await get_dhis2_user_info(token=token, dhis2_url=url)
-
-    if not user_info:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid DHIS2 token",
-        )
-
-    return {"user": user_info}
+MAX_FAILED_LOGINS = 5
+FAILED_LOGIN_WINDOW_SECONDS = 15 * 60
 
 
-@auth_router.get("/auth/dhis2/login")
-async def dhis2_login():
-    """Redirect to DHIS2 OAuth authorization endpoint."""
-    from etlhub.core.config import get_settings
+class LoginRequest(BaseModel):
+    dhis2_url: str = Field(min_length=1, max_length=2048)
+    username: str = Field(min_length=1, max_length=255)
+    password: SecretStr = Field(min_length=1, max_length=1024)
 
-    settings = get_settings()
-    base_url = get_dhis_url()
-    if not base_url or not settings.dhis2_client_id:
-        raise HTTPException(
-            status_code=500,
-            detail="DHIS2 OAuth not configured",
-        )
 
-    auth_url = (
-        f"{base_url.rstrip('/')}/oauth/authorize?"
-        f"client_id={settings.dhis2_client_id}&"
-        f"response_type=code&"
-        f"redirect_uri={settings.dhis2_redirect_uri}"
+def _set_session_cookie(response: Response, session_id: str) -> None:
+    response.set_cookie(
+        SESSION_COOKIE,
+        session_id,
+        max_age=TOKEN_LIFETIME_SECONDS,
+        httponly=True,
+        samesite="strict",
+        secure=get_settings().cookie_secure,
+        path="/",
     )
-    return {"auth_url": auth_url}
 
 
-@auth_router.post("/auth/dhis2/callback")
-async def dhis2_callback(code: str):
-    """Exchange authorization code for access token."""
-    from etlhub.core.config import get_settings
+def _revoke_previous(client: httpx.Client, url: str, basic: tuple) -> None:
+    """Revoke the token etlhub created at the previous login, and only that one."""
+    previous = auth_store.get_credential()
+    if not previous:
+        return
+    revoked = revoke_pat(client, previous["url"], previous["pat_uid"], token=previous["token"])
+    if not revoked and previous["url"] == url:
+        revoke_pat(client, url, previous["pat_uid"], auth=basic)
 
-    settings = get_settings()
-    base_url = get_dhis_url()
-    if not base_url or not settings.dhis2_client_id or not settings.dhis2_client_secret:
-        raise HTTPException(
-            status_code=500,
-            detail="DHIS2 OAuth not configured",
-        )
 
+def _rollback(client: httpx.Client, url: str, uid: str, basic: tuple) -> None:
+    revoke_pat(client, url, uid, auth=basic)
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{base_url.rstrip('/')}/oauth/token",
-                data={
-                    "grant_type": "authorization_code",
-                    "code": code,
-                    "client_id": settings.dhis2_client_id,
-                    "client_secret": settings.dhis2_client_secret,
-                    "redirect_uri": settings.dhis2_redirect_uri,
-                },
-                timeout=settings.dhis2_auth_timeout,
-            )
-            if response.status_code == 200:
-                token_data = response.json()
-                user_info = await get_dhis2_user_info(token=token_data["access_token"])
-                return {"access_token": token_data["access_token"], "user": user_info}
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Failed to obtain access token from DHIS2",
+        current = auth_store.get_credential()
+        if current and current["pat_uid"] == uid:
+            auth_store.delete_credential()
+    except redis.RedisError as e:
+        logger.error("Could not remove the revoked DHIS2 credential from Redis: %s", e)
+
+
+@auth_router.post("/auth/login")
+def login(body: LoginRequest, request: Request, response: Response):
+    """Log in with a DHIS2 username and password.
+
+    etlhub creates a 24h DHIS2 personal access token for this user, stores it in Redis
+    for the ETL jobs, revokes the one created at the previous login, and sets an
+    HttpOnly session cookie. The password is neither stored nor logged.
+    """
+    url = normalize_dhis2_url(body.dhis2_url)
+    if not url:
+        raise HTTPException(status_code=400, detail="DHIS2 URL not allowed")
+
+    ip = request.client.host if request.client else "unknown"
+    try:
+        if auth_store.failed_logins(ip, body.username) >= MAX_FAILED_LOGINS:
+            raise HTTPException(status_code=429, detail="Too many failed attempts, try again later")
+
+        basic = (body.username, body.password.get_secret_value())
+        with dhis2_client() as client:
+            user = fetch_me(client, url, auth=basic)
+            if user is None:
+                auth_store.record_failed_login(ip, body.username, FAILED_LOGIN_WINDOW_SECONDS)
+                raise HTTPException(status_code=401, detail="Invalid DHIS2 username or password")
+            auth_store.clear_failed_logins(ip, body.username)
+
+            _revoke_previous(client, url, basic)
+            expires_at = int(time.time()) + TOKEN_LIFETIME_SECONDS
+            key, uid = create_pat(client, url, basic, expires_at * 1000)
+            try:
+                if fetch_me(client, url, token=key) is None:
+                    raise DHIS2Error("DHIS2 rejected the token it just created")
+                auth_store.set_credential(
+                    {"url": url, "token": key, "pat_uid": uid, "username": user["username"], "expires_at": expires_at},
+                    ttl=TOKEN_LIFETIME_SECONDS,
                 )
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"DHIS2 OAuth error: {str(e)}",
-        )
+                session_id = auth_store.create_session(user, uid, TOKEN_LIFETIME_SECONDS)
+                # Values written by the old config form; nothing reads them any more.
+                ConfigStore().delete_keys(["DHIS_URL", "DHIS_TOKEN"])
+            except Exception:
+                _rollback(client, url, uid, basic)
+                raise
+    except (DHIS2Error, httpx.HTTPError) as e:
+        logger.warning("DHIS2 login failed for user=%s url=%s: %s", body.username, url, e)
+        raise HTTPException(status_code=502, detail="DHIS2 unreachable or returned an unexpected response")
+    except redis.RedisError as e:
+        logger.error("DHIS2 login failed for user=%s: Redis error: %s", body.username, e)
+        raise HTTPException(status_code=503, detail="Session store unavailable")
+
+    _set_session_cookie(response, session_id)
+    logger.info("DHIS2 login: user=%s url=%s ip=%s token_uid=%s", body.username, url, ip, uid)
+    return {"user": user, "expires_at": expires_at}
 
 
-@auth_router.get("/auth/me", dependencies=[Depends(get_current_user)])
-async def get_me(user: dict = Depends(get_current_user)):
-    """Get current authenticated user info."""
+@auth_router.post("/auth/logout", status_code=204)
+def logout(request: Request):
+    """End the session and revoke its DHIS2 token. Always clears the cookie."""
+    session_id = request.cookies.get(SESSION_COOKIE)
+    session = auth_store.get_session(session_id) if session_id else None
+    if session:
+        auth_store.delete_session(session_id)
+        credential = auth_store.get_credential()
+        if credential and credential["pat_uid"] == session["pat_uid"]:
+            with dhis2_client() as client:
+                revoke_pat(client, credential["url"], credential["pat_uid"], token=credential["token"])
+            auth_store.delete_credential()
+        logger.info("DHIS2 logout: user=%s", session["user"].get("username"))
+
+    response = Response(status_code=204)
+    response.delete_cookie(
+        SESSION_COOKIE, path="/", httponly=True, samesite="strict", secure=get_settings().cookie_secure
+    )
+    return response
+
+
+@auth_router.get("/auth/me")
+def get_me(user: dict = Depends(get_current_user)):
+    """Current user, while the session and its DHIS2 token are valid."""
     return user

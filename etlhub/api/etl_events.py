@@ -1,9 +1,7 @@
 import json
 from datetime import datetime, timezone
 
-from etlhub.core.config import get_settings
-
-import redis
+from etlhub.infrastructure.redis_client import get_redis
 
 
 class ETLEventManager:
@@ -12,13 +10,7 @@ class ETLEventManager:
 
     def _get_client(self):
         if self._client is None:
-            settings = get_settings()
-            self._client = redis.Redis(
-                host=settings.redis_host,
-                port=settings.redis_port,
-                db=settings.redis_db,
-                decode_responses=True,
-            )
+            self._client = get_redis()
         return self._client
 
     def publish_log(self, job_id: str, level: str, message: str, source: str = "etl-processor"):

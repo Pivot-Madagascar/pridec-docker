@@ -1,36 +1,31 @@
+import api from './api'
 import { useAuthStore } from '@/stores/auth'
 
-const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8111'
-
-
-export async function handleTokenSubmit(token: string, dhis2Url?: string): Promise<void> {
-    const authStore = useAuthStore()
-    const res = await fetch(`${API_URL}/auth/validate-token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, dhis2_url: dhis2Url }),
-    })
-    if (!res.ok) throw new Error('Token validation failed')
-    const data = await res.json()
-    authStore.setToken(token)
-    authStore.setUser(data.user)
+const LOGIN_ERRORS: Record<number, string> = {
+    400: 'This DHIS2 URL is not allowed',
+    401: 'Invalid DHIS2 username or password',
+    429: 'Too many failed attempts, try again later',
+    502: 'DHIS2 is unreachable or returned an unexpected response',
+    503: 'Session store unavailable, contact an administrator',
 }
 
+// etlhub exchanges the credentials for a DHIS2 token it keeps server-side,
+// and answers with an HttpOnly session cookie.
+export async function login(dhis2Url: string, username: string, password: string): Promise<void> {
+    try {
+        const { data } = await api.post('/auth/login', { dhis2_url: dhis2Url, username, password })
+        useAuthStore().setUser(data.user)
+    } catch (e: any) {
+        throw new Error(LOGIN_ERRORS[e?.response?.status] ?? 'Login failed')
+    }
+}
 
 export async function logout(): Promise<void> {
-    const authStore = useAuthStore()
-    authStore.clear()
+    try {
+        await api.post('/auth/logout')
+    } catch (e: any) {
+        console.warn('Logout request failed; the session expires on its own:', e?.message)
+    }
+    useAuthStore().clear()
     window.location.href = '/login'
-}
-
-
-export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
-    const authStore = useAuthStore()
-    return fetch(`${API_URL}${path}`, {
-        ...options,
-        headers: {
-            ...options.headers,
-            Authorization: `Bearer ${authStore.token}`,
-        },
-    })
 }

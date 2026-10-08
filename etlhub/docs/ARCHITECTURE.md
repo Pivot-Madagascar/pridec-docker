@@ -77,7 +77,7 @@ Worth knowing:
 - **DHIS2**: writes (`dataValueSets`, `resourceTables`, datastore) and reads (`analytics`, `organisationUnits`). The scripts use the configuration from `etl/scripts/config.py`.
 - **GEE** and **Pivot**: read by `import_gee` and `import_pivot_*` (service key `.gee-private-key.json` in the current directory).
 - **Docker**: the worker runs `mvevans89/pridec_forecast:0.1.0` (`host` network, `input/` read-only, `output/` read-write); it needs access to the Docker socket.
-- **Authentication**: `etlui` only uses API-token login. `POST /auth/validate-token` returns the user; the raw DHIS2 token is stored in `localStorage` and sent as `Authorization: Bearer` on every call. The back end checks it against DHIS2 (`/api/me.json`, 120 s in-memory cache) **only** on `/api/config/*` and `/auth/me`. The OAuth routes exist (`/auth/dhis2/*`) but the front end does not call them.
+- **Authentication** (`api/auth/`, `infrastructure/auth_store.py`): `etlui` sends a DHIS2 URL, username and password to `POST /auth/login`. etlhub checks them (`GET /api/me`, Basic auth), revokes the token it created at the previous login, creates a 24 h personal access token (`POST /api/apiToken`, `MethodAllowedList` attribute required by DHIS2 2.40), checks it, and stores it in Redis `dhis2:credential` with a 24 h TTL. The browser gets an `etlhub_session` cookie (`HttpOnly`, `SameSite=Strict`, `Secure` unless `COOKIE_SECURE=false`); Redis keeps `session:{sha256(id)}` with the same TTL. `get_current_user` accepts a session only while its `pat_uid` is the active credential's, so a new login logs every other session out. `POST /auth/logout` revokes the token with the token itself (checked against DHIS2 2.40.3 on 2026-10-08) and deletes it. The password is never stored or logged; the token never reaches the browser (`GET /api/config/` returns `has_dhis_token`). Safeguards: `DHIS2_ALLOWED_HOSTS` (empty = every login refused, https required except localhost, no redirects followed), 5 failed logins per IP and username in 15 min → 429, and `check_origin` (`api/middleware.py`) refuses POST/PUT/PATCH/DELETE whose `Origin` is not `FRONTEND_URL`. The ETL scripts read the credential through `get_dhis_url()` / `get_dhis_token()` (`etl/scripts/config.py`); without it they raise `DHIS2SessionError` ("log in again") instead of using `.env`, unless `DHIS_ENV_FALLBACK=true` is in the process environment (set in `compose.yaml` for the CLI only). The forecast container never receives `DHIS_URL` / `DHIS_TOKEN`. Persistence relies on Redis AOF (`redis.conf`). Every router except `auth_router` requires the session through `include_router(..., dependencies=[Depends(get_current_user)])`; `get_current_user` takes an `HTTPConnection`, so it also guards the log WebSocket: wrong `Origin` → handshake refused (403), no session → accepted then closed with `4401`. `tests/api/test_route_protection.py` walks every route.
 
 ## 7. Data pipeline
 
@@ -101,10 +101,10 @@ Concurrency: no lock and no deduplication. Two simultaneous `fetch_*`, `validate
 
 ## 8. Security (summary)
 
-1. Only `/api/config/*` and `/auth/me` are authenticated. Everything else is open, including DHIS2 writes, `docker run`, `DELETE /output/reset` and the WebSocket.
+1. Every route needs the etlui session except `/auth/login`, `/auth/logout`, `GET /` and FastAPI's `/docs`, `/redoc`, `/openapi.json`. There are no roles: any logged-in user can launch any job.
 2. `/output/reset` is protected only by the existence of an `.output_sig` file, with a `sudo rm -rf` fallback.
-3. `webhook_url` and `dhis2_url` (when `DHIS2_ALLOWED_HOSTS` is empty) allow outgoing requests to any address.
-4. `GET /api/config/` returns `DHIS_TOKEN` in clear. The middleware logs the full URL: any secret in a query string ends up in `logs/requests/`.
+3. `webhook_url` allows outgoing requests to any address. The login only sends credentials to `DHIS2_ALLOWED_HOSTS`.
+4. The middleware logs the full URL: any secret in a query string ends up in `logs/requests/`. The login password travels in the body and is not logged.
 5. The worker needs the Docker socket (equivalent to root on the host).
 
 ## 9. Operations

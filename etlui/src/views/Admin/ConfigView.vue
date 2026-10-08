@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useConfigStore } from '@/stores/config'
 
 const configStore = useConfigStore()
+// DHIS2 URL and token come from the login and are read-only here.
+const tokenStatus = computed(() => {
+  const config = configStore.config
+  if (!config?.has_dhis_token) return 'No active token: log in again'
+  if (!config.dhis_token_expires_at) return 'Active'
+  return `Active until ${new Date(config.dhis_token_expires_at * 1000).toLocaleString()}`
+})
 const form = ref({
-  dhis_url: '',
-  dhis_token: '',
   parent_ou: '',
   ou_level: '' as number | string | null,
   disease_code: ''
@@ -16,8 +21,6 @@ onMounted(async () => {
   await configStore.fetchConfig()
   if (configStore.config) {
     form.value = {
-      dhis_url: configStore.config.dhis_url || '',
-      dhis_token: configStore.config.dhis_token || '',
       parent_ou: configStore.config.parent_ou || '',
       ou_level: configStore.config.ou_level ?? '',
       disease_code: configStore.config.disease_code || ''
@@ -28,8 +31,6 @@ onMounted(async () => {
 const handleSave = async () => {
   showSuccess.value = false
   const payload = {
-    dhis_url: form.value.dhis_url || null,
-    dhis_token: form.value.dhis_token || null,
     parent_ou: form.value.parent_ou || null,
     ou_level: form.value.ou_level ? Number(form.value.ou_level) : null,
     disease_code: form.value.disease_code || null
@@ -51,8 +52,6 @@ const handleReload = async () => {
     await configStore.reloadConfig()
     if (configStore.config) {
       form.value = {
-        dhis_url: configStore.config.dhis_url || '',
-        dhis_token: configStore.config.dhis_token || '',
         parent_ou: configStore.config.parent_ou || '',
         ou_level: configStore.config.ou_level ?? '',
         disease_code: configStore.config.disease_code || ''
@@ -80,23 +79,18 @@ const handleReload = async () => {
       </div>
 
       <div class="form-group">
-        <label for="dhis_url">DHIS URL</label>
+        <label for="dhis_url">DHIS URL (from login)</label>
         <input
           id="dhis_url"
-          v-model="form.dhis_url"
+          :value="configStore.config?.dhis_url || ''"
           type="url"
-          placeholder="https://your-dhis2-instance.org"
+          readonly
         />
       </div>
 
       <div class="form-group">
-        <label for="dhis_token">DHIS Token</label>
-        <input
-          id="dhis_token"
-          v-model="form.dhis_token"
-          type="password"
-          placeholder="Bearer token"
-        />
+        <label>DHIS Token</label>
+        <p class="token-status">{{ tokenStatus }}</p>
       </div>
 
       <div class="form-group">
@@ -168,6 +162,14 @@ const handleReload = async () => {
 
 .form-group input {
   @apply w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 transition-colors;
+}
+
+.form-group input[readonly] {
+  @apply opacity-60 cursor-not-allowed;
+}
+
+.token-status {
+  @apply text-sm text-gray-300;
 }
 
 .error-message {

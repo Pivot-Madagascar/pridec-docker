@@ -18,7 +18,7 @@ async def get_redis_client() -> aioredis.Redis:
     if redis_pool is None:
         settings = get_settings()
         redis_pool = aioredis.ConnectionPool.from_url(
-            f"redis://{settings.redis_host}:{settings.redis_port}/{settings.redis_db}",
+            settings.redis_url,
             decode_responses=True,
             max_connections=10,
         )
@@ -65,6 +65,7 @@ async def _get_status(job_id: str) -> Optional[dict]:
 
 
 async def handle_etl_logs_ws(websocket: WebSocket, job_id: str):
+    # The session and origin are checked by the router dependency (get_current_user).
     await websocket.accept()
 
     try:

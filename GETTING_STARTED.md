@@ -31,18 +31,35 @@ pip install -r etlhub/requirements.txt
 
 ## 3. Start Redis Server
 
-Redis is used as a message broker for Celery. Start it with the following command in the virtual environment:
+Redis is the Celery broker and also keeps the etlui login (the DHIS2 token, 24 h). It must run with a password and with persistence, using `redis.conf` from the project root:
+
+Run these from the project root, once. They generate a random password (hex, so no quoting problem) and write it both to `redis-secret.conf` and to the env file etlhub reads. Nothing is printed. Replace `.env.debug` with the file your `ENV_FILE` points to:
 
 ```bash
-# From the project root directory
-redis-server
+mkdir -p redis-data && chmod 700 redis-data
+pw=$(openssl rand -hex 24)
+printf 'requirepass %s\n' "$pw" > redis-secret.conf && chmod 600 redis-secret.conf
+printf '\nREDIS_PASSWORD=%s\n' "$pw" >> .env.debug
+unset pw
 ```
 
-Redis should listen on `localhost:6379` by default. To verify that Redis is working:
+Then, every time (the include path must be absolute):
 
 ```bash
-redis-cli ping
+redis-server redis.conf --include "$PWD/redis-secret.conf"
+```
+
+`redis-data/` and `redis-secret.conf` are git-ignored. To check that Redis is working (it asks for the password, which is the value after `requirepass` in `redis-secret.conf`):
+
+```bash
+redis-cli --askpass ping
 # Should return: PONG
+```
+
+**etlhub reads its settings from the file named by `ENV_FILE`**, not from the root `.env` (the default, `etlhub/.env`, does not exist). The VS Code launch configurations already set `ENV_FILE` to `.env.debug`. In a terminal, export it before starting the worker or the API, otherwise they connect without a password and fail with `NOAUTH`:
+
+```bash
+export ENV_FILE="$PWD/.env.debug"   # from the project root
 ```
 
 ## 4. Start the Celery Worker
@@ -117,14 +134,18 @@ For full development, you need to have all three services running in separate te
 
 ### Terminal 1 - Celery Worker
 ```bash
+# From the project root
 source test-venv/bin/activate
+export ENV_FILE="$PWD/.env.debug"
 python -m etlhub.run_celery
 ```
 
 ### Terminal 2 - FastAPI Server
 ```bash
+# From the project root
 source test-venv/bin/activate
-python -m run_server
+export ENV_FILE="$PWD/.env.debug"
+cd etlhub && python -m run_server
 ```
 
 ### Terminal 3 - Frontend Server
@@ -135,8 +156,11 @@ yarn start
 
 ### Redis (optional - if not running as a system service)
 ```bash
-redis-server
+redis-server redis.conf --include "$PWD/redis-secret.conf"
 ```
+
+### Login
+etlui asks for the DHIS2 URL, username and password. The DHIS2 host must be listed in `DHIS2_ALLOWED_HOSTS` (for example `localhost:8082`). In local http development, set `COOKIE_SECURE=false` if your browser does not keep the session cookie.
 
 Once all services are started:
 - **Frontend**: http://localhost:5173
