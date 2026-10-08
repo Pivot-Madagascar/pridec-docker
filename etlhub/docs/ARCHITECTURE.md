@@ -52,10 +52,10 @@ Outside the written rule but widespread: `api` → `domain` (DTOs), `infrastruct
 1. `POST /<job>?webhook_url=…` → the service generates `job_id = <type>_<8 hex>` and calls `TaskLauncher.launch` → **202** response `{status, message, job_id, webhook_url}`.
 2. The worker runs `_run_task`: `job:{id}` becomes `running`, the script runs with stdout/stderr captured (`_JobLogger`), each fragment is published on `etl_logs:{id}` and appended to `logs/{id}.log`.
 3. End: `job:{id}` becomes `success` or `error`, a message is published on `etl_status:{id}`, and the webhook is POSTed if one was given. On error the task re-raises the exception.
-4. The front opens `WS /api/tracking/etl-logs/{job_id}`: `etl_log_history` → `job_status_update` / `etl_log_entry` → `etl_log_complete` → close. Code `4004` if there is no history.
+4. The front opens `WS /api/tracking/etl-logs/{job_id}`: `etl_log_history` → `job_status_update` / `etl_log_entry` → `etl_log_complete` → close. Subscribes before reading history and status, waits for pub/sub messages with a 1 s timeout (no busy-wait), re-reads `job:{id}` every 10 s in case the final event was missed, and stops when the client leaves. Closes with `4004` **only for an unknown job** (no `job:{id}` and no logs); a known job without logs yet gets an empty `etl_log_history` and stays open. A job whose record expired but has logs gets its history then `etl_log_complete` with `final_status: null`. Jobs are recorded as `pending` at launch (`CeleryTaskLauncher.launch`), so they are known from the 202 on.
 
 Worth knowing:
-- Forecast writes its logs **only at the end**: a WebSocket opened during the run receives `4004`. For ETL jobs the same happens if it opens before the first `print`. `etlui` does not retry, because the close is clean.
+- Forecast writes its logs **only at the end**: a WebSocket opened during the run gets status updates but no log lines until the end.
 - `etlui` marks a step `success` as soon as it receives the 202, without waiting for the job to finish.
 - No timeout anywhere (Celery, forecast `subprocess.run`). If the worker is killed, `job:{id}` stays `running` until the TTL (24 h) expires, and the WebSocket stays open.
 - `/post_forecast` and `/update_key` do not follow this model: they run **synchronously** in the API, which blocks the asyncio loop.
@@ -66,7 +66,7 @@ Worth knowing:
 |---|---|---|
 | Job status | Redis `job:{id}` | 24 h TTL |
 | Job logs | Redis `etl_logs:{id}` + `logs/{id}.log`, `logs/{id}.json` (forecast) | 24 h TTL; files are never purged |
-| HTTP requests | Redis `req:{id}` + `logs/requests/*.json` | 24 h TTL; files are never rotated (511 files at the time of the audit) |
+| HTTP requests | SQLite `logs/etlhub.db`, table `request_log` | 30 days, purged on each insert. Unhandled errors recorded as 500 with `error`; `/api/tracking` never recorded |
 | Dynamic config | Redis, hash `app:config:dynamic` | no TTL |
 | ETL data | `input/`, `output/` | never purged |
 

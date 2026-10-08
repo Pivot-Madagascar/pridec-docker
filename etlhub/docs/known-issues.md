@@ -11,7 +11,6 @@ Priority scale: **P1** fix next (security or a broken feature), **P2** fix soon 
 | 1 | P3 | `DELETE /output/reset`: "signature" is only "file exists" (sudo fallback removed) | 1.1 |
 | 2 | P1 | `webhook_url`: SSRF from the worker (any URL, redirects followed) | 1.2 |
 | 3 | P1 | `/validate_inputs`: free file paths and `input_dir` | 1.3 |
-| 4 | P1 | Log WebSocket busy-waits (`get_message` without timeout) | 3 |
 | 5 | P1 | `/post_forecast`, `/update_key` block the event loop | 3 |
 | 6 | P2 | A login while a job runs revokes the token that job uses | 1.4 |
 | 7 | P2 | No roles: any DHIS2 user of an allowed host can log in and run anything | 1.5 |
@@ -20,7 +19,7 @@ Priority scale: **P1** fix next (security or a broken feature), **P2** fix soon 
 | 10 | P2 | `etlui` marks a step `success` on the 202; forecast logs only at the end | 3 |
 | 11 | P3 | Everything else below | — |
 
-Order of work suggested: 2 → 3 (small, independent, each its own change), then 4 and 5 (they degrade the whole API), then 6 (needs a product decision).
+Order of work suggested: 2 → 3 (small, independent, each its own change), then 5 (it freezes the whole API), then 6 and 7 (they need a product decision).
 
 ## 1. Security
 
@@ -29,8 +28,8 @@ Order of work suggested: 2 → 3 (small, independent, each its own change), then
 3. **P1 — `/validate_inputs` takes free paths** (`api/routers/etl/validation_router.py:24-31`, `validation_use_cases.py:36`). File paths and `input_dir` come from the query; the use case writes `config_valid.json`, `input_valid.json`, `polygon_valid.geojson` into `input_dir`. Fix: reuse the `ForecastParams` path validator (under `input/`, no `..`, no leading `-`).
 4. **P2 — A login revokes the token of running jobs.** Scripts read the DHIS2 token once at start (`DHIS_TOKEN = get_dhis_token()`). A new login revokes it (`api/auth/router.py`, `_revoke_previous`), so a running import gets 401 from DHIS2 mid-way and stops half done. Same at logout and at the 24 h expiry. Decision needed: refuse login/logout while a DHIS2 job runs (409), or document it.
 5. **P2 — No roles.** Any user of a host in `DHIS2_ALLOWED_HOSTS` who can log in becomes the global DHIS2 identity for every job, and can call every endpoint (`DELETE /output/reset`, `/forecast/`, DHIS2 writes). Decision needed: require a DHIS2 authority or user group at login?
-6. **P2 — Request logs keep the full URL** (`api/middleware.py:94-107`, stored in SQLite `logs/etlhub.db` and Redis `req:{id}`). A secret in a query string (a `webhook_url` carrying a token) is stored. Bodies and headers are not logged, so the login password and cookies are not.
-7. **P3 — `X-Request-ID` is taken from the client** (`api/middleware.py:86`) and stored with `INSERT OR REPLACE` (`request_tracker.py:58`): a client can overwrite another request's log entry. No length limit. Fix: accept only a UUID. (The old path traversal risk is gone: the tracker no longer writes one file per request.)
+6. **P2 — Request logs keep the full URL** (`api/middleware.py:94-107`, stored in SQLite `logs/etlhub.db`, 30 days). A secret in a query string (a `webhook_url` carrying a token) is stored. Bodies and headers are not logged, so the login password and cookies are not.
+7. *Fixed (2026-10-08):* a client `X-Request-ID` is kept only if it is a UUID (`api/middleware.py`, `_request_id`), so it can no longer overwrite another entry.
 8. **P3 — The DHIS2 token is in clear in Redis** (`dhis2:credential`) and in its AOF/RDB files. Accepted: `redis.conf` binds to localhost, requires a password, and the data directory must stay `chmod 700`. The token lives 24 h and is revoked at logout.
 9. **P3 — Public pages to decide**: `GET /`, `/docs`, `/redoc`, `/openapi.json` (the full API map).
 10. **P3 — Forecast temp env file** `/tmp/forecast_{id}.env` holds the other `.env` secrets (`PIVOT_TOKEN`, GEE…) for the whole run and survives a SIGKILL. It no longer contains `DHIS_URL` / `DHIS_TOKEN`.
@@ -52,11 +51,11 @@ The `EventPublisher` port exists in `domain/interfaces/` but is never injected. 
 
 ## 3. Behaviour worth knowing
 
-- **P1 — Log WebSocket busy-waits** (`api/websockets/etl_logs.py:130`): `pubsub.get_message()` is called with its default `timeout=0.0`, so the loop spins and the 30 s `wait_for` never fires. If the job ends between the status read and `subscribe`, the client waits forever. *Unverified at runtime.*
+- *Fixed (2026-10-08):* the log WebSocket no longer busy-waits (1 s `get_message` timeout, 0.3 % CPU measured while waiting), subscribes before reading history, re-checks the job status every 10 s, stops when the client leaves, and closes with `4004` only for an unknown job. Jobs are recorded `pending` at launch. The tracking page follows pending/running jobs live in its request detail modal.
 - **P1 — `/post_forecast` and `/update_key` run inline** in `async def` handlers (`analytics_router.py:56,109` → `analytics_service.py:22,38`): the whole API, login and WebSockets included, is frozen while they run.
 - **P2 — No timeout, no reconciliation, no lock.** No Celery time limit, no timeout on the forecast `subprocess.run` (`forecast_runner.py:111`). A killed worker leaves `job:{id}` at `running` until the 24 h TTL. Two simultaneous `fetch_*`, `validate_inputs` or `forecast` runs write the same `input/` and `output/` files. Imports resend the same `dataValueSets` each time.
-- **P2 — `etlui` marks a step `success` on the 202** (`useEtlPipeline.ts`), and **forecast logs are written only at the end** (`forecast_runner.py`): a WebSocket opened during a forecast gets `4004`, a clean close that `etlui` does not retry.
-- **P2 — Swallowed errors**: `JobStore`, `RequestTracker.save` (Redis part) and pub/sub publishing catch every exception.
+- **P2 — `etlui` marks a step `success` on the 202** (`useEtlPipeline.ts`), and **forecast logs are written only at the end** (`forecast_runner.py`): a WebSocket opened during a forecast gets status updates but no log lines until the end.
+- **P2 — Swallowed errors**: `JobStore` and pub/sub publishing catch every exception.
 - **P3** — ETL failure: `save_logs` overwrites the job log with the traceback (`tasks.py`, `job_store.py`).
 - **P3** — Forecast status written and published twice; `task_forecast` duplicates `_run_task`. `run_rscript` rewrites the job record with a new `started`.
 - **P3** — `api/middleware.py:61`: `threading.local` shared across asyncio requests.
@@ -64,13 +63,15 @@ The `EventPublisher` port exists in `domain/interfaces/` but is never injected. 
 - **P3** — `build_analytics` ignores `DRYRUN`. Whether `update_key` calls DHIS2 with `DRYRUN=true` depends on `pivot_dhis_tools` (not in the repo, *unverified*).
 - **P3** — Scripts write under `os.getcwd()/input|output`; the worker's cwd is *unverified*.
 - **P3** — `TaskLaunchError` has a handler (`main.py`) but nothing raises it.
-- **Verified 2026-10-08**: `Settings` reads only the file named by `ENV_FILE` (default `etlhub/.env`, which does not exist); the root `.env` is not read. The team keeps exporting `ENV_FILE` by hand (`GETTING_STARTED.md`). Values exported in the process environment (or loaded by `load_dotenv` before the first `get_settings()`) override the file.
+- **Since 2026-10-08** `Settings` reads the root `.env` by default; `ENV_FILE` overrides it (VS Code debug configurations use `.env.debug`). Values exported in the process environment override the file. **Pending migration:** `.env.debug` is meant for local debugging only; decide what it keeps and align the launch configurations.
+
+Fixed (request tracking, 2026-10-08): unhandled errors are recorded (500 + `error`), `/api/tracking` is never recorded, writes run off the event loop, SQLite only with a 30-day purge (the Redis copy `req:{id}` and the unused `services` / `track_service` are removed), each entry has a `timestamp`; `etlui` `/tracking` shows the data (`storeToRefs`), loads the last 50 requests on mount and on Refresh (no polling, 10 per page, so pagination works), shows the real time and the endpoint, and opens the logs of a request's job (`job_id` read from its JSON response) in a modal · `logs/requests/` (658 legacy files) deleted.
 
 Fixed: one shared Redis client per process (`infrastructure/redis_client.py`) replaces the per-instance clients · request tracking is stored in SQLite, so `list_recent` is one indexed query · `ValidationError` is now raised (input upload).
 
 ## 4. Dead code and duplication
 
-- **P3** Dead: `track_service` (`api/middleware.py:65`), `ValidationResponse`, `BaseSchema`, `get_request_tracker_repo` (`core/dependencies.py:31`), `verify_signature` (`forecast_runner.py:66`), the `get_etl_event_manager` import in `core/dependencies.py`, `import uuid` in `validation_router.py`.
+- **P3** Dead: `ValidationResponse`, `BaseSchema`, `get_request_tracker_repo` (`core/dependencies.py:31`), `verify_signature` (`forecast_runner.py:66`), the `get_etl_event_manager` import in `core/dependencies.py`, `import uuid` in `validation_router.py`.
 - **P3** Duplicated: `_get_output_dir` and the signature check (`forecast_runner.py` and `forecast_report_router.py`), ten near-identical Celery tasks, `__import__(...)` used 4 times in `forecast_runner.py` to call `get_settings`.
 
 Fixed: the five separate Redis clients.
@@ -90,7 +91,7 @@ Fixed: the order-dependent `test_auth.py` failure (file rewritten) · tests no l
 
 - **P3** — `GETTING_STARTED.md:90-94` says port 8000; `run_server.py` uses 8111. The "Complete Setup" section runs `yarn start`; the script is `dev`.
 - **P3** — `.env.example` lacks `LOGS_DIR`, `DATA_DIR`, `HOST_PWD`, `ENV_FILE`, and has `GEE_PROJECT =` with a space.
-- **P3** — `REDIS_PASSWORD` differs between the local `.env` and `.env.debug` (seen on 2026-10-08); only `.env.debug` matches `redis-secret.conf`.
+- **P3** — `.env.debug` duplicates most of `.env` with different values for `DHIS_TOKEN`, `PIVOT_URL`, `PIVOT_TOKEN`, `LOG_LEVEL` (names compared on 2026-10-08). To clean up with the `.env.debug` migration.
 - **P3** — Two diverging versions of the skill: `etlhub/docs/SKILL.md` and `.claude/skills/etlhub/implementation.md` (probably not loaded: not named `SKILL.md`).
 - **P3** — Version drift: `pridec_gee` and `pivot_dhis_tools` differ between `etlhub/requirements.txt` and `etl/requirements.txt`. The OpenAPI text of `/forecast/` says `:latest`, the code uses `:0.1.0`.
 - **P3** — `etlhub/CLAUDE.MD` is in upper case; the root `CLAUDE.md` points to `etlhub/CLAUDE.md`.

@@ -22,7 +22,9 @@ class TrackingService:
         return RequestLog(**log)
 
     def get_etl_logs(self, job_id: str) -> ETLLog:
+        """Logs and, while the job record exists (24 h), its status and message."""
         logs = self._job_repo.get_logs(job_id)
-        if logs is None:
+        job = self._job_repo.get(job_id) or {}
+        if logs is None and not job:
             raise JobNotFoundError(f"ETL logs not found for this job_id: {job_id}")
-        return ETLLog(job_id=job_id, logs=logs)
+        return ETLLog(job_id=job_id, status=job.get("status"), message=job.get("message"), logs=logs)

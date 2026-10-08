@@ -1,10 +1,11 @@
-import uuid
-import threading
+import json
+import re
 import time
-from contextlib import contextmanager
-from urllib.parse import urlparse
+import uuid
+from datetime import datetime, timezone
 
 from fastapi import Request
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, Response
@@ -13,18 +14,20 @@ from etlhub.infrastructure.request_tracker import get_request_tracker
 from etlhub.core.config import get_settings
 
 
-def _should_track_request(url: str) -> bool:
-    settings = get_settings()
-    if not settings.tracked_endpoints:
-        return True
-    tracked = [e.strip() for e in settings.tracked_endpoints.split(",") if e.strip()]
+def _should_track_request(path: str) -> bool:
+    # Reading the tracking must not fill the tracking: never record /api/tracking, filter or not.
+    if path.startswith("/api/tracking"):
+        return False
+    tracked = [e.strip() for e in get_settings().tracked_endpoints.split(",") if e.strip()]
+    return not tracked or any(path.startswith(ep) for ep in tracked)
+
+
+def _request_id(header: str | None) -> str:
+    """Client X-Request-ID only if it is a UUID: anything else could overwrite another entry."""
     try:
-        path = urlparse(url).path
-        if path.startswith("/api/tracking"):
-            return False
-        return any(path.startswith(ep) for ep in tracked)
-    except Exception:
-        return True
+        return str(uuid.UUID(header))
+    except (TypeError, ValueError):
+        return str(uuid.uuid4())
 
 
 def setup_cors(app):
@@ -58,54 +61,61 @@ async def check_origin(request: Request, call_next):
     return await call_next(request)
 
 
-_tracker_local = threading.local()
+# Frozen job_id format: <task_type>_<8 hex>.
+_JOB_ID = re.compile(r"^[a-z_]+_[0-9a-f]{8}$")
+_MAX_JOB_BODY = 64 * 1024
 
 
-@contextmanager
-def track_service(service: str, method: str, url: str):
-    start = time.perf_counter()
-    entry = {"service": service, "method": method, "url": url}
-    if not hasattr(_tracker_local, "calls"):
-        _tracker_local.calls = []
-    _tracker_local.calls.append(entry)
-    _tracker_local.stack = getattr(_tracker_local, "stack", []) + [entry]
+async def _with_job_id(response: Response) -> tuple[Response, str | None]:
+    """Read `job_id` from a small JSON response (job launches, job status).
+
+    The body can only be read once, so the response is rebuilt from it. Large or
+    non-JSON responses (previews, the HTML report) are left untouched.
+    """
+    length = response.headers.get("content-length")
+    if "application/json" not in response.headers.get("content-type", "") or not length or int(length) > _MAX_JOB_BODY:
+        return response, None
+    body = b"".join([chunk async for chunk in response.body_iterator])
+    rebuilt = Response(content=body, status_code=response.status_code, headers=dict(response.headers))
     try:
-        yield entry
-    except Exception as exc:
-        entry["error"] = str(exc)
-        raise
-    finally:
-        entry["duration_ms"] = round((time.perf_counter() - start) * 1000, 2)
-        if hasattr(_tracker_local, "stack") and _tracker_local.stack:
-            _tracker_local.stack.pop()
+        job_id = json.loads(body).get("job_id")
+    except (ValueError, AttributeError):
+        job_id = None
+    return rebuilt, job_id if isinstance(job_id, str) and _JOB_ID.match(job_id) else None
 
 
 class RequestTrackingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start = time.perf_counter()
-        request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
-        _tracker_local.calls = []
-        _tracker_local.stack = []
-        _tracker_local.request_id = request_id
-
+        request_id = _request_id(request.headers.get("X-Request-ID"))
         request.state.request_id = request_id
 
-        response: Response = await call_next(request)
+        tracked = _should_track_request(request.url.path)
+        status_code, error, job_id = 500, None, None
+        try:
+            response: Response = await call_next(request)
+            status_code = response.status_code
+            if tracked:
+                response, job_id = await _with_job_id(response)
+        except Exception as exc:
+            # Unhandled errors are the requests most worth tracking: record them, then re-raise.
+            error = f"{type(exc).__name__}: {exc}"[:300]
+            raise
+        finally:
+            if tracked:
+                log = {
+                    "request_id": request_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "method": request.method,
+                    "url": str(request.url),
+                    "status_code": status_code,
+                    "duration_ms": round((time.perf_counter() - start) * 1000, 2),
+                    "client_host": request.client.host if request.client else None,
+                    "error": error,
+                    "job_id": job_id,
+                }
+                # SQLite write off the event loop.
+                await run_in_threadpool(get_request_tracker().save, log)
 
-        if _should_track_request(str(request.url)):
-            duration = round((time.perf_counter() - start) * 1000, 2)
-            log = {
-                "request_id": request_id,
-                "method": request.method,
-                "url": str(request.url),
-                "status_code": response.status_code,
-                "duration_ms": duration,
-                "client_host": request.client.host if request.client else None,
-                "services": _tracker_local.calls,
-                "error": None,
-            }
-            get_request_tracker().save(log)
-        _tracker_local.calls = []
-        _tracker_local.stack = []
         response.headers["X-Request-ID"] = request_id
         return response

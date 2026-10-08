@@ -62,13 +62,8 @@ def test_log_websocket_from_another_origin_is_refused(anon_app):
             ws.receive_json()
 
 
-def test_log_websocket_with_session_goes_past_the_check(app, monkeypatch):
-    async def no_history(job_id):
-        return None
-
-    monkeypatch.setattr(etl_logs, "_get_history", no_history)
-
+def test_log_websocket_with_session_goes_past_the_check(app, fake_ws_redis):
     with TestClient(app).websocket_connect("/api/tracking/etl-logs/job_1") as ws:
         with pytest.raises(WebSocketDisconnect) as closed:
             ws.receive_json()
-    assert closed.value.code == 4004  # existing "no history" close, after the session check
+    assert closed.value.code == 4004  # unknown job, after the session check

@@ -6,6 +6,7 @@
           <th class="px-4 py-2 text-left">Request ID</th>
           <th class="px-4 py-2 text-left">Time</th>
           <th class="px-4 py-2 text-left">Method</th>
+          <th class="px-4 py-2 text-left">Endpoint</th>
           <th class="px-4 py-2 text-left">Status</th>
           <th class="px-4 py-2 text-right">Duration (ms)</th>
           <th class="px-4 py-2"></th>
@@ -19,14 +20,14 @@
             'bg-gray-800': selectedId === req.request_id,
             'hover:bg-gray-750': selectedId !== req.request_id,
           }"
-          class="cursor-pointer"
-          @click="$emit('select', req.request_id)"
+          :style="req.job_id ? 'cursor: pointer' : undefined"
+          @click="req.job_id && $emit('select', req.request_id)"
         >
           <td class="px-4 py-2 font-mono text-xs text-gray-300">
             {{ shortRequestId(req.request_id) }}
           </td>
           <td class="px-4 py-2 text-xs text-gray-400">
-            {{ formatTime(req.duration_ms) }}
+            {{ formatTime(req.timestamp) }}
           </td>
           <td class="px-4 py-2">
             <span
@@ -35,6 +36,9 @@
             >
               {{ req.method }}
             </span>
+          </td>
+          <td class="px-4 py-2 font-mono text-xs text-gray-300 break-all">
+            {{ endpointOf(req.url) }}
           </td>
           <td class="px-4 py-2">
             <span
@@ -48,8 +52,10 @@
             {{ req.duration_ms.toFixed(2) }}
           </td>
           <td class="px-4 py-2 text-right">
+            <!-- Only requests that started a job have something to show: their logs -->
             <button
-              class="text-xs text-blue-400 hover:text-blue-300"
+              v-if="req.job_id"
+              class="detail-btn text-xs text-blue-400 hover:text-blue-300"
               @click.stop="$emit('select', req.request_id)"
             >
               Detail
@@ -57,7 +63,7 @@
           </td>
         </tr>
         <tr v-if="!requests.length">
-          <td colspan="6" class="px-4 py-6 text-center text-gray-500">
+          <td colspan="7" class="px-4 py-6 text-center text-gray-500">
             No requests recorded yet.
           </td>
         </tr>
@@ -117,8 +123,17 @@ function shortRequestId(requestId: string) {
   return requestId.length > 12 ? requestId.slice(0, 12) + '...' : requestId
 }
 
-function formatTime(durationMs: number) {
-  return new Date().toLocaleTimeString()
+function formatTime(timestamp: string | null | undefined) {
+  return timestamp ? new Date(timestamp).toLocaleString() : '-'
+}
+
+// Path only: the host is always etlhub, and the query string can be long.
+function endpointOf(url: string) {
+  try {
+    return new URL(url).pathname
+  } catch {
+    return url
+  }
 }
 
 function methodColor(method: string) {

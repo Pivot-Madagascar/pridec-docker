@@ -18,7 +18,7 @@
 - **Coverage of the sources: 58 %** (domain 100 %, core 87 %, api 60 %, application 55 %, infrastructure 37 %). Below 60 %: `forecast_runner` 12 %, WebSocket `etl_logs` 17 %, `job_store` 25 %, `forecast_report_router` 27 %, `validation_use_cases` 28 %, `etl_use_cases` 38 %, `request_tracker` 50 %, `config_store` 51 %, `analytics_service` 55 %, `validation_service` 56 %, `auth/router` 57 %, `tasks` 57 %. `run_server.py` and `run_celery.py` are at 0 %.
 - 18 of 31 tests assert only on `status_code` (1.84 assertions per test on average).
 - No real dependency: `redis`, `pridec_gee`, `pivot_dhis_tools`, `earthengine_api` and `geopandas` are replaced in `sys.modules`. 25 `MagicMock`, 6 `AsyncMock`, 25 `patch`, 8 `monkeypatch`, 7 `dependency_overrides`; no `tmp_path`, no `fakeredis`.
-- **Side effect:** because Redis is mocked, `RequestTracker` falls back to files, so each run writes about 119 files in `logs/requests/` at the repository root (git-ignored).
+- *Fixed:* request logs go to SQLite in `tmp_path` during tests; nothing is written in `logs/requests/` any more. *Old note:* because Redis is mocked, `RequestTracker` fell back to files, so each run wrote about 119 files in `logs/requests/` at the repository root (git-ignored).
 - CI runs `pytest --cov` with no threshold and no linter. Branch protection is not visible in the repository. There is no pre-commit, no git hook, no PR template, no CODEOWNERS.
 - Front end: one spec file (8 tests), no `test` script, no eslint, no prettier.
 

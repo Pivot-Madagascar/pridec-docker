@@ -41,7 +41,8 @@ def _send_webhook(webhook_url: str, job_id: str, status: str, message: str, logs
 
 
 def _update_task_status(job_store: JobStore, job_id: str, status: str, message: str = None, logs: str = None):
-    task_status = job_store.get(job_id) or {"job_id": job_id, "started": datetime.now().isoformat()}
+    task_status = job_store.get(job_id) or {"job_id": job_id}
+    task_status.setdefault("started", datetime.now().isoformat())  # set when the worker starts, not at launch
     task_status["status"] = status
     if message:
         task_status["message"] = message
@@ -188,6 +189,9 @@ class CeleryTaskLauncher:
         fn = self._registry.get(task_type)
         if fn is None:
             raise ValueError(f"Unknown task type: {task_type}")
+        # Known from the 202 on, before a worker picks it up: the log WebSocket and the
+        # tracking page can follow it (an unknown job gets 4004).
+        JobStore().set(job_id, {"job_id": job_id, "status": "pending", "message": "Queued"})
         fn.delay(job_id, webhook_url=webhook_url, **kwargs)
 
 

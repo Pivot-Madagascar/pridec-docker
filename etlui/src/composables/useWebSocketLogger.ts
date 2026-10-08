@@ -1,5 +1,6 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import api from '@/services/api'
 
 // Close code etlhub sends when the session cookie is missing or expired.
 export const WS_NOT_AUTHENTICATED = 4401
@@ -21,7 +22,8 @@ export interface UseWebSocketLoggerOptions {
 }
 
 export function useWebSocketLogger(options: UseWebSocketLoggerOptions = {}) {
-  const { baseUrl = '' } = options
+  // Defaults to the etlhub URL the axios client uses.
+  const { baseUrl = api.defaults.baseURL ?? '' } = options
   const logs = ref<LogEntry[]>([])
   const history = ref<string>('')
   const status = ref<string>('')
@@ -47,7 +49,8 @@ export function useWebSocketLogger(options: UseWebSocketLoggerOptions = {}) {
     connectionError.value = ''
     currentJobId = jobId
 
-    const wsUrl = `${baseUrl.replace(/^https?/, 'ws')}/api/tracking/etl-logs/${encodeURIComponent(jobId)}`
+    // http → ws, https → wss
+    const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/api/tracking/etl-logs/${encodeURIComponent(jobId)}`
 
     try {
       ws = new WebSocket(wsUrl)

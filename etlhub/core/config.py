@@ -6,7 +6,9 @@ from functools import lru_cache
 
 _PROJECT_ROOT = Path(__file__).parent.parent
 
-_env_file = os.getenv("ENV_FILE", str(_PROJECT_ROOT / ".env"))
+# The repo root .env by default. ENV_FILE overrides it, e.g. .env.debug in the
+# VS Code launch configurations (local debugging only).
+_env_file = os.getenv("ENV_FILE", str(_PROJECT_ROOT.parent / ".env"))
 
 
 class Settings(BaseSettings):

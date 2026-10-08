@@ -43,4 +43,12 @@ describe('useWebSocketLogger', () => {
 
     expect(location.href).toBe('')
   })
+
+  it('uses wss:// for an https API and ws:// for http', () => {
+    useWebSocketLogger({ baseUrl: 'https://etl.example.org' }).connect('import_gee_1234abcd')
+    expect(FakeWebSocket.last.url).toBe('wss://etl.example.org/api/tracking/etl-logs/import_gee_1234abcd')
+
+    useWebSocketLogger({ baseUrl: 'http://localhost:8111' }).connect('import_gee_1234abcd')
+    expect(FakeWebSocket.last.url).toBe('ws://localhost:8111/api/tracking/etl-logs/import_gee_1234abcd')
+  })
 })
