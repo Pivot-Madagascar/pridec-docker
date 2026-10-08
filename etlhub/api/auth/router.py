@@ -55,6 +55,9 @@ def _revoke_previous(client: httpx.Client, url: str, basic: tuple) -> None:
     revoked = revoke_pat(client, previous["url"], previous["pat_uid"], token=previous["token"])
     if not revoked and previous["url"] == url:
         revoke_pat(client, url, previous["pat_uid"], auth=basic)
+    # Never leave a revoked token where jobs and sessions would still use it,
+    # even if creating the new one fails below.
+    auth_store.delete_credential()
 
 
 def _rollback(client: httpx.Client, url: str, uid: str, basic: tuple) -> None:

@@ -197,6 +197,19 @@ def test_second_login_revokes_previous_token_and_invalidates_previous_session(an
     assert other_browser.get("/auth/me").status_code == 200
 
 
+def test_failed_second_login_does_not_leave_the_revoked_token_active(anon_app, https_client, dhis2):
+    _login(https_client)
+    first_uid = auth_store.get_credential()["pat_uid"]
+    dhis2.fail_create = True
+
+    other_browser = TestClient(anon_app, base_url="https://testserver")
+    assert _login(other_browser).status_code == 502
+
+    assert first_uid not in dhis2.tokens
+    assert auth_store.get_credential() is None
+    assert https_client.get("/auth/me").status_code == 401
+
+
 def test_logout_revokes_token_and_clears_session(https_client, dhis2):
     _login(https_client)
 
