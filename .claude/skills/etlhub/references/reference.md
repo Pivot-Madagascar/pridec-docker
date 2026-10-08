@@ -16,7 +16,7 @@ Re-check against the code before relying on a line number or a default.
 | POST | `/forecast/` | `forecast_router` | Celery → `docker run`, 202 | — |
 | GET | `/forecast/status/{job_id}` | `forecast_router` | Redis → `logs/{job_id}.json` | — |
 | GET | `/api/tracking/requests[/{id}]` | `tracking_router` | Read | — |
-| GET | `/api/tracking/etl-logs/{job_id}` | `tracking_router` | Read | — |
+| GET | `/api/tracking/etl-logs/{job_id}` | `tracking_router` | Read. `{job_id, status, message, logs}`: status/message from `job:{id}` (24 h), logs from Redis or `logs/{id}.log`; 404 only when both are missing | — |
 | WS | `/api/tracking/etl-logs/{job_id}` | `tracking_router` | Redis pub/sub stream | — |
 | GET, PUT | `/api/config/`, PUT `/api/config/reload` | `config_router` | Redis. DHIS URL/token read-only (from the login) | **Session** |
 | POST | `/auth/login` | `auth_router` | Sync. Body `{dhis2_url, username, password}` → DHIS2 calls, Redis, `etlhub_session` cookie. 400 URL not allowed, 401, 429, 502 DHIS2, 503 Redis | — |
@@ -45,12 +45,12 @@ Known endpoint-level quirks:
 | `LOGS_DIR` | `logs` | Job and request logs |
 | `DATA_DIR` | `.` | Root of `output/` and `.output_sig` |
 | `HOST_PWD` | `.` | Host path for the forecast Docker volumes (read from `Settings.host_pwd`; must be exported in the worker's environment) |
-| `TRACKED_ENDPOINTS` | `""` (all) | Middleware tracing prefixes |
+| `TRACKED_ENDPOINTS` | `""` (all) | Path prefixes to record (`/api/tracking` is never recorded) |
 | `FRONTEND_URL` | `http://localhost:5173` | CORS origin and `Origin` check |
 | `DHIS2_AUTH_TIMEOUT` | `10.0` | Login DHIS2 call timeout |
 | `DHIS2_ALLOWED_HOSTS` | `""` (every login refused) | `host[:port]` the login may send credentials to |
 | `COOKIE_SECURE` | `true` | `Secure` flag of the session cookie (false for local http only) |
-| `ENV_FILE` | `etlhub/.env` | Env file path (that default file does not exist) |
+| `ENV_FILE` | root `.env` | Env file path; `.env.debug` only for VS Code debugging |
 
 Read by the ETL scripts (`etl/scripts/config.py`), not by `Settings`: `DHIS_URL`, `DHIS_TOKEN`, `DHIS_USER`, `DHIS_PWD`, `PARENT_OU`, `OU_LEVEL`, `DISEASE_CODE`, `DRYRUN`, `LOG_LEVEL`, `PIVOT_URL`, `PIVOT_TOKEN`, `GEE_PROJECT`, `GEE_SERVICE_ACCOUNT`, `GEE_VARIABLES`. `ConfigStore` overrides take priority for `PARENT_OU`, `OU_LEVEL`, `DISEASE_CODE`, `DRYRUN`, `LOG_LEVEL`. `DHIS_URL` / `DHIS_TOKEN` come from the login (`dhis2:credential`); `.env` is used only with `DHIS_ENV_FALLBACK=true` in the process environment (CLI).
 
@@ -63,11 +63,10 @@ Read by the ETL scripts (`etl/scripts/config.py`), not by `Settings`: `DHIS_URL`
 | Celery broker and backend | default queues, `redis://{host}:{port}/{db}` |
 | Job state | `job:{id}` |
 | Job logs | `etl_logs:{id}` (24 h TTL) |
-| Requests | `req:{id}` |
 | Pub/sub | `etl_logs:{id}`, `etl_status:{id}` |
 | Dynamic config | hash `app:config:dynamic` |
 
-Five separate Redis clients are built (`JobStore`, `RequestTracker`, `ConfigStore`, `ETLEventManager`, the WebSocket pool). File fallback: `logs/{id}.log`, `logs/{id}.json`, `logs/requests/*.json`.
+One sync Redis client per process (`infrastructure/redis_client.py`) plus the async pool of the WebSocket. HTTP request logs live in SQLite `logs/etlhub.db` (30 days), not in Redis. File fallback for jobs: `logs/{id}.log`, `logs/{id}.json`.
 
 ## Celery (`core/celery_app.py`)
 

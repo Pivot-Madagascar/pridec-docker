@@ -57,17 +57,18 @@ Celery worker (_run_task):
 
 Behaviours worth knowing (read from the code):
 - On failure, `save_logs(job_id, traceback)` **overwrites** the job log with the traceback.
-- `JobStore`, `RequestTracker` and event publishing swallow all exceptions: a missing job does not prove it failed.
+- Request tracking: `RequestTrackingMiddleware` → SQLite `logs/etlhub.db` only (30-day retention), unhandled errors recorded as 500 with `error`, `/api/tracking` never recorded, `TRACKED_ENDPOINTS` = path prefixes. For tracked requests with a small JSON response (≤ 64 KB), the middleware reads the body and records its `job_id` (format `<type>_<8 hex>`), so the tracking page can open the job logs. `etlui` `/tracking` loads the last 50 on mount and on Refresh (no polling).
+- `JobStore` and event publishing swallow all exceptions: a missing job does not prove it failed.
 - Forecast status is written twice: `run_rscript` rewrites the whole record (new `started`, no `message`), then `task_forecast` writes again. Forecast logs are written only at the end, so a WebSocket opened during the run gets `4004`.
 - No timeout and no lock anywhere: a killed worker leaves `job:{id}` at `running` until the 24h TTL, and concurrent jobs write the same `input/` and `output/` files.
-- WebSocket: `etl_log_history` → `job_status_update` / `etl_log_entry` → `etl_log_complete` → close. Code `4004` when no history exists, which can happen right after the 202.
+- WebSocket: `etl_log_history` → `job_status_update` / `etl_log_entry` → `etl_log_complete` → close. Subscribes before reading history and status, waits for pub/sub messages with a 1 s timeout (no busy-wait), re-reads `job:{id}` every 10 s in case the final event was missed, and stops when the client leaves. Closes with `4004` **only for an unknown job** (no `job:{id}` and no logs); a known job without logs yet gets an empty `etl_log_history` and stays open. A job whose record expired but has logs gets its history then `etl_log_complete` with `final_status: null`. Jobs are recorded as `pending` at launch (`CeleryTaskLauncher.launch`), so they are known from the 202 on.
 
 Two endpoints are **not** part of this model: `/post_forecast` and `/update_key` run the script inline inside an `async def` handler. They block the event loop and redirect the process-wide `stdout`. `async def` handlers are only safe when they merely call a non-blocking `.delay()`.
 
 ## Configuration
 
-- `core/config.py` (pydantic-settings). Default env file is `etlhub/.env` (`_PROJECT_ROOT` is `etlhub/`), or the file named by `ENV_FILE`. That file does not exist in the repo; the real `.env` is at the root. Three things read an env file: `Settings` (`etlhub/.env`), `forecast_runner.py` and `/api/config/reload` (root `.env`), and `load_dotenv()` in `etl/scripts/config.py` (relative to the cwd).
-- `get_settings()` is `lru_cache`d and is first called at import of `core/celery_app.py`, before `etl/scripts/config.py` runs `load_dotenv()`. **Read from the code, not executed:** the `REDIS_*` values of the root `.env` are probably ignored unless exported or `ENV_FILE` is set; Redis then defaults to `localhost:6379/0`.
+- `core/config.py` (pydantic-settings). Default env file is the **root `.env`** (since 2026-10-08), or the file named by `ENV_FILE`. `.env.debug` is only for the VS Code debug launch configurations (migration of that file pending). Three things read an env file: `Settings`, `forecast_runner.py` and `/api/config/reload` (root `.env`), and `load_dotenv()` in `etl/scripts/config.py` (relative to the cwd).
+- `get_settings()` is `lru_cache`d and first called at import of `core/celery_app.py`. Values exported in the process environment override the env file.
 - **Dynamic config** (Redis hash `app:config:dynamic`: `DHIS_URL`, `DHIS_TOKEN`, `PARENT_OU`, `OU_LEVEL`, `DISEASE_CODE`) is read by the forecast container **and** by `etl/scripts/config.py`, which gives `ConfigStore` priority for these keys plus `DRYRUN` and `LOG_LEVEL`. It is not forecast-only.
 - Variable tables: `references/reference.md`.
 

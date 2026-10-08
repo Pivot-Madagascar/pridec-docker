@@ -1,15 +1,16 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { trackingApi } from '@/services/api'
-import type { RequestLog } from '@/services/api'
+import type { JobLogs, RequestLog } from '@/services/api'
 
 export const useTrackingStore = defineStore('tracking', () => {
   const requests = ref<RequestLog[]>([])
   const selected = ref<RequestLog | null>(null)
   const loading = ref(false)
   const error = ref('')
-
-  let timer: number | null = null
+  const jobLogs = ref<JobLogs | null>(null)
+  const jobLogsLoading = ref(false)
+  const jobLogsError = ref('')
 
   async function fetchRequests(limit = 50, endpoint?: string) {
     loading.value = true
@@ -37,16 +38,19 @@ export const useTrackingStore = defineStore('tracking', () => {
     }
   }
 
-  function startPolling(limit = 50, endpoint?: string) {
-    stopPolling()
-    fetchRequests(limit, endpoint)
-    timer = window.setInterval(() => fetchRequests(limit, endpoint), 2000)
-  }
-
-  function stopPolling() {
-    if (timer !== null) {
-      clearInterval(timer)
-      timer = null
+  async function fetchJobLogs(jobId: string) {
+    jobLogsLoading.value = true
+    jobLogsError.value = ''
+    try {
+      const { data } = await trackingApi.getJobLogs(jobId)
+      jobLogs.value = data
+    } catch (e: any) {
+      jobLogs.value = null
+      jobLogsError.value = e?.response?.status === 404
+        ? 'No logs found for this job (job records are kept 24 h).'
+        : e?.message || 'Failed to load job logs'
+    } finally {
+      jobLogsLoading.value = false
     }
   }
 
@@ -57,7 +61,9 @@ export const useTrackingStore = defineStore('tracking', () => {
     error,
     fetchRequests,
     fetchRequest,
-    startPolling,
-    stopPolling,
+    jobLogs,
+    jobLogsLoading,
+    jobLogsError,
+    fetchJobLogs,
   }
 })

@@ -193,6 +193,8 @@ Also in `conftest.py`: `sys.modules['earthengine_api']` is the pip package name,
 
 ## m11 — WebSocket loop (verify before changing)
 
+**Done (2026-10-08).** Subscribe before history, `get_message(timeout=1.0)`, `job:{id}` re-check every 10 s, client-leave detection, `4004` only for an unknown job, `pending` record at launch. Checked on a real server: 0.3 % CPU while waiting. The text below is kept as history.
+
 **Read from the code, not measured.** In `api/websockets/etl_logs.py`, `pubsub.get_message(ignore_subscribe_messages=True)` is called without `timeout=`; redis-py then returns immediately when nothing is queued, so the `while True` loop spins and `wait_for(..., 30.0)` never times out. Also, if a job finishes between the history/status read and `subscribe`, the client waits forever. And the server closes with `4004` when no history exists yet, which can happen right after the 202, before the first log line; `etlui` has no special handling for 4004 (reconnects only on unclean closes, up to 5 times). **For forecast it is systematic**: logs are written only at the end (`forecast_runner.py:165-168`), so a WebSocket opened during the run always gets 4004, and `etlui` does not retry because the close is clean (`useWebSocketLogger.ts:81-89`). Fixing it means either writing logs early in `run_rscript` or sending an empty `etl_log_history` instead of 4004, which is a contract decision.
 
 **Steps.**

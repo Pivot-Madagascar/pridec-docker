@@ -35,22 +35,23 @@ api.interceptors.response.use(
 
 export interface RequestLog {
   request_id: string
+  timestamp: string | null  // UTC ISO 8601, null on old entries
   method: string
   url: string
   status_code: number
   duration_ms: number
   client_host: string | null
-  services: ServiceCallLog[]
+  // Job started or read by this request (from its JSON response), if any.
+  job_id: string | null
+  // Set when the request raised an unhandled exception (status 500).
   error: string | null
 }
 
-export interface ServiceCallLog {
-  service: string
-  method: string
-  url: string
-  status_code: number | null
-  duration_ms: number | null
-  error: string | null
+export interface JobLogs {
+  job_id: string
+  status: string | null   // null once the job record expired (24 h)
+  message: string | null
+  logs: string | null     // null while a job has not logged anything yet
 }
 
 export const trackingApi = {
@@ -61,6 +62,9 @@ export const trackingApi = {
   },
   getRequest(requestId: string) {
     return api.get(`api/tracking/requests/${encodeURIComponent(requestId)}`)
+  },
+  getJobLogs(jobId: string) {
+    return api.get<JobLogs>(`api/tracking/etl-logs/${encodeURIComponent(jobId)}`)
   }
 }
 

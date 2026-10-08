@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+import sqlite3
 
 import pytest
 
@@ -13,16 +13,13 @@ def _log(request_id: str, url: str) -> dict:
         "status_code": 200,
         "duration_ms": 1.0,
         "client_host": None,
-        "services": [],
         "error": None,
     }
 
 
 @pytest.fixture
 def tracker(tmp_path):
-    t = RequestTracker(db_path=tmp_path / "etlhub.db")
-    t._redis_client = MagicMock(get=MagicMock(return_value=None))
-    return t
+    return RequestTracker(db_path=tmp_path / "etlhub.db")
 
 
 def test_save_stores_in_sqlite_without_json_files(tracker, tmp_path):
@@ -46,3 +43,14 @@ def test_list_recent_newest_first_with_limit_and_filter(tracker):
     assert [l["request_id"] for l in tracker.list_recent()] == ["c", "b", "a"]
     assert [l["request_id"] for l in tracker.list_recent(limit=1)] == ["c"]
     assert [l["request_id"] for l in tracker.list_recent(endpoint="import_gee")] == ["c", "a"]
+
+
+def test_save_deletes_entries_older_than_the_retention(tracker, tmp_path):
+    tracker.save(_log("old", "http://x/import_gee"))
+    with sqlite3.connect(tmp_path / "etlhub.db") as conn:
+        conn.execute("UPDATE request_log SET created_at = '2000-01-01T00:00:00.000' WHERE request_id = 'old'")
+
+    tracker.save(_log("new", "http://x/import_gee"))
+
+    assert tracker.get("old") is None
+    assert tracker.get("new") is not None

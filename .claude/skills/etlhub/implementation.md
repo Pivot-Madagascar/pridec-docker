@@ -29,7 +29,7 @@ etlhub/
 ├── infrastructure/         # Adapters (port implementations)
 │   ├── tasks.py            #   Celery tasks, CeleryTaskLauncher, DefaultWebhookNotifier
 │   ├── job_store.py        #   JobStore (Redis + log files)
-│   ├── request_tracker.py  #   RequestTracker (Redis + logs/requests/*.json)
+│   ├── request_tracker.py  #   RequestTracker (SQLite logs/etlhub.db, 30 days)
 │   ├── config_store.py     #   ConfigStore (Redis hash)
 │   └── forecast_runner.py  #   Docker run for R pipeline
 ├── api/                    # Inbound adapters
@@ -75,7 +75,7 @@ Celery Worker:
 
 ### WebSocket Protocol
 
-`etl_log_history` (history) → `job_status_update` / `etl_log_entry` (live) → `etl_log_complete` then close. Code `4004` if no history.
+`etl_log_history` (history) → `job_status_update` / `etl_log_entry` (live) → `etl_log_complete` then close. Code `4004` only for an unknown job.
 
 ### Persistence
 
@@ -85,7 +85,7 @@ Redis (24h TTL) with file fallback (`logs/*.log`, `logs/*.json`, `logs/requests/
 
 ### Configuration
 
-`core/config.py` (pydantic-settings, `.env` file pointed to by `ENV_FILE`, default `etlhub/.env`):
+`core/config.py` (pydantic-settings, root `.env` by default, `ENV_FILE` overrides it):
 
 | Variable | Default | Usage |
 |---|---|---|

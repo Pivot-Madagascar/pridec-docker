@@ -33,13 +33,13 @@ pip install -r etlhub/requirements.txt
 
 Redis is the Celery broker and also keeps the etlui login (the DHIS2 token, 24 h). It must run with a password and with persistence, using `redis.conf` from the project root:
 
-Run these from the project root, once. They generate a random password (hex, so no quoting problem) and write it both to `redis-secret.conf` and to the env file etlhub reads. Nothing is printed. Replace `.env.debug` with the file your `ENV_FILE` points to:
+Run these from the project root, once. They generate a random password (hex, so no quoting problem) and write it both to `redis-secret.conf` and to the root `.env`, which etlhub reads. Nothing is printed:
 
 ```bash
 mkdir -p redis-data && chmod 700 redis-data
 pw=$(openssl rand -hex 24)
 printf 'requirepass %s\n' "$pw" > redis-secret.conf && chmod 600 redis-secret.conf
-printf '\nREDIS_PASSWORD=%s\n' "$pw" >> .env.debug
+printf '\nREDIS_PASSWORD=%s\n' "$pw" >> .env
 unset pw
 ```
 
@@ -56,11 +56,7 @@ redis-cli --askpass ping
 # Should return: PONG
 ```
 
-**etlhub reads its settings from the file named by `ENV_FILE`**, not from the root `.env` (the default, `etlhub/.env`, does not exist). The VS Code launch configurations already set `ENV_FILE` to `.env.debug`. In a terminal, export it before starting the worker or the API, otherwise they connect without a password and fail with `NOAUTH`:
-
-```bash
-export ENV_FILE="$PWD/.env.debug"   # from the project root
-```
+**etlhub reads its settings from the root `.env`.** Nothing to export. `ENV_FILE` overrides it: the VS Code launch configurations set it to `.env.debug`, which is for local debugging only. If an old shell still has `ENV_FILE` exported, run `unset ENV_FILE`.
 
 ## 4. Start the Celery Worker
 
@@ -136,7 +132,6 @@ For full development, you need to have all three services running in separate te
 ```bash
 # From the project root
 source test-venv/bin/activate
-export ENV_FILE="$PWD/.env.debug"
 python -m etlhub.run_celery
 ```
 
@@ -144,7 +139,6 @@ python -m etlhub.run_celery
 ```bash
 # From the project root
 source test-venv/bin/activate
-export ENV_FILE="$PWD/.env.debug"
 cd etlhub && python -m run_server
 ```
 

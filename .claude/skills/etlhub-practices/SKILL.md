@@ -38,7 +38,7 @@ Line numbers in the references come from an inspection of the repository. Re-run
 
 ## Frozen contracts (`etlui` depends on them)
 
-`ETLResponse = {status, message, job_id, webhook_url}` · `JobStatus = {status, job_id, started, completed, logs, message}` · `job_id = <type>_<8 hex>` · WebSocket types `etl_log_history`, `job_status_update`, `etl_log_entry`, `etl_log_complete`, close codes `4004` (no history) and `4401` (no session) · webhook payload `{job_id, status, message, logs_url}`. A change here also changes `etlui/src/composables/useWebSocketLogger.ts` and `useEtlPipeline.ts`, in the same change.
+`ETLResponse = {status, message, job_id, webhook_url}` · `JobStatus = {status, job_id, started, completed, logs, message}` · `job_id = <type>_<8 hex>` · WebSocket types `etl_log_history`, `job_status_update`, `etl_log_entry`, `etl_log_complete`, close codes `4004` (unknown job) and `4401` (no session) · webhook payload `{job_id, status, message, logs_url}`. A change here also changes `etlui/src/composables/useWebSocketLogger.ts` and `useEtlPipeline.ts`, in the same change.
 
 ## Missing practices — status board
 
@@ -53,7 +53,7 @@ Line numbers in the references come from an inspection of the repository. Re-run
 | Celery limits | Defaults only, no time limit, no retry | Explicit settings | migrations.md#m8 (decision) |
 | Layering | `etl_events` imported from `application`/`infrastructure` | `EventPublisher` port injected | migrations.md#m9 |
 | Front/back agreement | JSON bodies ignored on `/fetch_disease`, `/validate_inputs` | One agreed shape | migrations.md#m10 (decision) |
-| WebSocket loop | Likely busy-wait, race after subscribe | Bounded wait, subscribe before history | migrations.md#m11 |
+| WebSocket loop | *Done* (2026-10-08): subscribe first, 1 s wait, status re-check, `4004` = unknown job | Keep `tests/api/test_etl_logs_ws.py` green | migrations.md#m11 |
 | Logging | 8 `print(`, no config, most modules have no logger | `logging.getLogger(__name__)` everywhere | migrations.md#m3 |
 
 Suggested order: m5, m6 → m3 → m4 → m2 → m1 → the rest. m5, m6 and m3 are low risk and make the later changes verifiable.

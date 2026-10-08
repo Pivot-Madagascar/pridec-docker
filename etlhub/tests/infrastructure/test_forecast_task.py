@@ -71,3 +71,20 @@ def test_forecast_success_keeps_container_details(monkeypatch, job_store, webhoo
     assert record["completed"] == "2026-09-30T10:05:00"
     assert record["logs"] == "R output"
     assert webhooks[-1]["status"] == "success"
+
+
+def test_launch_records_the_job_as_pending_before_queueing(monkeypatch):
+    from etlhub.infrastructure import tasks
+
+    records, queued = {}, []
+
+    class Store:
+        def set(self, job_id, data):
+            records[job_id] = data
+
+    monkeypatch.setattr(tasks, "JobStore", Store)
+    monkeypatch.setattr(tasks.task_import_gee, "delay", lambda *a, **k: queued.append((a, records.copy())))
+
+    tasks.CeleryTaskLauncher().launch("import_gee", "import_gee_1234abcd")
+
+    assert queued[0][1]["import_gee_1234abcd"]["status"] == "pending"

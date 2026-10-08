@@ -109,3 +109,58 @@ def override_dependencies(app, mock_task_launcher, mock_job_repository, mock_req
     yield app
     
     app.dependency_overrides.clear()
+
+
+class FakePubSub:
+    """Async pub/sub double for the log WebSocket: tests push messages into `queue`."""
+
+    def __init__(self, store):
+        self.store = store
+        self.channels = []
+        self.closed = False
+
+    async def subscribe(self, *channels):
+        self.channels.extend(channels)
+
+    async def get_message(self, ignore_subscribe_messages=True, timeout=0.0):
+        import asyncio
+        if self.store.queue:
+            return {"type": "message", "data": self.store.queue.pop(0)}
+        await asyncio.sleep(0.01)
+        return None
+
+    async def unsubscribe(self, *channels):
+        self.channels = []
+
+    async def aclose(self):
+        self.closed = True
+
+
+class FakeAsyncRedis:
+    def __init__(self):
+        self.data = {}
+        self.queue = []
+        self.pubsubs = []
+
+    async def get(self, key):
+        return self.data.get(key)
+
+    def pubsub(self):
+        ps = FakePubSub(self)
+        self.pubsubs.append(ps)
+        return ps
+
+
+@pytest.fixture
+def fake_ws_redis(monkeypatch, tmp_path):
+    """Replaces the WebSocket's Redis client; job log files are looked up in tmp_path."""
+    from types import SimpleNamespace
+    from etlhub.api.websockets import etl_logs
+    fake = FakeAsyncRedis()
+
+    async def client():
+        return fake
+
+    monkeypatch.setattr(etl_logs, "get_redis_client", client)
+    monkeypatch.setattr(etl_logs, "get_settings", lambda: SimpleNamespace(logs_dir=str(tmp_path)))
+    return fake
