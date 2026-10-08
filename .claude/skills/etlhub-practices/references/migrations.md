@@ -8,6 +8,8 @@ Ready-to-apply order: m5, m6 → m3 → m4 → m2 → m1 → the rest. The first
 
 ## m1 — Authenticate the routers
 
+**Done (2026-10-08).** Applied in `main.py` for every router except `auth_router`; the dependency also covers the WebSocket. The text below is kept as history.
+
 **Problem.** Only `/api/config/*` and `/auth/me` use `get_current_user`. Every ETL POST, `/forecast/`, `/post_forecast`, `/update_key`, `/validate_inputs`, `DELETE /output/reset`, `GET /api/tracking/*` and the log WebSocket are open, and several write to DHIS2 or the host.
 
 **Target.** All routers protected except `auth_router`. Tracking is protected per route.

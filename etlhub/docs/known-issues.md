@@ -4,15 +4,17 @@ Findings from a read-only inspection of the repository. Nothing here has been fi
 
 ## 1. Security (highest risk first)
 
-1. **Almost no authentication.** Only `/api/config/*` and `/auth/me` use `get_current_user`. Unprotected: every ETL POST, `/forecast/`, `/post_forecast`, `/update_key`, `/validate_inputs`, `DELETE /output/reset`, `GET /api/tracking/*` and the log WebSocket. Fix: `dependencies=[Depends(get_current_user)]` on each router except `auth_router`.
+1. *Fixed:* every router except `auth_router` requires the session (`main.py`, `dependencies=[Depends(get_current_user)]`), the log WebSocket included (origin check, close code `4401` without session). `tests/api/test_route_protection.py` fails if a route is left open. Still public: `GET /`, `/docs`, `/redoc`, `/openapi.json` (decision pending). A logged-in user can still call every endpoint: there are no roles.
 2. **`DELETE /output/reset`** (`api/routers/forecast_report_router.py`): the "signature" only checks that `.output_sig` exists and is non-empty. Falls back to `sudo rm -rf`.
-3. **SSRF**: `/auth/validate-token` sends the token to any `dhis2_url` when `DHIS2_ALLOWED_HOSTS` is empty (the default). `webhook_url` lets the worker POST to any URL (`infrastructure/tasks.py`, host network).
+3. **SSRF**: `webhook_url` lets the worker POST to any URL (`infrastructure/tasks.py`, host network).
 4. **`/validate_inputs`** takes free file paths in the query and writes `config_valid.json`, `input_valid.json`, `polygon_valid.geojson` into a free `input_dir`.
 5. **Forecast**: `ForecastParams` paths are now validated (under `input/`, no `..`, no leading `-`). A temp env file holds secrets for the whole run. No timeout.
-6. **`GET /api/config/` returns `DHIS_TOKEN` in clear** (`ConfigResponse` has a `dhis_token` field). `etlui` puts it in a password input (`ConfigView.vue`), so it is hidden on screen but present in the DOM and the store.
-7. **Middleware logs the full URL, query string included** (`middleware.py:77-86`), to `logs/requests/*.json` and `req:{id}`. A secret in a query string (a `webhook_url` carrying a token, the OAuth `code` of `/auth/dhis2/callback`) is stored. No bodies and no headers are logged, so the `Authorization` token is not. `X-Request-ID` is accepted from the client and used as a file name (`request_tracker.py:44`): possible path traversal (read, not tested).
-8. **The log WebSocket and `/api/tracking/*` are open**, and `etlui` sends no token on the WebSocket (`useWebSocketLogger.ts:46-49`).
-9. **OAuth is half-wired.** The callback validates the OAuth `access_token` with `Authorization: ApiToken …` (`dhis2_auth.py:59`); OAuth tokens normally use `Bearer` (cannot be verified without DHIS2). The `HTTPException(400)` at `router.py:112` is caught by the `except Exception` at `router.py:116-120`, and `code` is a query parameter on a POST. `etlui` never calls `/auth/dhis2/*` and has no `/login/callback` route, which is the default `DHIS2_REDIRECT_URI`.
+6. *Fixed:* `GET /api/config/` no longer returns the DHIS2 token (`has_dhis_token` instead).
+7. **Middleware logs the full URL, query string included** (`middleware.py:77-86`), to `logs/requests/*.json` and `req:{id}`. A secret in a query string (a `webhook_url` carrying a token) is stored. No bodies and no headers are logged, so the `Authorization` token is not. `X-Request-ID` is accepted from the client and used as a file name (`request_tracker.py:44`): possible path traversal (read, not tested).
+8. *Fixed:* the log WebSocket and `/api/tracking/*` require the session (see 1).
+9. *Fixed:* the OAuth routes, `/auth/validate-token` and `JWT_SECRET` are removed; login is DHIS2 username/password (see `ARCHITECTURE.md`, Authentication).
+10. **Login state is only as safe as Redis.** The active DHIS2 token is stored in clear in Redis (`dhis2:credential`) and in its AOF/RDB files. `redis.conf` binds to localhost and requires a password; the data directory must stay `chmod 700`.
+11. **One DHIS2 identity at a time.** The credential is global: the last login decides which instance and account every job uses, and logs the previous session out. A job running when the token expires (24 h) or at logout fails on DHIS2 with 401.
 
 ## 2. Layering violations
 
@@ -55,7 +57,7 @@ Import audit (AST, 2026-10-02): the domain imports only `typing` and `pydantic`.
 
 ## 4. Dead code and duplication
 
-- Dead: `JWT_SECRET`, `track_service` (middleware), `ValidationResponse`, `BaseSchema`, `get_request_tracker_repo`, `verify_signature` (`forecast_runner.py:63`), `get_etl_event_manager` import, `import uuid` in `validation_router.py`.
+- Dead: `track_service` (middleware), `ValidationResponse`, `BaseSchema`, `get_request_tracker_repo`, `verify_signature` (`forecast_runner.py:63`), `get_etl_event_manager` import, `import uuid` in `validation_router.py`.
 - Duplicated: `_get_output_dir` and signature check (`forecast_runner.py` and `forecast_report_router.py`), five separate Redis clients, ten near-identical Celery tasks, `__import__(...)` used to call `get_settings`.
 
 ## 5. Tests
@@ -91,7 +93,6 @@ Import audit (AST, 2026-10-02): the domain imports only `typing` and `pydantic`.
 - Celery pool and concurrency in production (default prefork, no `--concurrency`)?
 - How is etlhub deployed?
 - Front/back mismatch on JSON bodies for `/fetch_disease` and `/validate_inputs`: fix the front or the back?
-- Should the OAuth routes stay? The front never uses them.
 - `DRYRUN` and `LOG_LEVEL` are read from Redis by the scripts but cannot be edited through `/api/config`. Intended?
 - In which working directory does the worker run in practice, and with which Celery pool? This decides where `input/` and `output/` land.
 - `README.md` mentions `compose-prod.yaml`, which is not in the repository. Is there a production setup elsewhere?

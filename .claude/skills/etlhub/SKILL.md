@@ -73,7 +73,7 @@ Two endpoints are **not** part of this model: `/post_forecast` and `/update_key`
 
 ## Authentication
 
-DHIS2 (API token or OAuth2). `get_current_user` (`api/auth/dhis2_auth.py`) uses `HTTPBearer(auto_error=False)` and a 120 s module-level token cache. It is applied **per endpoint** on `/api/config/*` and on `/auth/me` only. Every other router, including every write endpoint, the tracking routes and the log WebSocket, is open. `JWT_SECRET` exists in `Settings` but is not used. `etlui` only uses token login: `POST /auth/validate-token`, then it stores the raw DHIS2 token in `localStorage` and sends `Authorization: Bearer` on every axios call (the log WebSocket sends nothing). The OAuth routes exist but the front never calls them. `GET /api/config/` returns `DHIS_TOKEN` in clear.
+DHIS2 username/password login (`POST /auth/login`) → etlhub creates a 24 h DHIS2 personal access token, keeps it in Redis `dhis2:credential` (read by the ETL scripts), and gives the browser an HttpOnly `etlhub_session` cookie. Full description in `etlhub/docs/ARCHITECTURE.md` (Authentication). `get_current_user` (`api/auth/dhis2_auth.py`) reads the cookie and is applied to **every router except `auth_router`** in `main.py`, the log WebSocket included (origin check, close `4401`). `tests/api/test_route_protection.py` fails if a route is left open; router tests get a logged-in user from the `app` fixture, auth tests use `anon_app`. Without a login, `get_dhis_url()` / `get_dhis_token()` raise `DHIS2SessionError` under etlhub; the `.env` fallback is for the CLI only (`DHIS_ENV_FALLBACK`).
 
 ## Forecast pipeline
 
@@ -89,7 +89,7 @@ Docker image `mvevans89/pridec_forecast:0.1.0` (the OpenAPI text says `latest`),
 Python 3.12 (`test-venv`; the system `python3` is 3.11). From the repo root unless noted:
 
 ```bash
-redis-server                                   # creates dump.rdb in the cwd
+redis-server redis.conf --include "$PWD/redis-secret.conf"   # AOF in redis-data/, see redis.conf
 python -m etlhub.run_celery                    # worker, from the repo root
 cd etlhub && python -m run_server              # API on 8111
 cd etlhub && ../test-venv/bin/python -m pytest tests -m "not integration"

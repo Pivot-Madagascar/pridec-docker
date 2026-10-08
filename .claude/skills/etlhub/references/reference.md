@@ -18,11 +18,10 @@ Re-check against the code before relying on a line number or a default.
 | GET | `/api/tracking/requests[/{id}]` | `tracking_router` | Read | — |
 | GET | `/api/tracking/etl-logs/{job_id}` | `tracking_router` | Read | — |
 | WS | `/api/tracking/etl-logs/{job_id}` | `tracking_router` | Redis pub/sub stream | — |
-| GET, PUT | `/api/config/`, PUT `/api/config/reload` | `config_router` | Redis | **DHIS2** |
-| POST | `/auth/validate-token` | `auth_router` | DHIS2 call | — |
-| GET | `/auth/dhis2/login` | `auth_router` | DHIS2 | — |
-| POST | `/auth/dhis2/callback` | `auth_router` | DHIS2 | — |
-| GET | `/auth/me` | `auth_router` | DHIS2 call | **DHIS2** |
+| GET, PUT | `/api/config/`, PUT `/api/config/reload` | `config_router` | Redis. DHIS URL/token read-only (from the login) | **Session** |
+| POST | `/auth/login` | `auth_router` | Sync. Body `{dhis2_url, username, password}` → DHIS2 calls, Redis, `etlhub_session` cookie. 400 URL not allowed, 401, 429, 502 DHIS2, 503 Redis | — |
+| POST | `/auth/logout` | `auth_router` | Revokes the DHIS2 token, 204, clears the cookie | — |
+| GET | `/auth/me` | `auth_router` | Redis | **Session** |
 | GET | `/output/forecast_report.html[/exists]` | `forecast_report_router` | File | — |
 | POST | `/input/files/{config\|external_data}` | `input_router` | Sync, multipart field `file` (≤ 10 MB) → replaces `input/config.json` or `input/external_data.csv`. 413 too big, 422 invalid JSON object / CSV without `orgUnit`,`period` / other name | — |
 | GET | `/input/files` | `input_router` | Sync. `{config, external_data}` → `{exists, size?, modified?}` | — |
@@ -36,26 +35,24 @@ Router prefixes (`main.py`): `ingest`, `analytics`, `validation`, `auth` have no
 
 Known endpoint-level quirks:
 - `/validate_inputs` takes file paths and `input_dir` from the caller and writes `config_valid.json`, `input_valid.json`, `polygon_valid.geojson` there.
-- `/auth/validate-token` sends the token to any `dhis2_url` when `DHIS2_ALLOWED_HOSTS` is empty (the default).
 - `webhook_url` on any job: the worker POSTs `{job_id, status, message, logs_url}` (relative `logs_url`, 10 s timeout, no signature) to any URL, errors ignored.
 
 ## Settings (`core/config.py`)
 
 | Variable | Default | Usage |
 |---|---|---|
-| `REDIS_HOST` / `REDIS_PORT` / `REDIS_DB` | `localhost` / `6379` / `0` | Every Redis connection |
+| `REDIS_HOST` / `REDIS_PORT` / `REDIS_DB` / `REDIS_PASSWORD` | `localhost` / `6379` / `0` / `""` | Every Redis connection (`Settings.redis_url`, one client per process in `infrastructure/redis_client.py`) |
 | `LOGS_DIR` | `logs` | Job and request logs |
 | `DATA_DIR` | `.` | Root of `output/` and `.output_sig` |
 | `HOST_PWD` | `.` | Host path for the forecast Docker volumes (read from `Settings.host_pwd`; must be exported in the worker's environment) |
 | `TRACKED_ENDPOINTS` | `""` (all) | Middleware tracing prefixes |
-| `FRONTEND_URL` | `http://localhost:5173` | CORS origin |
-| `DHIS2_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI` | — | DHIS2 OAuth2 |
-| `DHIS2_AUTH_TIMEOUT` | `3.0` | Auth call timeout |
-| `DHIS2_ALLOWED_HOSTS` | `""` (all allowed) | DHIS2 URL whitelist |
-| `JWT_SECRET` | — | Defined, **unused** |
+| `FRONTEND_URL` | `http://localhost:5173` | CORS origin and `Origin` check |
+| `DHIS2_AUTH_TIMEOUT` | `10.0` | Login DHIS2 call timeout |
+| `DHIS2_ALLOWED_HOSTS` | `""` (every login refused) | `host[:port]` the login may send credentials to |
+| `COOKIE_SECURE` | `true` | `Secure` flag of the session cookie (false for local http only) |
 | `ENV_FILE` | `etlhub/.env` | Env file path (that default file does not exist) |
 
-Read by the ETL scripts (`etl/scripts/config.py`), not by `Settings`: `DHIS_URL`, `DHIS_TOKEN`, `DHIS_USER`, `DHIS_PWD`, `PARENT_OU`, `OU_LEVEL`, `DISEASE_CODE`, `DRYRUN`, `LOG_LEVEL`, `PIVOT_URL`, `PIVOT_TOKEN`, `GEE_PROJECT`, `GEE_SERVICE_ACCOUNT`, `GEE_VARIABLES`. `ConfigStore` overrides take priority for `DHIS_URL`, `DHIS_TOKEN`, `PARENT_OU`, `OU_LEVEL`, `DISEASE_CODE`, `DRYRUN`, `LOG_LEVEL`.
+Read by the ETL scripts (`etl/scripts/config.py`), not by `Settings`: `DHIS_URL`, `DHIS_TOKEN`, `DHIS_USER`, `DHIS_PWD`, `PARENT_OU`, `OU_LEVEL`, `DISEASE_CODE`, `DRYRUN`, `LOG_LEVEL`, `PIVOT_URL`, `PIVOT_TOKEN`, `GEE_PROJECT`, `GEE_SERVICE_ACCOUNT`, `GEE_VARIABLES`. `ConfigStore` overrides take priority for `PARENT_OU`, `OU_LEVEL`, `DISEASE_CODE`, `DRYRUN`, `LOG_LEVEL`. `DHIS_URL` / `DHIS_TOKEN` come from the login (`dhis2:credential`); `.env` is used only with `DHIS_ENV_FALLBACK=true` in the process environment (CLI).
 
 `.env.example` lacks `LOGS_DIR`, `DATA_DIR`, `HOST_PWD`, `ENV_FILE`, and writes `dryRun` while the code reads `DRYRUN`.
 

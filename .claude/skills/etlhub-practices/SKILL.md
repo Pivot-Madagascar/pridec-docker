@@ -38,13 +38,13 @@ Line numbers in the references come from an inspection of the repository. Re-run
 
 ## Frozen contracts (`etlui` depends on them)
 
-`ETLResponse = {status, message, job_id, webhook_url}` · `JobStatus = {status, job_id, started, completed, logs, message}` · `job_id = <type>_<8 hex>` · WebSocket types `etl_log_history`, `job_status_update`, `etl_log_entry`, `etl_log_complete`, close code `4004` · webhook payload `{job_id, status, message, logs_url}`. A change here also changes `etlui/src/composables/useWebSocketLogger.ts` and `useEtlPipeline.ts`, in the same change.
+`ETLResponse = {status, message, job_id, webhook_url}` · `JobStatus = {status, job_id, started, completed, logs, message}` · `job_id = <type>_<8 hex>` · WebSocket types `etl_log_history`, `job_status_update`, `etl_log_entry`, `etl_log_complete`, close codes `4004` (no history) and `4401` (no session) · webhook payload `{job_id, status, message, logs_url}`. A change here also changes `etlui/src/composables/useWebSocketLogger.ts` and `useEtlPipeline.ts`, in the same change.
 
 ## Missing practices — status board
 
 | Practice | Today | Target | Where |
 |---|---|---|---|
-| Authenticate routers | Only `/api/config/*` and `/auth/me` | All routers except `auth`; per-route on tracking because of the WebSocket | migrations.md#m1 |
+| Authenticate routers | *Done*: all routers except `auth`, WebSocket included | Keep `test_route_protection.py` green | migrations.md#m1 |
 | No blocking work in `async def` | `/post_forecast`, `/update_key` run inline | Celery tasks, 202 | migrations.md#m2 |
 | No silent failures | `except Exception: pass` in `JobStore`, `tasks.py`, `_JobLogger`, `forecast_runner` | `logger.warning` with context | migrations.md#m3 |
 | Validate `webhook_url` | Any URL, any scheme | One validator in `core/webhook.py`, called from `launch()` | migrations.md#m4 |
@@ -60,15 +60,14 @@ Suggested order: m5, m6 → m3 → m4 → m2 → m1 → the rest. m5, m6 and m3 
 
 ## Decisions pending (ask the user, do not choose)
 
-1. Must the log WebSocket be authenticated? Browsers cannot send an `Authorization` header on a WebSocket: it needs a query token or a first auth message.
+1. *Decided:* the log WebSocket is authenticated by the session cookie (sent by the browser on the handshake) through the router dependency.
 2. Should `/` and `/output/*` stay public?
 3. With `webhook_allowed_hosts` empty: refuse everything, or only require https? Revalidate in `_send_webhook` against redirects?
 4. Env loading: set `ENV_FILE`, point `_PROJECT_ROOT` to the repo root, or call `load_dotenv` first?
 5. `/fetch_disease` and `/validate_inputs`: should the backend accept the JSON body, or should the front stop sending it?
 6. Webhook payload: absolute `logs_url`? HMAC signature?
 7. Celery: `acks_late`, time limits, retries. ETL scripts write to DHIS2 and may not be idempotent, so do not enable retries blindly.
-8. Should `GET /api/config/` keep returning `DHIS_TOKEN`? (`etlui` shows it in a password input.)
-9. Should the OAuth routes stay? The front never uses them, and the callback validates an OAuth token with `ApiToken`.
+8. *Decided:* `GET /api/config/` no longer returns the DHIS2 token; the OAuth routes are removed (username/password login, see `etlhub/docs/ARCHITECTURE.md`).
 
 ## Never
 

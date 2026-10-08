@@ -4,24 +4,12 @@ import { useAuthStore } from '@/stores/auth'
 // Create axios instance
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8111',
+  // Sends the HttpOnly session cookie set by etlhub on /auth/login.
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
   }
 })
-
-// Request interceptor to add auth token
-api.interceptors.request.use(
-  (config) => {
-    const authStore = useAuthStore()
-    if (authStore.token) {
-      config.headers.Authorization = `Bearer ${authStore.token}`
-    }
-    return config
-  },
-  (error) => {
-    return Promise.reject(error)
-  }
-)
 
 // Response interceptor for error handling
 api.interceptors.response.use(
@@ -30,7 +18,8 @@ api.interceptors.response.use(
   },
   (error) => {
     if (error.response) {
-      if (error.response.status === 401) {
+      // A 401 on /auth/login is a wrong password, not an expired session.
+      if (error.response.status === 401 && error.config?.url !== '/auth/login') {
         const authStore = useAuthStore()
         authStore.clear()
         window.location.href = '/login'

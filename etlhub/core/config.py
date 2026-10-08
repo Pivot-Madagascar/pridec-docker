@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import quote
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
@@ -22,13 +23,17 @@ class Settings(BaseSettings):
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_db: int = 0
-    jwt_secret: str = "CHANGE_ME_IN_PRODUCTION"
+    redis_password: str = ""
     frontend_url: str = "http://localhost:5173"
-    dhis2_client_id: str = ""
-    dhis2_client_secret: str = ""
-    dhis2_redirect_uri: str = "http://localhost:5173/login/callback"
-    dhis2_auth_timeout: float = 3.0
+    dhis2_auth_timeout: float = 10.0
+    # Comma-separated host[:port] list. Empty = every login is refused.
     dhis2_allowed_hosts: str = ""
+    cookie_secure: bool = True
+
+    @property
+    def redis_url(self) -> str:
+        auth = f":{quote(self.redis_password, safe='')}@" if self.redis_password else ""
+        return f"redis://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
 
 @lru_cache

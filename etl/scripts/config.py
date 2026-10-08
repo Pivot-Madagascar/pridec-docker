@@ -1,11 +1,16 @@
 from dotenv import load_dotenv
 import os
 from etlhub.infrastructure.config_store import ConfigStore
+from etlhub.infrastructure.auth_store import get_credential
+
+# Read before load_dotenv on purpose: only the process environment counts (the CLI sets it
+# in compose.yaml). A DHIS_ENV_FALLBACK line in .env must not enable it under etlhub.
+_ENV_FALLBACK = os.getenv("DHIS_ENV_FALLBACK", "").lower() == "true"
 
 load_dotenv(override=False)
 
 _store = ConfigStore()
-_EDITABLE_KEYS = {"DHIS_URL", "DHIS_TOKEN", "PARENT_OU", "OU_LEVEL", "DISEASE_CODE", "DRYRUN", "LOG_LEVEL"}
+_EDITABLE_KEYS = {"PARENT_OU", "OU_LEVEL", "DISEASE_CODE", "DRYRUN", "LOG_LEVEL"}
 
 def _get(key: str, default=None) -> str | None:
     if key in _EDITABLE_KEYS:
@@ -20,12 +25,24 @@ def get_dry_run() -> bool:
 def get_log_level() -> str:
     return _get('LOG_LEVEL', 'INFO').upper()
 
+class DHIS2SessionError(RuntimeError):
+    pass
+
+def _dhis2_credential(field: str, env_key: str) -> str | None:
+    """DHIS2 URL/token from the etlui login (Redis). Falls back to .env for the CLI only."""
+    credential = get_credential()
+    if credential:
+        return credential[field]
+    if _ENV_FALLBACK:
+        return os.getenv(env_key)
+    raise DHIS2SessionError("No active DHIS2 session (expired, logged out or Redis unavailable). Log in again in etlui.")
+
 def get_dhis_url() -> str | None:
-    url = _get('DHIS_URL')
+    url = _dhis2_credential('url', 'DHIS_URL')
     return url.rstrip('/') if url else None
 
 def get_dhis_token() -> str | None:
-    return _get('DHIS_TOKEN')
+    return _dhis2_credential('token', 'DHIS_TOKEN')
 
 def get_parent_ou() -> str | None:
     return _get('PARENT_OU')

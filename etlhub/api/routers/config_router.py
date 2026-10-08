@@ -2,36 +2,31 @@ import logging
 import os
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 from dotenv import dotenv_values
 
 from etlhub.api.auth.dhis2_auth import get_current_user
 from etlhub.infrastructure.config_store import ConfigStore
+from etlhub.infrastructure.auth_store import get_credential
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/config", tags=["Configuration"])
 
-_RELOADABLE_KEYS = ["DHIS_URL", "DHIS_TOKEN", "PARENT_OU", "OU_LEVEL", "DISEASE_CODE"]
+# DHIS_URL and DHIS_TOKEN are not here: they come from the DHIS2 login only (auth_store).
+_RELOADABLE_KEYS = ["PARENT_OU", "OU_LEVEL", "DISEASE_CODE"]
 
 class ConfigUpdate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    dhis_url: str | None = Field(None)
-    dhis_token: str | None = Field(None)
     parent_ou: str | None = Field(None)
     ou_level: int | None = Field(None, ge=1, le=10)
     disease_code: str | None = Field(None)
 
-    @field_validator('dhis_url')
-    @classmethod
-    def validate_url(cls, v):
-        if v and not v.startswith(('http://', 'https://')):
-            raise ValueError('URL must start with http:// or https://')
-        return v.rstrip('/') if v else v
-
 class ConfigResponse(BaseModel):
+    # Read-only, from the DHIS2 login. The token itself is never returned.
     dhis_url: str | None = None
-    dhis_token: str | None = None
+    has_dhis_token: bool = False
+    dhis_token_expires_at: int | None = None
     parent_ou: str | None = None
     ou_level: int | None = None
     disease_code: str | None = None
@@ -39,9 +34,11 @@ class ConfigResponse(BaseModel):
 @router.get("/", response_model=ConfigResponse, dependencies=[Depends(get_current_user)])
 async def get_config():
     data = ConfigStore().get_all()
+    credential = get_credential() or {}
     return ConfigResponse(
-        dhis_url=data.get("DHIS_URL"),
-        dhis_token=data.get("DHIS_TOKEN"),
+        dhis_url=credential.get("url"),
+        has_dhis_token=bool(credential.get("token")),
+        dhis_token_expires_at=credential.get("expires_at"),
         parent_ou=data.get("PARENT_OU"),
         ou_level=int(data["OU_LEVEL"]) if data.get("OU_LEVEL") else None,
         disease_code=data.get("DISEASE_CODE"),

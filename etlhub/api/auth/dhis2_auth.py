@@ -1,130 +1,143 @@
+"""DHIS2 calls used by login/logout, and the session dependency.
+
+Login exchanges a DHIS2 username/password for a personal access token (PAT). The PAT
+never leaves the server: the browser only gets an HttpOnly session cookie.
+"""
 import logging
-import time
-from typing import Optional
+import re
+from urllib.parse import urlparse
 
 import httpx
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import HTTPException, WebSocketException, status
+from starlette.concurrency import run_in_threadpool
+from starlette.requests import HTTPConnection
 
+from etlhub.api.middleware import is_allowed_origin
 from etlhub.core.config import get_settings
-from etl.scripts.config import get_dhis_url
+from etlhub.infrastructure import auth_store
 
 logger = logging.getLogger(__name__)
 
-security = HTTPBearer(auto_error=False)
+SESSION_COOKIE = "etlhub_session"
+# WebSocket close code when the session is missing or no longer valid. etlui sends the
+# user back to /login on it (useWebSocketLogger.ts).
+WS_NOT_AUTHENTICATED = 4401
+TOKEN_LIFETIME_SECONDS = 24 * 3600
 
-_token_cache: dict = {}
-_cache_ttl_seconds = 120
-
-
-def _get_cached_user_info(token: str) -> Optional[dict]:
-    entry = _token_cache.get(token)
-    if entry and time.time() - entry["timestamp"] < _cache_ttl_seconds:
-        return entry["user_info"]
-    return None
-
-
-def _set_cached_user_info(token: str, user_info: Optional[dict]) -> None:
-    if user_info:
-        _token_cache[token] = {"user_info": user_info, "timestamp": time.time()}
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+_UID = re.compile(r"^[A-Za-z0-9]{11}$")
+# Attributes DHIS2 2.40 requires to create a PAT (checked manually against 2.40.3).
+_PAT_ATTRIBUTES = [{"type": "MethodAllowedList", "allowedMethods": ["GET", "POST", "PUT", "PATCH", "DELETE"]}]
 
 
-def _clean_cache() -> None:
-    now = time.time()
-    expired = [t for t, e in _token_cache.items() if now - e["timestamp"] >= _cache_ttl_seconds]
-    for t in expired:
-        del _token_cache[t]
+class DHIS2Error(Exception):
+    """DHIS2 is unreachable or answered something unexpected."""
 
 
-async def get_dhis2_user_info(
-    token: Optional[str] = None,
-    user: Optional[str] = None,
-    pwd: Optional[str] = None,
-    dhis2_url: Optional[str] = None,
-) -> Optional[dict]:
-    settings = get_settings()
-    base_url = (dhis2_url or get_dhis_url()).rstrip('/') if (dhis2_url or get_dhis_url()) else None
-    if not base_url:
-        logger.warning("get_dhis2_user_info: DHIS2 URL not configured")
-        return None
+def normalize_dhis2_url(url: str) -> str | None:
+    """Return the URL without trailing slash if it may receive credentials, else None.
 
-    if not token and not (user and pwd):
-        raise ValueError("Authentication required: provide either a token or both user and pwd")
-
-    if token:
-        cached = _get_cached_user_info(token)
-        if cached:
-            return cached
-
-    headers = {"Authorization": f"ApiToken {token}"} if token else {}
-    auth = None if token else httpx.BasicAuth(user, pwd)
-
+    The host must be listed in DHIS2_ALLOWED_HOSTS (an empty list refuses everything),
+    and plain http is accepted for localhost only.
+    """
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(
-                f"{base_url}/api/me.json",
-                headers=headers,
-                auth=auth,
-                timeout=settings.dhis2_auth_timeout,
-            )
-            if response.status_code == 200:
-                try:
-                    data = response.json()
-                except (ValueError, Exception):
-                    logger.error("DHIS2 returned invalid JSON response")
-                    return None
-                user_info = {
-                    "id": data.get("id"),
-                    "email": data.get("email"),
-                    "username": data.get("username"),
-                    "displayName": data.get("displayName"),
-                }
-                if token:
-                    _set_cached_user_info(token, user_info)
-                    _clean_cache()
-                return user_info
-            if response.status_code in (401, 403):
-                logger.warning(
-                    "DHIS2 authentication failed for user=%s with status=%s",
-                    user or "unknown",
-                    response.status_code,
-                )
-                return None
-            response_text = response.text[:200] if response.text else "no content"
-            logger.error(
-                "DHIS2 returned unexpected status %s: %s",
-                response.status_code,
-                response_text,
-            )
-            return None
-    except (httpx.ConnectError, httpx.TimeoutException) as e:
-        logger.warning(
-            "DHIS2 unreachable for user=%s: %s",
-            user or "unknown",
-            str(e)[:100],
-        )
+        parsed = urlparse(url.strip())
+    except ValueError:
         return None
-    except Exception:
-        logger.exception("Unexpected error validating DHIS2 credentials")
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
         return None
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        return None
+    if parsed.scheme == "http" and parsed.hostname not in _LOCAL_HOSTS:
+        return None
+    allowed = {h.strip().lower() for h in get_settings().dhis2_allowed_hosts.split(",") if h.strip()}
+    if parsed.netloc.lower() not in allowed:
+        return None
+    return url.strip().rstrip("/")
 
 
-async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-) -> dict:
-    if not credentials:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
+def dhis2_client() -> httpx.Client:
+    # No redirects: credentials must only ever go to the allowed host.
+    return httpx.Client(follow_redirects=False, timeout=get_settings().dhis2_auth_timeout)
+
+
+def _token_header(token: str) -> dict:
+    return {"Authorization": f"ApiToken {token}"}
+
+
+def fetch_me(client: httpx.Client, url: str, *, auth: tuple | None = None, token: str | None = None) -> dict | None:
+    """Return the DHIS2 user for these credentials, or None if DHIS2 rejects them."""
+    response = client.get(f"{url}/api/me.json", auth=auth, headers=_token_header(token) if token else None)
+    if response.status_code in (401, 403):
+        return None
+    if response.status_code != 200:
+        raise DHIS2Error(f"GET /api/me returned {response.status_code}")
+    try:
+        data = response.json()
+    except ValueError as e:
+        raise DHIS2Error("GET /api/me returned invalid JSON") from e
+    return {k: data.get(k) for k in ("id", "email", "username", "displayName")}
+
+
+def create_pat(client: httpx.Client, url: str, auth: tuple, expire_ms: int) -> tuple[str, str]:
+    """Create a PAT for the Basic-auth user. Return (key, uid)."""
+    response = client.post(
+        f"{url}/api/apiToken",
+        json={"expire": expire_ms, "attributes": _PAT_ATTRIBUTES},
+        auth=auth,
+    )
+    if response.status_code != 201:
+        raise DHIS2Error(f"POST /api/apiToken returned {response.status_code}")
+    try:
+        body = response.json()["response"]
+        key, uid = body["key"], body["uid"]
+    except (ValueError, KeyError, TypeError) as e:
+        raise DHIS2Error("POST /api/apiToken returned an unexpected body") from e
+    if not key.startswith("d2pat_") or not _UID.match(uid):
+        raise DHIS2Error("POST /api/apiToken returned an unexpected key or uid")
+    return key, uid
+
+
+def revoke_pat(client: httpx.Client, url: str, uid: str, *, auth: tuple | None = None, token: str | None = None) -> bool:
+    """Delete a PAT in DHIS2. Never raises: a failed revocation is logged, the token expires anyway."""
+    if not _UID.match(uid):
+        logger.warning("Not revoking DHIS2 token: invalid uid")
+        return False
+    try:
+        response = client.delete(
+            f"{url}/api/apiToken/{uid}", auth=auth, headers=_token_header(token) if token else None
         )
+    except httpx.HTTPError as e:
+        logger.warning("Could not revoke DHIS2 token uid=%s: %s", uid, e)
+        return False
+    if response.status_code != 200:
+        logger.warning("DHIS2 refused to revoke token uid=%s: status %s", uid, response.status_code)
+        return False
+    logger.info("Revoked DHIS2 token uid=%s", uid)
+    return True
 
-    user_info = await get_dhis2_user_info(token=credentials.credentials)
 
-    if not user_info:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired DHIS2 token",
-        )
+def user_from_cookies(cookies) -> dict | None:
+    """User of the session cookie, valid only while it belongs to the active DHIS2 token."""
+    session_id = cookies.get(SESSION_COOKIE)
+    session = auth_store.get_session(session_id) if session_id else None
+    credential = auth_store.get_credential() if session else None
+    if not session or not credential or credential["pat_uid"] != session["pat_uid"]:
+        return None
+    return session["user"]
 
-    logger.info("User authenticated successfully: id=%s", user_info.get("id"))
-    return user_info
+
+async def get_current_user(connection: HTTPConnection) -> dict:
+    """Router dependency for HTTP routes and WebSockets alike."""
+    is_websocket = connection.scope["type"] == "websocket"
+    # CORS does not cover WebSockets: check the origin here (HTTP is checked by check_origin).
+    if is_websocket and not is_allowed_origin(connection.headers.get("origin")):
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)  # handshake refused
+    user = await run_in_threadpool(user_from_cookies, connection.cookies)
+    if user is not None:
+        return user
+    if is_websocket:
+        # Accept first: a refused handshake only shows code 1006 to the browser.
+        await connection.accept()
+        raise WebSocketException(code=WS_NOT_AUTHENTICATED, reason="Not authenticated")
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")

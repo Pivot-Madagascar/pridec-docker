@@ -94,17 +94,18 @@ Redis (24h TTL) with file fallback (`logs/*.log`, `logs/*.json`, `logs/requests/
 | `DATA_DIR` | `.` | Root for `output/` and `.output_sig` |
 | `HOST_PWD` | `.` | Host path for Docker forecast volumes |
 | `TRACKED_ENDPOINTS` | `""` (all) | Middleware tracing prefixes |
-| `FRONTEND_URL` | `http://localhost:5173` | CORS origin |
-| `DHIS2_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI` | — | DHIS2 OAuth2 |
-| `DHIS2_AUTH_TIMEOUT` | `3.0` | Auth call timeout |
-| `DHIS2_ALLOWED_HOSTS` | `""` (all allowed) | DHIS2 URL whitelist |
+| `FRONTEND_URL` | `http://localhost:5173` | CORS origin and `Origin` check |
+| `DHIS2_AUTH_TIMEOUT` | `10.0` | Login DHIS2 call timeout |
+| `DHIS2_ALLOWED_HOSTS` | `""` (every login refused) | Hosts the login may send credentials to |
+| `COOKIE_SECURE` | `true` | `Secure` flag of the session cookie |
+| `REDIS_PASSWORD` | `""` | Redis `requirepass` |
 
-The DHIS2 URL comes from `etl/scripts/config.get_dhis_url()`. Hot-editable keys (`DHIS_URL`, `DHIS_TOKEN`, `PARENT_OU`, `OU_LEVEL`, `DISEASE_CODE`) live in Redis hash `app:config:dynamic`; they only apply to the forecast container.
+DHIS2 URL and token come from the etlui login (Redis `dhis2:credential`, 24 h TTL) through `etl/scripts/config.get_dhis_url()` / `get_dhis_token()`. Hot-editable keys (`PARENT_OU`, `OU_LEVEL`, `DISEASE_CODE`) live in Redis hash `app:config:dynamic`.
 
 ### Authentication
 
-- **DHIS2**: API token or OAuth2 (`/auth/dhis2/login`, `/auth/dhis2/callback`)
-- Only `/api/config/*` and `/auth/me` require `get_current_user` (to be extended to all routers)
+- **DHIS2**: username/password login (`/auth/login`, `/auth/logout`) → server-side 24 h PAT + HttpOnly session cookie (see `etlhub/docs/ARCHITECTURE.md`)
+- Every router except `auth_router` requires `get_current_user` (set in `main.py`), the log WebSocket included
 
 ### Exceptions
 
@@ -225,8 +226,8 @@ To test a new router:
 | GET | `/api/tracking/etl-logs/{job_id}` | `tracking_router` | Read | — |
 | WS | `/api/tracking/etl-logs/{job_id}` | `tracking_router` | Pub/sub stream | — |
 | GET/PUT | `/api/config/`, PUT `/api/config/reload` | `config_router` | Redis | **DHIS2** |
-| POST | `/auth/validate-token`, GET `/auth/dhis2/login`, POST `/auth/dhis2/callback` | `auth_router` | DHIS2 call | — |
-| GET | `/auth/me` | `auth_router` | DHIS2 call | **DHIS2** |
+| POST | `/auth/login`, `/auth/logout` | `auth_router` | DHIS2 calls + Redis, session cookie | — |
+| GET | `/auth/me` | `auth_router` | Redis | **Session** |
 | GET | `/output/forecast_report.html[/exists]` | `forecast_report_router` | File | — |
 | DELETE | `/output/reset` | `forecast_report_router` | Delete `output/` | "signature" |
 | GET | `/` | `main.py` | Static HTML | — |

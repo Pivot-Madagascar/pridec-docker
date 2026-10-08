@@ -1,238 +1,278 @@
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+"""DHIS2 username/password login, session cookie, token revocation.
 
+DHIS2 is faked with httpx.MockTransport and Redis with an in-memory dict: these tests
+say nothing about real Redis expiry, only about what etlhub writes and reads.
+"""
+import base64
+import logging
+import os
+
+import httpx
+import pytest
 from fastapi.testclient import TestClient
 
+from etlhub.api.auth import router as auth_router_module
+from etlhub.core.config import get_settings
+from etlhub.infrastructure import auth_store
 
-def test_validate_token_endpoint_exists(client: TestClient):
-    """Test that validate-token endpoint exists."""
-    response = client.post("/auth/validate-token", json={"token": "test-token"})
-    assert response.status_code in [200, 401, 500]
-
-
-def test_protected_route_requires_auth(client: TestClient):
-    """Test that protected routes require authentication."""
-    response = client.get("/auth/me")
-    assert response.status_code == 401
+DHIS2_URL = "https://dhis2.test"
+PASSWORD = "s3cret-Pa55word"
+FRONTEND = "http://localhost:5173"
 
 
-def test_missing_credentials_returns_401(client: TestClient):
-    """Test that missing Authorization header returns 401."""
-    response = client.get("/auth/me")
-    assert response.status_code == 401
-    assert response.json()["detail"] == "Not authenticated"
+class FakeRedis:
+    def __init__(self):
+        self.data = {}
+
+    def get(self, key):
+        return self.data.get(key)
+
+    def set(self, key, value, ex=None):
+        self.data[key] = value
+
+    def delete(self, *keys):
+        for k in keys:
+            self.data.pop(k, None)
+
+    def incr(self, key):
+        self.data[key] = str(int(self.data.get(key, 0)) + 1)
+
+    def expire(self, key, seconds):
+        pass
+
+    def pipeline(self):
+        return self
+
+    def execute(self):
+        pass
 
 
-def test_valid_token_authenticates_user(client: TestClient):
-    """Test that a valid token returns user info."""
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "id": "user123",
-        "email": "test@example.com",
-        "username": "testuser",
-        "displayName": "Test User",
-    }
+class FakeDHIS2:
+    """Basic auth for admin, ApiToken for the tokens it created."""
 
-    mock_client = MagicMock()
-    mock_client.get = AsyncMock(return_value=mock_response)
+    def __init__(self):
+        self.tokens = {}  # uid -> key
+        self.created = 0
+        self.calls = []
+        self.down = False
+        self.fail_create = False
 
-    with patch("httpx.AsyncClient") as mock_client_cls:
-        mock_client_cls.return_value.__aenter__.return_value = mock_client
-        with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value="http://localhost:8080"):
-            with patch("etlhub.core.config.get_settings") as mock_settings:
-                mock_settings.return_value.dhis2_allowed_hosts = ""
-                mock_settings.return_value.dhis2_auth_timeout = 3.0
+    def _basic_ok(self, request):
+        expected = "Basic " + base64.b64encode(f"admin:{PASSWORD}".encode()).decode()
+        return request.headers.get("authorization") == expected
 
-                response = client.get(
-                    "/auth/me",
-                    headers={"Authorization": "Bearer valid-token"},
-                )
+    def _token_ok(self, request):
+        header = request.headers.get("authorization", "")
+        return header.startswith("ApiToken ") and header[9:] in self.tokens.values()
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == "user123"
-
-
-def test_invalid_token_returns_401(client: TestClient):
-    """Test that an invalid token returns 401."""
-    mock_response = MagicMock()
-    mock_response.status_code = 401
-
-    mock_client = MagicMock()
-    mock_client.get = AsyncMock(return_value=mock_response)
-
-    with patch("httpx.AsyncClient") as mock_client_cls:
-        mock_client_cls.return_value.__aenter__.return_value = mock_client
-        with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value="http://localhost:8080"):
-            with patch("etlhub.core.config.get_settings") as mock_settings:
-                mock_settings.return_value.dhis2_allowed_hosts = ""
-                mock_settings.return_value.dhis2_auth_timeout = 3.0
-
-                response = client.get(
-                    "/auth/me",
-                    headers={"Authorization": "Bearer invalid-token"},
-                )
-
-    assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid or expired DHIS2 token"
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        if self.down:
+            raise httpx.ConnectError("down", request=request)
+        self.calls.append((request.method, request.url.path))
+        authed = self._basic_ok(request) or self._token_ok(request)
+        if request.url.path == "/api/me.json":
+            if not authed:
+                return httpx.Response(401)
+            return httpx.Response(200, json={"id": "u1", "username": "admin", "email": None, "displayName": "Admin"})
+        if request.method == "POST" and request.url.path == "/api/apiToken":
+            if not self._basic_ok(request):
+                return httpx.Response(401)
+            if self.fail_create:
+                return httpx.Response(500)
+            if b'"MethodAllowedList"' not in request.content or b'"expire"' not in request.content:
+                return httpx.Response(415)
+            self.created += 1
+            n = self.created
+            uid, key = f"tokenUid{n:03d}", f"d2pat_key{n}"
+            self.tokens[uid] = key
+            return httpx.Response(201, json={"httpStatusCode": 201, "response": {"key": key, "uid": uid}})
+        if request.method == "DELETE" and request.url.path.startswith("/api/apiToken/"):
+            uid = request.url.path.rsplit("/", 1)[1]
+            if not authed or uid not in self.tokens:
+                return httpx.Response(404)
+            del self.tokens[uid]
+            return httpx.Response(200, json={"httpStatusCode": 200, "response": {"uid": uid}})
+        return httpx.Response(404)
 
 
-def test_dhis2_unreachable_returns_401(client: TestClient):
-    """Test that DHIS2 being unreachable returns 401."""
-    import httpx
-
-    mock_client = MagicMock()
-    mock_client.get = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
-
-    with patch("httpx.AsyncClient") as mock_client_cls:
-        mock_client_cls.return_value.__aenter__.return_value = mock_client
-        with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value="http://localhost:8080"):
-            with patch("etlhub.core.config.get_settings") as mock_settings:
-                mock_settings.return_value.dhis2_allowed_hosts = ""
-                mock_settings.return_value.dhis2_auth_timeout = 3.0
-
-                response = client.get(
-                    "/auth/me",
-                    headers={"Authorization": "Bearer some-token"},
-                )
-
-    assert response.status_code == 401
+@pytest.fixture
+def fake_redis(monkeypatch):
+    fake = FakeRedis()
+    monkeypatch.setattr(auth_store, "get_redis", lambda: fake)
+    return fake
 
 
-def test_invalid_json_response_returns_401(client: TestClient):
-    """Test that invalid JSON response from DHIS2 returns 401."""
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.side_effect = ValueError("Invalid JSON")
-
-    mock_client = MagicMock()
-    mock_client.get = AsyncMock(return_value=mock_response)
-
-    with patch("httpx.AsyncClient") as mock_client_cls:
-        mock_client_cls.return_value.__aenter__.return_value = mock_client
-        with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value="http://localhost:8080"):
-            with patch("etlhub.core.config.get_settings") as mock_settings:
-                mock_settings.return_value.dhis2_allowed_hosts = ""
-                mock_settings.return_value.dhis2_auth_timeout = 3.0
-
-                response = client.get(
-                    "/auth/me",
-                    headers={"Authorization": "Bearer some-token"},
-                )
-
-    assert response.status_code == 401
+@pytest.fixture
+def dhis2(monkeypatch):
+    fake = FakeDHIS2()
+    monkeypatch.setattr(
+        auth_router_module, "dhis2_client", lambda: httpx.Client(transport=httpx.MockTransport(fake.handler))
+    )
+    return fake
 
 
-def test_token_missing_url_returns_401(client: TestClient):
-    """Test that missing DHIS2 URL in settings returns 401."""
-    with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value=""):
-        with patch("etlhub.core.config.get_settings") as mock_settings:
-            mock_settings.return_value.dhis2_allowed_hosts = ""
-            mock_settings.return_value.dhis2_auth_timeout = 3.0
-
-            response = client.get(
-                "/auth/me",
-                headers={"Authorization": "Bearer some-token"},
-            )
-
-    assert response.status_code == 401
+@pytest.fixture
+def settings(monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, "dhis2_allowed_hosts", "dhis2.test")
+    monkeypatch.setattr(s, "cookie_secure", True)
+    monkeypatch.setattr(s, "frontend_url", FRONTEND)
+    return s
 
 
-def test_validate_token_endpoint_with_custom_url_returns_user(client: TestClient):
-    """Test that validate-token works with custom dhis2_url."""
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "id": "user456",
-        "email": "validate@example.com",
-        "username": "validateuser",
-        "displayName": "Validate User",
-    }
+@pytest.fixture
+def https_client(anon_app, fake_redis, dhis2, settings):
+    # https base URL: the session cookie is Secure.
+    return TestClient(anon_app, base_url="https://testserver")
 
-    mock_client = MagicMock()
-    mock_client.get = AsyncMock(return_value=mock_response)
 
-    with patch("httpx.AsyncClient") as mock_client_cls:
-        mock_client_cls.return_value.__aenter__.return_value = mock_client
-        with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value=None):
-            with patch("etlhub.core.config.get_settings") as mock_settings:
-                mock_settings.return_value.dhis2_allowed_hosts = "localhost:8082"
-                mock_settings.return_value.dhis2_auth_timeout = 3.0
+def _login(client, password=PASSWORD, url=DHIS2_URL):
+    return client.post("/auth/login", json={"dhis2_url": url, "username": "admin", "password": password})
 
-                response = client.post(
-                    "/auth/validate-token",
-                    json={"token": "valid-token", "dhis2_url": "http://localhost:8082"},
-                )
+
+def test_login_sets_httponly_cookie_and_stores_the_token_server_side(https_client, fake_redis, dhis2, caplog):
+    caplog.set_level(logging.DEBUG)
+    response = _login(https_client)
 
     assert response.status_code == 200
-    data = response.json()
-    assert "user" in data
-    assert data["user"]["id"] == "user456"
+    assert response.json()["user"]["username"] == "admin"
+    cookie = response.headers["set-cookie"]
+    assert "etlhub_session=" in cookie
+    assert "HttpOnly" in cookie and "Secure" in cookie and "SameSite=strict" in cookie
+
+    credential = auth_store.get_credential()
+    assert credential["url"] == DHIS2_URL
+    assert credential["token"] in dhis2.tokens.values()
+    assert credential["token"] not in response.text
+    assert PASSWORD not in caplog.text
+    assert credential["token"] not in caplog.text
+
+    assert https_client.get("/auth/me").json()["username"] == "admin"
 
 
-def test_validate_token_endpoint_disallowed_url_returns_400(client: TestClient):
-    """Test that validate-token rejects disallowed dhis2_url."""
-    with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value=None):
-        with patch("etlhub.core.config.get_settings") as mock_settings:
-            mock_settings.return_value.dhis2_allowed_hosts = "trusted.dhis2.com"
-            mock_settings.return_value.dhis2_auth_timeout = 3.0
+def test_wrong_password_returns_401_and_stores_nothing(https_client, fake_redis, dhis2):
+    response = _login(https_client, password="wrong")
 
-            response = client.post(
-                "/auth/validate-token",
-                json={"token": "valid-token", "dhis2_url": "http://localhost:8082"},
-            )
-
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Invalid or disallowed DHIS2 URL"
+    assert response.status_code == 401
+    assert auth_store.get_credential() is None
+    assert dhis2.tokens == {}
 
 
-def test_no_credentials_raises_error():
-    """Test that missing credentials raises ValueError."""
-    from etlhub.api.auth.dhis2_auth import get_dhis2_user_info
+def test_too_many_failures_returns_429_without_calling_dhis2(https_client, dhis2):
+    for _ in range(5):
+        assert _login(https_client, password="wrong").status_code == 401
+    calls = len(dhis2.calls)
 
-    import asyncio
-    with patch("etlhub.api.auth.dhis2_auth.get_dhis_url", return_value="http://localhost:8080"):
-        with patch("etlhub.core.config.get_settings") as mock_settings:
-            mock_settings.return_value.dhis2_auth_timeout = 3.0
+    assert _login(https_client).status_code == 429
+    assert len(dhis2.calls) == calls
 
-            with pytest.raises(ValueError, match="Authentication required"):
-                asyncio.run(get_dhis2_user_info())
+
+@pytest.mark.parametrize("url", [
+    "https://evil.test",                 # not in DHIS2_ALLOWED_HOSTS
+    "http://dhis2.test",                 # plain http outside localhost
+    "https://user:pw@dhis2.test",        # credentials in the URL
+    "https://dhis2.test/?next=evil",     # query string
+    "ftp://dhis2.test",
+])
+def test_disallowed_url_returns_400(https_client, dhis2, url):
+    assert _login(https_client, url=url).status_code == 400
+    assert dhis2.calls == []
+
+
+def test_empty_allowlist_refuses_every_login(https_client, settings, dhis2, monkeypatch):
+    monkeypatch.setattr(settings, "dhis2_allowed_hosts", "")
+    assert _login(https_client).status_code == 400
+
+
+def test_second_login_revokes_previous_token_and_invalidates_previous_session(anon_app, https_client, dhis2):
+    _login(https_client)
+    first_uid = auth_store.get_credential()["pat_uid"]
+
+    other_browser = TestClient(anon_app, base_url="https://testserver")
+    assert _login(other_browser).status_code == 200
+
+    assert first_uid not in dhis2.tokens
+    assert len(dhis2.tokens) == 1
+    assert https_client.get("/auth/me").status_code == 401
+    assert other_browser.get("/auth/me").status_code == 200
+
+
+def test_logout_revokes_token_and_clears_session(https_client, dhis2):
+    _login(https_client)
+
+    response = https_client.post("/auth/logout", headers={"Origin": FRONTEND})
+
+    assert response.status_code == 204
+    assert dhis2.tokens == {}
+    assert auth_store.get_credential() is None
+    assert https_client.get("/auth/me").status_code == 401
+
+
+def test_expired_credential_logs_the_user_out(https_client, fake_redis):
+    _login(https_client)
+    fake_redis.delete(auth_store.CREDENTIAL_KEY)  # what Redis does when the TTL ends
+
+    assert https_client.get("/auth/me").status_code == 401
+
+
+def test_dhis2_unreachable_returns_502(https_client, dhis2):
+    dhis2.down = True
+    assert _login(https_client).status_code == 502
+
+
+def test_token_creation_failure_returns_502_and_stores_nothing(https_client, dhis2):
+    dhis2.fail_create = True
+
+    assert _login(https_client).status_code == 502
+    assert auth_store.get_credential() is None
+
+
+def test_redis_failure_after_token_creation_revokes_the_new_token(https_client, fake_redis, dhis2, monkeypatch):
+    import redis
+
+    def broken_set(*args, **kwargs):
+        raise redis.RedisError("down")
+
+    monkeypatch.setattr(fake_redis, "set", broken_set)
+
+    assert _login(https_client).status_code == 503
+    assert dhis2.tokens == {}
+
+
+def test_request_from_another_origin_is_refused(https_client):
+    _login(https_client)
+
+    assert https_client.post("/auth/logout", headers={"Origin": "http://localhost:8082"}).status_code == 403
+    assert https_client.get("/auth/me").status_code == 200
+
+
+def test_me_without_cookie_returns_401(https_client):
+    assert https_client.get("/auth/me").status_code == 401
+
+
+def test_config_never_returns_the_token(https_client, monkeypatch):
+    from etlhub.infrastructure.config_store import ConfigStore
+    monkeypatch.setattr(ConfigStore, "get_all", lambda self: {})
+    _login(https_client)
+
+    body = https_client.get("/api/config/").json()
+
+    assert body["has_dhis_token"] is True
+    assert body["dhis_url"] == DHIS2_URL
+    assert "dhis_token" not in body
+    assert auth_store.get_credential()["token"] not in str(body)
 
 
 @pytest.mark.integration
-def test_authentication_with_github_secrets(client: TestClient):
-    """Integration test: validate token against real DHIS2 instance using DHIS2_URL and DHIS2_TOKEN env vars.
+def test_fetch_me_with_a_real_token():
+    """Read-only check against a real DHIS2 (GET /api/me). Needs DHIS_URL and DHIS_TOKEN."""
+    from etlhub.api.auth.dhis2_auth import fetch_me
 
-    This test uses GitHub secrets (DHIS2_URL and DHIS2_TOKEN) for real authentication testing.
-    It will be skipped if either environment variable is not set.
-    The env vars are populated from GitHub repository secrets during CI runs.
-    """
-    import os
-
-    dhis2_url = os.getenv("DHIS_URL")
-    dhis2_token = os.getenv("DHIS_TOKEN")
-
-    if not dhis2_url or not dhis2_token:
+    url, token = os.getenv("DHIS_URL"), os.getenv("DHIS_TOKEN")
+    if not url or not token:
         pytest.skip("DHIS_URL and DHIS_TOKEN environment variables not set")
 
-    assert dhis2_url.startswith("http"), f"DHIS2_URL should be a valid HTTP URL, got: {dhis2_url}"
-    assert len(dhis2_token) > 10, "DHIS2_TOKEN appears invalid (too short)"
+    with httpx.Client(timeout=10) as client:
+        user = fetch_me(client, url.rstrip("/"), token=token)
 
-    response = client.post(
-        "/auth/validate-token",
-        json={"token": dhis2_token, "dhis2_url": dhis2_url},
-    )
-
-    if response.status_code != 200:
-        print(f"Response status: {response.status_code}")
-        print(f"Response body: {response.text}")
-        print(f"URL used: {dhis2_url}")
-
-    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.json()}"
-    data = response.json()
-    assert "user" in data, "Response should contain user object"
-    assert data["user"]["id"] is not None, "User should have an id"
-    assert data["user"]["email"] is not None, "User should have an email"
-    assert data["user"]["username"] is not None, "User should have a username"
-    assert data["user"]["displayName"] is not None, "User should have a displayName"
+    assert user is not None and user["id"]

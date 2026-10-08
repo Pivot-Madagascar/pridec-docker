@@ -1,4 +1,8 @@
 import { ref, computed, onUnmounted } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+
+// Close code etlhub sends when the session cookie is missing or expired.
+export const WS_NOT_AUTHENTICATED = 4401
 
 export interface LogEntry {
   type: 'etl_log_entry' | 'job_status_update' | 'etl_log_history' | 'etl_log_complete'
@@ -81,6 +85,12 @@ export function useWebSocketLogger(options: UseWebSocketLoggerOptions = {}) {
       ws.onclose = (event) => {
         connected.value = false
         ws = null
+
+        if (event.code === WS_NOT_AUTHENTICATED) {
+          useAuthStore().clear()
+          window.location.href = '/login'
+          return
+        }
 
         if (!event.wasClean && reconnectAttempts < maxReconnectAttempts && status.value !== 'success' && status.value !== 'error') {
           reconnectAttempts++

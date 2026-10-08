@@ -8,20 +8,12 @@ export interface Dhis2User {
     displayName: string | null
 }
 
+// The session itself is an HttpOnly cookie set by etlhub: JavaScript never sees it.
+// `user` is only a hint for the router; etlhub answers 401 when the session is gone.
 export const useAuthStore = defineStore('auth', () => {
-    const token = ref<string | null>(localStorage.getItem('token'))
     const user = ref<Dhis2User | null>(null)
 
-    const isAuthenticated = computed(() => !!token.value)
-
-    function setToken(newToken: string | null) {
-        token.value = newToken
-        if (newToken) {
-            localStorage.setItem('token', newToken)
-        } else {
-            localStorage.removeItem('token')
-        }
-    }
+    const isAuthenticated = computed(() => !!user.value)
 
     function setUser(newUser: Dhis2User | null) {
         user.value = newUser
@@ -33,22 +25,19 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     function clear() {
-        token.value = null
         user.value = null
-        localStorage.removeItem('token')
         localStorage.removeItem('user')
+        localStorage.removeItem('token') // left by the old token login
     }
 
     const storedUser = localStorage.getItem('user')
-    if (storedUser && token.value) {
+    if (storedUser) {
         user.value = JSON.parse(storedUser)
     }
 
     return {
-        token,
         user,
         isAuthenticated,
-        setToken,
         setUser,
         clear,
     }

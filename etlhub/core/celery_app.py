@@ -3,7 +3,7 @@ from etlhub.core.config import get_settings
 
 settings = get_settings()
 
-redis_url = f"redis://{settings.redis_host}:{settings.redis_port}/{settings.redis_db}"
+redis_url = settings.redis_url
 
 celery_app = Celery(
     "etlhub",

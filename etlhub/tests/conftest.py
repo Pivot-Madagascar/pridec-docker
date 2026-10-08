@@ -3,6 +3,8 @@ from unittest.mock import MagicMock
 
 redis_mock = MagicMock()
 redis_mock.asyncio = MagicMock()
+# `except redis.RedisError` needs a real exception class, not a MagicMock.
+redis_mock.RedisError = type("RedisError", (Exception,), {})
 sys.modules['redis'] = redis_mock
 sys.modules['redis.asyncio'] = redis_mock.asyncio
 sys.modules['pridec_gee'] = MagicMock()
@@ -20,9 +22,25 @@ def _request_log_db(tmp_path, monkeypatch):
     monkeypatch.setattr(request_tracker, "_request_tracker", request_tracker.RequestTracker(tmp_path / "etlhub.db"))
 
 
+TEST_USER = {"id": "u1", "email": None, "username": "tester", "displayName": "Tester"}
+
+
 @pytest.fixture
 def app():
+    """The app with a logged-in user: router tests are not about authentication."""
     from etlhub.main import app
+    from etlhub.api.auth import get_current_user
+    app.dependency_overrides[get_current_user] = lambda: TEST_USER
+    yield app
+    app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.fixture
+def anon_app():
+    """The app with the real session check (no override)."""
+    from etlhub.main import app
+    from etlhub.api.auth import get_current_user
+    app.dependency_overrides.pop(get_current_user, None)
     return app
 
 

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { configService } from '@/services/config'
-import type { ConfigResponse } from '@/types/config'
+import type { ConfigResponse, ConfigUpdate } from '@/types/config'
 
 export const useConfigStore = defineStore('config', () => {
   const config = ref<ConfigResponse | null>(null)
@@ -20,7 +20,7 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
-  async function updateConfig(payload: Partial<ConfigResponse>) {
+  async function updateConfig(payload: ConfigUpdate) {
     loading.value = true
     error.value = null
     try {

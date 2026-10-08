@@ -58,3 +58,6 @@ local-docs/
 # local graphify knowledge graph
 graphify/
 graphify-out/
+# Redis (see redis.conf)
+redis-data/
+redis-secret.conf

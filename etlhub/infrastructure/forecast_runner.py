@@ -24,10 +24,12 @@ def _build_dynamic_env_file(host_pwd: str, job_id: str) -> str:
     with open(base_env_path) as f:
         base_lines = f.readlines()
 
-    overrides = ConfigStore().get_all()
-    
-    # Filter lines from the original .env that will be overridden
-    override_keys = set(overrides.keys())
+    # The R pipeline does not call DHIS2: never hand it the DHIS2 URL or token.
+    excluded = {"DHIS_URL", "DHIS_TOKEN"}
+    overrides = {k: v for k, v in ConfigStore().get_all().items() if k not in excluded}
+
+    # Filter lines from the original .env that will be overridden or excluded
+    override_keys = set(overrides.keys()) | excluded
     filtered_base = []
     for line in base_lines:
         stripped = line.strip()

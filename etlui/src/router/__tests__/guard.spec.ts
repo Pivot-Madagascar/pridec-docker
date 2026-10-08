@@ -3,6 +3,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+const USER = { id: '123', email: 'test@example.com', username: 'test', displayName: 'Test User' }
+
 describe('Router Guard', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -102,7 +104,7 @@ expect(router.currentRoute.value.name).toBe('Login')
     })
 
     const authStore = useAuthStore()
-    authStore.setToken('test-token')
+    authStore.setUser(USER)
 
     router.beforeEach((to, _from, next) => {
       const authStore = useAuthStore()
@@ -135,7 +137,7 @@ expect(router.currentRoute.value.name).toBe('Login')
     })
 
     const authStore = useAuthStore()
-    authStore.setToken('test-token')
+    authStore.setUser(USER)
 
     router.beforeEach((to, _from, next) => {
       const authStore = useAuthStore()
@@ -164,34 +166,33 @@ describe('Auth Store', () => {
     localStorage.clear()
   })
 
-  it('should be unauthenticated when no token in localStorage', () => {
+  it('should be unauthenticated when no user in localStorage', () => {
     const authStore = useAuthStore()
     expect(authStore.isAuthenticated).toBe(false)
-    expect(authStore.token).toBe(null)
   })
 
-  it('should be authenticated when token is set', () => {
+  it('should be authenticated when a user is set, and keep no token', () => {
     const authStore = useAuthStore()
-    authStore.setToken('my-token')
+    authStore.setUser(USER)
     expect(authStore.isAuthenticated).toBe(true)
-    expect(authStore.token).toBe('my-token')
-    expect(localStorage.getItem('token')).toBe('my-token')
-  })
-
-  it('should be unauthenticated after clear()', () => {
-    const authStore = useAuthStore()
-    authStore.setToken('my-token')
-    expect(authStore.isAuthenticated).toBe(true)
-    authStore.clear()
-    expect(authStore.isAuthenticated).toBe(false)
+    expect(JSON.parse(localStorage.getItem('user')!)).toEqual(USER)
     expect(localStorage.getItem('token')).toBe(null)
   })
 
-  it('should store and retrieve user info', () => {
+  it('should be unauthenticated after clear(), and drop a token left by the old login', () => {
+    localStorage.setItem('token', 'old-token')
     const authStore = useAuthStore()
-    const userInfo = { id: '123', email: 'test@example.com', username: 'test', displayName: 'Test User' }
-    authStore.setUser(userInfo)
-    expect(authStore.user).toEqual(userInfo)
-    expect(JSON.parse(localStorage.getItem('user')!)).toEqual(userInfo)
+    authStore.setUser(USER)
+    authStore.clear()
+    expect(authStore.isAuthenticated).toBe(false)
+    expect(localStorage.getItem('user')).toBe(null)
+    expect(localStorage.getItem('token')).toBe(null)
+  })
+
+  it('should restore the user from localStorage', () => {
+    localStorage.setItem('user', JSON.stringify(USER))
+    const authStore = useAuthStore()
+    expect(authStore.user).toEqual(USER)
+    expect(authStore.isAuthenticated).toBe(true)
   })
 })
