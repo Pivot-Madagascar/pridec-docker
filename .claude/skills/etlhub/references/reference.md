@@ -23,13 +23,22 @@ Re-check against the code before relying on a line number or a default.
 | POST | `/auth/logout` | `auth_router` | Revokes the DHIS2 token, 204, clears the cookie | — |
 | GET | `/auth/me` | `auth_router` | Redis | **Session** |
 | GET | `/output/forecast_report.html[/exists]` | `forecast_report_router` | File | — |
-| POST | `/input/files/{config\|external_data}` | `input_router` | Sync, multipart field `file` (≤ 10 MB) → replaces `input/config.json` or `input/external_data.csv`. 413 too big, 422 invalid JSON object / CSV without `orgUnit`,`period` / other name | — |
+| POST | `/input/files/{config\|external_data}` | `input_router` | Sync, multipart field `file` (≤ 10 MB) → replaces `input/config.json` or `input/external_data.csv`. 413 too big, 422 invalid JSON object / CSV without `orgUnit`,`period` / other name / `forecast_start` ≠ running cycle | — |
 | GET | `/input/files` | `input_router` | Sync. `{config, external_data}` → `{exists, size?, modified?}` | — |
 | GET | `/input/files/config/preview` | `input_router` | Sync, content of `input/config.json`. 404 absent, 422 not a JSON object | — |
 | GET | `/input/files/external_data/preview?limit=100` | `input_router` | Sync, `{columns, rows, total_rows, period_range, org_units}`: first `limit` (1–500) rows, summary over the whole file read line by line. 404 absent | — |
 | DELETE | `/input/files/{config\|external_data}` | `input_router` | Sync, deletes the file in `input/`. 404 absent, 422 other name | — |
+| GET | `/pipeline/checkpoints?cycle=YYYYMM` | `pipeline_router` | SQLite (Redis in test mode), default cycle = the current month. `{cycle, cycle_state, current_step, run, lock, dry_run, steps[{step, done, accessible, items[{item, status, job_id, updated_at, launchable}]}]}` | Session |
+| POST | `/pipeline/runs` | `pipeline_router` | Body `{source, disease}`, `?confirm`. Opens the forecast run of a couple (one at a time), empties `input/` and `output/`. 201 run, 409, 422 unknown couple | Session |
+| DELETE | `/pipeline/runs/current` | `pipeline_router` | Abandons the open run, its items → pending. `{abandoned: couple}` | Session |
+| POST | `/pipeline/runs/current/approve` | `pipeline_router` | Body `{decision: approve\|reject}`. `{couple, decision}` | Session |
+| PUT | `/pipeline/mode` | `pipeline_router` | Body `{dry_run}`, `?confirm`. Writes `DRYRUN` to the dynamic config; test mode keeps checkpoints in Redis (`pipeline:dry_run:db`) only; leaving it discards them (needs confirm when there are any). 409 while a job runs | Session |
+| DELETE | `/pipeline/lock` | `pipeline_router` | Frees the job lock (killed worker; the lock never expires), its running checkpoint → `error`. `{released: job_id\|null}` | Session |
+| POST | `/calc_orgunit_alerts` | `analytics_router` | **501**: no script implements it yet (item of the CSB runs) | Session |
 | DELETE | `/output/reset` | `forecast_report_router` | `rm -rf output/` | `.output_sig` exists (not real auth) |
-| GET | `/` | `main.py` | Static HTML | — |
+| GET | `/` | `main.py` | 307 redirect to `/docs` | — |
+
+Every launch (`/import_*`, `/fetch_*`, `/validate_inputs`, `/build_analytics`, `/calc_csb_alerts`, `/post_forecast`, `/update_key`, `/forecast/`) and `POST`/`DELETE /input/files/{name}` go through the pipeline gate (`etlhub/docs/pipeline-checkpoints.md`): **409** `{message}` while another job runs, when a prerequisite is not in `success`, or for a forecast-run job (`/fetch_*`, `/validate_inputs`, `/forecast/`, `/post_forecast`, input files) without an open run. Undoing a `success` needs `?confirm=true`, otherwise **409** `{code: "confirmation_required", message, impact{item, step, current_step, reset_items, blocked_steps, kept_items}}` and nothing is written. All messages are in English.
 
 Router prefixes (`main.py`): `ingest`, `analytics`, `validation`, `auth` have none; `forecast` `/forecast`; `tracking` `/api/tracking`; `forecast_report` `/output`; `input` `/input`; `config` `/api/config`. `auth_router` has no OpenAPI tag.
 
@@ -78,7 +87,7 @@ Explicit: `task_track_started=True`, JSON serializers, `accept_content=["json"]`
 |---|---|
 | `JobNotFoundError` | 404 |
 | `ValidationError` | 400 |
-| `TaskLaunchError`, `ETLException` | 500 |
+| `ETLException` | 500 |
 
 `CeleryTaskLauncher.launch` raises a plain `ValueError` for an unknown task type, which is not one of the mapped exceptions.
 

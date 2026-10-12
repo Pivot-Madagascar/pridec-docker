@@ -145,7 +145,7 @@ cd etlhub && python -m run_server
 ### Terminal 3 - Frontend Server
 ```bash
 cd etlui
-yarn start
+yarn dev
 ```
 
 ### Redis (optional - if not running as a system service)

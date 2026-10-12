@@ -31,9 +31,9 @@ Line numbers in the references come from an inspection of the repository. Re-run
 - ETL wrappers go through `_execute_etl_job`; failures become `ETLException(f"{name} failed: {e}")`.
 - Celery tasks use `_run_task(...)` and **re-raise** after writing the "error" status.
 - Launch endpoints: `POST`, `status_code=202`, `response_model=ETLResponse`, `summary`, `description`, `response_description`, optional `webhook_url: str | None = Query(None)`, handler `async def api_<action>`.
-- Domain errors map to HTTP in `main.py` (`JobNotFoundError` 404, `ValidationError` 400, `TaskLaunchError`/`ETLException` 500).
+- Domain errors map to HTTP in `main.py` (`JobNotFoundError` 404, `ValidationError` 400, `ETLException` 500).
 - Naming: `*_router.py`, `*_service.py`, `*_use_cases.py`, `run_<action>`, `task_<action>`, `get_<x>_service`. English for code, logs and messages.
-- Tests: `app.dependency_overrides` through the `override_dependencies` fixture; assert `202`, `status == "accepted"`, and `job_id` in the body. Task tests monkeypatch `tasks.JobStore` with an in-memory store and `tasks._send_webhook` with a recorder.
+- Tests: `app.dependency_overrides` through the `override_dependencies` fixture; assert `202`, `status == "accepted"`, and `job_id` in the body. Task tests monkeypatch `tasks.JobStore` with an in-memory store and `tasks.notify_webhook` with a recorder.
 - Commits: English, imperative, capitalised (`Add …`, `Refactor …`), no prefix.
 
 ## Frozen contracts (`etlui` depends on them)
@@ -51,7 +51,7 @@ Line numbers in the references come from an inspection of the repository. Re-run
 | Reliable test config | `pytest.ini` ignored; 1 failing test | `[pytest]` header; fix token cache key | migrations.md#m5, #m6 |
 | Env loading order | `get_settings()` runs before `load_dotenv()` | One explicit loading path | migrations.md#m7 (decision) |
 | Celery limits | Defaults only, no time limit, no retry | Explicit settings | migrations.md#m8 (decision) |
-| Layering | `etl_events` imported from `application`/`infrastructure` | `EventPublisher` port injected | migrations.md#m9 |
+| Layering | `etl_events` imported from `application`/`infrastructure` | `EventPublisher` port (to create) injected | migrations.md#m9 |
 | Front/back agreement | JSON bodies ignored on `/fetch_disease`, `/validate_inputs` | One agreed shape | migrations.md#m10 (decision) |
 | WebSocket loop | *Done* (2026-10-08): subscribe first, 1 s wait, status re-check, `4004` = unknown job | Keep `tests/api/test_etl_logs_ws.py` green | migrations.md#m11 |
 | Logging | 8 `print(`, no config, most modules have no logger | `logging.getLogger(__name__)` everywhere | migrations.md#m3 |
@@ -62,7 +62,7 @@ Suggested order: m5, m6 → m3 → m4 → m2 → m1 → the rest. m5, m6 and m3 
 
 1. *Decided:* the log WebSocket is authenticated by the session cookie (sent by the browser on the handshake) through the router dependency.
 2. Should `/` and `/output/*` stay public?
-3. With `webhook_allowed_hosts` empty: refuse everything, or only require https? Revalidate in `_send_webhook` against redirects?
+3. With `webhook_allowed_hosts` empty: refuse everything, or only require https? Revalidate in `notify_webhook` against redirects?
 4. Env loading: set `ENV_FILE`, point `_PROJECT_ROOT` to the repo root, or call `load_dotenv` first?
 5. `/fetch_disease` and `/validate_inputs`: should the backend accept the JSON body, or should the front stop sending it?
 6. Webhook payload: absolute `logs_url`? HMAC signature?

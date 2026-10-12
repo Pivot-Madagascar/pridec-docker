@@ -4,12 +4,9 @@ Tick every line or say why it does not apply.
 
 ## A. New ETL job type
 
-- [ ] Script function exists in `etl/scripts/` and is imported at the top of `etl_use_cases.py`
-- [ ] Service method generates `f"{type}_{uuid.uuid4().hex[:8]}"` and calls `task_launcher.launch(...)` (templates.md §1)
-- [ ] `run_<name>` wrapper goes through `_execute_etl_job` (§2)
-- [ ] `task_<name>` uses `_run_task`, no hand-written body (§3)
-- [ ] Entry added to `CeleryTaskLauncher._registry` (§3)
-- [ ] Router: 202, `ETLResponse`, `summary`, `description`, `response_description`, `webhook_url` (§4)
+- [ ] Script function imported at the top of `etl_use_cases.py` and added to `ETL_JOBS` (templates.md §1)
+- [ ] Job added to `domain/pipeline.py` (`PIPELINE`, `RUN_TASKS` if it belongs to a run)
+- [ ] Router: one entry in the `ingest_router.py` table (or `add_launch_route`) (§4)
 - [ ] Router is protected (see m1) once m1 has been merged
 - [ ] Router test: 202, `status == "accepted"`, `job_id` present (§7)
 - [ ] Task test: success and failure, failure re-raises (§8)
@@ -48,7 +45,7 @@ Should fix:
 - [ ] `print(` in `etlhub/` outside job output; module without a logger that can fail
 - [ ] Test asserts nothing about behaviour (Redis is a `MagicMock`, so "passes" proves little)
 - [ ] Patch applied to a name already imported elsewhere (no effect)
-- [ ] Dead code added (`JWT_SECRET`, `WebhookNotification`, `ValidationResponse` are existing examples: do not add more)
+- [ ] Dead code added (`JWT_SECRET` is an existing example: do not add more)
 - [ ] `.env.example` / docs not updated for a new variable (`LOGS_DIR`, `DATA_DIR`, `HOST_PWD`, `ENV_FILE` are currently missing)
 
 ## E. Before saying "done"

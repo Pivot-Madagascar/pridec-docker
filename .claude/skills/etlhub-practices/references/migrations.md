@@ -32,23 +32,13 @@ Ready-to-apply order: m5, m6 → m3 → m4 → m2 → m1 → the rest. The first
 
 ## m2 — Stop running ETL inline in `async def` handlers
 
-**Problem.** `/post_forecast` and `/update_key` call `run_post_forecast` / `run_update_key` directly from `AnalyticsService` (`analytics_service.py`, lines ~22-47) inside an `async def` handler. This blocks the event loop for the whole DHIS2 call, and `redirect_stdout` changes `sys.stdout` for the whole process.
+**Problem.** `/post_forecast` and `/update_key` run `run_etl_job` directly from `AnalyticsService._run` inside an `async def` handler. This blocks the event loop for the whole DHIS2 call, and `redirect_stdout` changes `sys.stdout` for the whole process.
 
-**Target.** Same 5-layer pattern as every other job: service returns a `job_id`, Celery runs it, the router returns 202.
+**Target.** Same pattern as every other job: service returns a `job_id`, Celery runs it, the router returns 202.
 
 **Steps.**
-1. `tasks.py`: import `run_post_forecast`, `run_update_key`; add
-   ```python
-   @celery_app.task(bind=True)
-   def task_post_forecast(self, job_id: str, webhook_url: str | None = None):
-       _run_task(self, job_id, "forecast publication", run_post_forecast, webhook_url=webhook_url)
-
-   @celery_app.task(bind=True)
-   def task_update_key(self, job_id: str, webhook_url: str | None = None):
-       _run_task(self, job_id, "PRIDE-C key update", run_update_key, webhook_url=webhook_url)
-   ```
-   and register `"post_forecast"` and `"update_key"` in `CeleryTaskLauncher._registry`.
-2. `analytics_service.py`: make both methods return `str` (the job_id) via `self._task_launcher.launch(...)`. Drop the `run_*` import and the inline `ETLResponse`/`ETLException` handling. Keep the constructor signature unchanged so `dependencies.py` and `conftest.py` need no change (`job_repo` and `webhook_notifier` become unused).
+1. `etl_use_cases.py`: move both entries from `SYNC_JOBS` to `ETL_JOBS` (with a label); `task_etl` and `CeleryTaskLauncher` then accept them.
+2. Routers: register both with `add_launch_route` (status 202, `IngestionService.launch`), drop `AnalyticsService` and `get_analytics_service`.
 3. `analytics_router.py`: add `status_code=202`, change the description from "synchronously" to "asynchronously", and return `ETLResponse(status="accepted", ..., job_id=job_id, webhook_url=webhook_url)`.
 
 **Tests.** Add router tests for both endpoints (202, `accepted`, `job_id`). Add a task test with the in-memory store (template 8): success and failure, failure must re-raise.
@@ -60,7 +50,7 @@ Ready-to-apply order: m5, m6 → m3 → m4 → m2 → m1 → the rest. The first
 ## m3 — No silent failures, and real logging
 
 **Problem.**
-- `except Exception: pass` in `job_store.py` (4 places), `request_tracker.py` (3), `tasks.py` (3), `forecast_runner.py` (4), `_JobLogger.write`/`flush`, `_send_webhook`. When Redis or a file is unavailable, jobs become invisible with no trace.
+- `except Exception: pass` in `job_store.py` (4 places), `request_tracker.py` (3), `tasks.py` (3), `forecast_runner.py` (4), `_JobLogger.write`, `notify_webhook`. When Redis or a file is unavailable, jobs become invisible with no trace.
 - Logging: 8 `print(` (6 in `validation_use_cases.py:77-93`, 2 in `forecast_runner.py:151,161`), 20 `logger.` calls in only 4 modules, no logging config. `tasks.py`, `job_store.py`, `etl_use_cases.py` have no logger.
 
 **Target.** Every module that can fail has `logger = logging.getLogger(__name__)`. A swallowed exception is logged with the job id and the operation, at `WARNING`. Do **not** change the control flow: a failure to persist must still not crash the job.
@@ -77,7 +67,7 @@ Same for `set`, `save_logs` (Redis and file separately), `get_logs`. Then `reque
 
 Careful in two places:
 - **`_JobLogger.write`** is installed as `sys.stdout`/`sys.stderr` during a job. A `logger.warning` called from inside it can write back to `sys.stderr`, i.e. to `_JobLogger.write` itself, and recurse. This depends on the handler: Python's last-resort handler (used when nothing is configured) looks up `sys.stderr` at emit time, so it would recurse; a `StreamHandler` created by `basicConfig` keeps the original stderr and would not. Reasoning from how `logging` works, not tested here. Leave `_JobLogger` swallowing for now, or test it with a `caplog`-style test before changing it.
-- **`_send_webhook`**: log the failure (job id, host only, not the full URL, it may carry a token).
+- **`notify_webhook`**: log the failure (job id, host only, not the full URL, it may carry a token).
 
 `print(` → `logger.info(` in `validation_use_cases.py` and `forecast_runner.py`. Inside `capture_stdout`, a `print` is captured into the job log and sent to the UI. A `logger.*` call goes to the logging handlers instead, which may or may not end up in the job log depending on the handler (see above), and `INFO` is dropped when no config sets the level. Decide per call: user-facing job output stays `print`, diagnostics become `logger`.
 
@@ -93,7 +83,7 @@ Also a known behaviour to fix here or separately: on failure `_run_task` calls `
 
 ## m4 — Validate `webhook_url` in one place
 
-**Problem.** `webhook_url` is accepted from anyone and POSTed from the worker (host network) with no scheme or host check: SSRF. `_send_webhook` also swallows all errors. `/auth/validate-token` has the same issue when `DHIS2_ALLOWED_HOSTS` is empty.
+**Problem.** `webhook_url` is accepted from anyone and POSTed from the worker (host network) with no scheme or host check: SSRF. `notify_webhook` also swallows all errors. `/auth/validate-token` has the same issue when `DHIS2_ALLOWED_HOSTS` is empty.
 
 **Target.** One validator, called at the single choke point, `CeleryTaskLauncher.launch`, so every job type is covered. A `ValidationError` raised there already becomes a 400 through the handler in `main.py`.
 
@@ -123,7 +113,7 @@ Also a known behaviour to fix here or separately: on failure `_run_task` calls `
 
 **Tests.** Unit tests for the validator: `None`, `http://`, no host, allowed host, disallowed host, empty allow-list. Router tests are unaffected because they replace the launcher.
 
-**Risks.** Existing callers using `http://` webhooks break. Empty allow-list behaviour is a pending decision. Redirects (`urllib` follows them) are not covered: revalidate in `_send_webhook` if the user wants that. **Coverage gap:** `/post_forecast` and `/update_key` do not go through `launch()` today (they call `self._webhook_notifier.send(...)` inline), so they bypass this validator until m2 is done. Do m2 first, or also validate in `DefaultWebhookNotifier.send`. **Check before relying on the 400:** confirm that `main.py` registers its handler for `etlhub.domain.exceptions.ValidationError` (not Pydantic's class of the same name). Today nothing raises `ValidationError` or `TaskLaunchError`, so that path has never been exercised: add a test for it.
+**Risks.** Existing callers using `http://` webhooks break. Empty allow-list behaviour is a pending decision. Redirects (`urllib` follows them) are not covered: revalidate in `notify_webhook` if the user wants that. **Coverage gap:** `/post_forecast` and `/update_key` do not go through `launch()` today (they call `notify_webhook` inline), so they bypass a validator placed in `launch()` until m2 is done. Do m2 first, or validate in `notify_webhook`. **Check before relying on the 400:** confirm that `main.py` registers its handler for `etlhub.domain.exceptions.ValidationError` (not Pydantic's class of the same name). Today nothing raises `ValidationError`, so that path has never been exercised: add a test for it.
 
 ---
 
@@ -177,9 +167,9 @@ Also in `conftest.py`: `sys.modules['earthengine_api']` is the pip package name,
 
 ## m9 — Layering: inject `EventPublisher`
 
-**Problem.** `domain/interfaces/event_publisher.py` exists but is never used. `tasks.py:52,79`, `forecast_runner.py:172,177`, `etl_use_cases.py:40`, `validation_use_cases.py:30` import `etlhub.api.etl_events` directly (inside `try`/`except pass` blocks).
+**Problem.** `tasks.py`, `forecast_runner.py` and `etl_use_cases.py` (`_JobLogger`) import `etlhub.api.etl_events` directly (inside `try`/`except pass` blocks).
 
-**Target.** Move `ETLEventManager` to `infrastructure/`, implement `EventPublisher`, and inject it.
+**Target.** Move `ETLEventManager` to `infrastructure/`, add an `EventPublisher` port (removed as unused on 2026-10-12), and inject it.
 
 **Approach.** Do it in two steps: (1) move the class and leave a re-export in `api/etl_events.py` so nothing breaks; (2) switch callers to the port one module at a time. Only do this if the user asks: it touches the job pipeline and has little test coverage. Add tests for `_run_task` first.
 

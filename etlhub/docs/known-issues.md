@@ -40,29 +40,26 @@ Fixed (2026-10-08): every router except `auth_router` requires the session, the 
 
 | Violation | Where |
 |---|---|
-| application → api | `application/use_cases/etl_use_cases.py`, `validation_use_cases.py` (`etlhub.api.etl_events`) |
+| application → api | `application/use_cases/etl_use_cases.py` (`etlhub.api.etl_events`) |
 | infrastructure → api | `infrastructure/tasks.py`, `forecast_runner.py` (`get_etl_event_manager`) |
-| core → api | `core/dependencies.py:8` (unused `get_etl_event_manager` import) |
 | api → infrastructure without DI | `api/routers/config_router.py:9-10`, `api/middleware.py`, and since the login work `api/auth/dhis2_auth.py:17`, `api/auth/router.py:21-22` (`auth_store`, `ConfigStore`) |
 | etl scripts → etlhub infrastructure | `etl/scripts/config.py:3-4` (`ConfigStore`, `auth_store`) |
 | application → pandas/geopandas | `validation_use_cases.py` |
 
-The `EventPublisher` port exists in `domain/interfaces/` but is never injected. Proposed fix: move `ETLEventManager` to `infrastructure/` and inject it. The auth code follows the existing `config_router` pattern (direct infrastructure calls); whether that is tolerated is the same open decision as the other imports (see `DEVELOPMENT.md`).
+There is no event port. Proposed fix: move `ETLEventManager` to `infrastructure/` behind a port and inject it. The auth code follows the existing `config_router` pattern (direct infrastructure calls); whether that is tolerated is the same open decision as the other imports (see `DEVELOPMENT.md`).
 
 ## 3. Behaviour worth knowing
 
 - *Fixed (2026-10-08):* the log WebSocket no longer busy-waits (1 s `get_message` timeout, 0.3 % CPU measured while waiting), subscribes before reading history, re-checks the job status every 10 s, stops when the client leaves, and closes with `4004` only for an unknown job. Jobs are recorded `pending` at launch. The tracking page follows pending/running jobs live in its request detail modal.
 - **P1 — `/post_forecast` and `/update_key` run inline** in `async def` handlers (`analytics_router.py:56,109` → `analytics_service.py:22,38`): the whole API, login and WebSockets included, is frozen while they run.
-- **P2 — No timeout, no reconciliation, no lock.** No Celery time limit, no timeout on the forecast `subprocess.run` (`forecast_runner.py:111`). A killed worker leaves `job:{id}` at `running` until the 24 h TTL. Two simultaneous `fetch_*`, `validate_inputs` or `forecast` runs write the same `input/` and `output/` files. Imports resend the same `dataValueSets` each time.
+- **P2 — No timeout, no reconciliation, no lock.** No Celery time limit, no timeout on the forecast `subprocess.run` (`forecast_runner.py:111`). A killed worker leaves `job:{id}` at `running` until the 24 h TTL. Lock: fixed since 2026-10-08 (one job at a time, `docs/pipeline-checkpoints.md`); it never expires, so a killed worker blocks everything until `DELETE /pipeline/lock`. `DELETE /output/reset` still bypasses it. Imports resend the same `dataValueSets` each time.
 - **P2 — `etlui` marks a step `success` on the 202** (`useEtlPipeline.ts`), and **forecast logs are written only at the end** (`forecast_runner.py`): a WebSocket opened during a forecast gets status updates but no log lines until the end.
-- **P2 — Swallowed errors**: `JobStore` and pub/sub publishing catch every exception.
-- **P3** — ETL failure: `save_logs` overwrites the job log with the traceback (`tasks.py`, `job_store.py`).
-- **P3** — Forecast status written and published twice; `task_forecast` duplicates `_run_task`. `run_rscript` rewrites the job record with a new `started`.
+- **P2 — Swallowed errors**: `JobStore` and pub/sub publishing catch every exception. So does the gate's `finish()` at the end of a job (logged, on purpose: the job keeps its real status, and the lock then needs `DELETE /pipeline/lock`).
+- **P3** — `run_rscript` rewrites the job record with a new `started` before `_run_task` writes the final status.
 - **P3** — `api/middleware.py:61`: `threading.local` shared across asyncio requests.
 - **P3** — `forecast_runner._build_dynamic_env_file` opens `.env` without checking it exists (the job is marked `error` before Docker, see the test).
 - **P3** — `build_analytics` ignores `DRYRUN`. Whether `update_key` calls DHIS2 with `DRYRUN=true` depends on `pivot_dhis_tools` (not in the repo, *unverified*).
 - **P3** — Scripts write under `os.getcwd()/input|output`; the worker's cwd is *unverified*.
-- **P3** — `TaskLaunchError` has a handler (`main.py`) but nothing raises it.
 - **Since 2026-10-08** `Settings` reads the root `.env` by default; `ENV_FILE` overrides it (VS Code debug configurations use `.env.debug`). Values exported in the process environment override the file. **Pending migration:** `.env.debug` is meant for local debugging only; decide what it keeps and align the launch configurations.
 
 Fixed (request tracking, 2026-10-08): unhandled errors are recorded (500 + `error`), `/api/tracking` is never recorded, writes run off the event loop, SQLite only with a 30-day purge (the Redis copy `req:{id}` and the unused `services` / `track_service` are removed), each entry has a `timestamp`; `etlui` `/tracking` shows the data (`storeToRefs`), loads the last 50 requests on mount and on Refresh (no polling, 10 per page, so pagination works), shows the real time and the endpoint, and opens the logs of a request's job (`job_id` read from its JSON response) in a modal · `logs/requests/` (658 legacy files) deleted.
@@ -71,8 +68,8 @@ Fixed: one shared Redis client per process (`infrastructure/redis_client.py`) re
 
 ## 4. Dead code and duplication
 
-- **P3** Dead: `ValidationResponse`, `BaseSchema`, `get_request_tracker_repo` (`core/dependencies.py:31`), `verify_signature` (`forecast_runner.py:66`), the `get_etl_event_manager` import in `core/dependencies.py`, `import uuid` in `validation_router.py`.
-- **P3** Duplicated: `_get_output_dir` and the signature check (`forecast_runner.py` and `forecast_report_router.py`), ten near-identical Celery tasks, `__import__(...)` used 4 times in `forecast_runner.py` to call `get_settings`.
+- **P3** Dead: `get_request_tracker_repo` (`core/dependencies.py`), `verify_signature` (`forecast_runner.py`).
+- **P3** Duplicated: `_get_output_dir` and the signature check (`forecast_runner.py` and `forecast_report_router.py`), `__import__(...)` used 4 times in `forecast_runner.py` to call `get_settings`.
 
 Fixed: the five separate Redis clients.
 
@@ -89,13 +86,12 @@ Fixed: the order-dependent `test_auth.py` failure (file rewritten) · tests no l
 
 ## 6. Documentation and config drift
 
-- **P3** — `GETTING_STARTED.md:90-94` says port 8000; `run_server.py` uses 8111. The "Complete Setup" section runs `yarn start`; the script is `dev`.
-- **P3** — `.env.example` lacks `LOGS_DIR`, `DATA_DIR`, `HOST_PWD`, `ENV_FILE`, and has `GEE_PROJECT =` with a space.
+- **P3** — `GETTING_STARTED.md:90-94` says port 8000; `run_server.py` uses 8111.- **P3** — `.env.example` lacks `LOGS_DIR`, `DATA_DIR`, `HOST_PWD`, `ENV_FILE`, and has `GEE_PROJECT =` with a space.
 - **P3** — `.env.debug` duplicates most of `.env` with different values for `DHIS_TOKEN`, `PIVOT_URL`, `PIVOT_TOKEN`, `LOG_LEVEL` (names compared on 2026-10-08). To clean up with the `.env.debug` migration.
 - **P3** — Two diverging versions of the skill: `etlhub/docs/SKILL.md` and `.claude/skills/etlhub/implementation.md` (probably not loaded: not named `SKILL.md`).
 - **P3** — Version drift: `pridec_gee` and `pivot_dhis_tools` differ between `etlhub/requirements.txt` and `etl/requirements.txt`. The OpenAPI text of `/forecast/` says `:latest`, the code uses `:0.1.0`.
 - **P3** — `etlhub/CLAUDE.MD` is in upper case; the root `CLAUDE.md` points to `etlhub/CLAUDE.md`.
-- **P3** — `compose.yaml` has no etlhub and no Redis; no etlhub Dockerfile; `hubcenter.egg-info/` has no `setup.py`/`pyproject.toml`.
+- **P3** — `compose.yaml` has no etlhub and no Redis; no etlhub Dockerfile.
 - **P3** — `local-docs/` (git-ignored) contradicts the code in many places (auth, Redis, tests); do not trust it.
 
 Fixed: `etlui/CLAUDE.md` now describes etlui · `.env.example` writes `DRYRUN` · the root `.env` declares `DHIS_URL` once.

@@ -21,17 +21,16 @@ etlhub/
 ├── application/use_cases/  # *_service.py, etl_use_cases.py, validation_use_cases.py
 ├── infrastructure/         # tasks.py, job_store.py, request_tracker.py, config_store.py, forecast_runner.py
 ├── api/                    # routers/, websockets/etl_logs.py, auth/, middleware.py, etl_events.py
-├── presentation/           # static HTML landing page
 └── tests/                  # api/ and infrastructure/
 ```
 
 Target direction of imports: `api` → `application`, `core` · `application` → `domain` · `infrastructure` → `domain`, `application` · `domain` → nothing. Adapters are singletons (`@lru_cache`) in `core/dependencies.py`; services are built per request with `Depends()`.
 
-**The code does not fully respect this.** `application` (`etl_use_cases.py`, `validation_use_cases.py`) and `infrastructure` (`tasks.py`, `forecast_runner.py`) import `etlhub.api.etl_events` directly; the `EventPublisher` port exists but is never injected. `core/dependencies.py` has an unused `api` import, and `config_router.py` / `middleware.py` use `infrastructure` without DI. Do not add new violations; the list is in `etlhub/docs/known-issues.md`.
+**The code does not fully respect this.** `application` (`etl_use_cases.py`) and `infrastructure` (`tasks.py`, `forecast_runner.py`) import `etlhub.api.etl_events` directly (no event port). `config_router.py` / `middleware.py` use `infrastructure` without DI. Do not add new violations; the list is in `etlhub/docs/known-issues.md`.
 
 ## Coupling with the rest of the repo
 
-- `etl/scripts/*` is **imported in-process** (`from etl.scripts.<module> import <fn>`), made possible by `sys.path.insert` in `main.py` and `validation_use_cases.py`. `main.py` also calls `os.chdir` to the repo root, and scripts write under `os.getcwd()/input|output` (the worker's cwd is unverified).
+- `etl/scripts/*` is **imported in-process** (`from etl.scripts.<module> import <fn>`), with the repo root on `sys.path` (`main.py` also inserts `etl/scripts`; the worker, run with `python -m etlhub.run_celery` from the root, needs nothing more). `main.py` also calls `os.chdir` to the repo root, and scripts write under `os.getcwd()/input|output` (the worker's cwd is unverified).
 - The coupling is **two-way**: `etl/scripts/config.py` imports `etlhub.infrastructure.config_store.ConfigStore`. Do not move or rename these modules.
 - `forecast/` (R) is run by `docker run` from the worker. Files are exchanged through `input/` and `output/`.
 - `etlui` consumes REST + WebSocket. Its contracts are frozen (see `CLAUDE.md`).
@@ -40,12 +39,12 @@ Target direction of imports: `api` → `application`, `core` · `application` �
 
 ```
 UI → POST /import_gee?webhook_url=…
-  → router → service.import_gee(webhook_url)
+  → router → service.launch("import_gee", webhook_url, confirm)
       job_id = "import_gee_<8 hex>"          # generated in the service
       task_launcher.launch("import_gee", job_id, webhook_url=…)
   → router → 202 {status: accepted, job_id}
 UI → WS /api/tracking/etl-logs/{job_id}
-Celery worker (_run_task):
+Celery worker (task_etl → _run_task):
   → job:{id} = running   + PUBLISH etl_status:{id}
   → run_fn() with stdout/stderr captured by _JobLogger
   → each print → PUBLISH etl_logs:{id} + append logs/{id}.log
@@ -56,10 +55,10 @@ Celery worker (_run_task):
 ```
 
 Behaviours worth knowing (read from the code):
-- On failure, `save_logs(job_id, traceback)` **overwrites** the job log with the traceback.
+- On failure, the traceback is appended to the job log (`save_logs(job_id, logs + traceback)`).
 - Request tracking: `RequestTrackingMiddleware` → SQLite `logs/etlhub.db` only (30-day retention), unhandled errors recorded as 500 with `error`, `/api/tracking` never recorded, `TRACKED_ENDPOINTS` = path prefixes. For tracked requests with a small JSON response (≤ 64 KB), the middleware reads the body and records its `job_id` (format `<type>_<8 hex>`), so the tracking page can open the job logs. `etlui` `/tracking` loads the last 50 on mount and on Refresh (no polling).
 - `JobStore` and event publishing swallow all exceptions: a missing job does not prove it failed.
-- Forecast status is written twice: `run_rscript` rewrites the whole record (new `started`, no `message`), then `task_forecast` writes again. Forecast logs are written only at the end, so a WebSocket opened during the run gets `4004`.
+- `task_forecast` goes through `_run_task`; `run_rscript` still rewrites the whole record (new `started`) before `_run_task` writes the final status. Forecast logs are written only at the end, so a WebSocket opened during the run gets `4004`.
 - No timeout and no lock anywhere: a killed worker leaves `job:{id}` at `running` until the 24h TTL, and concurrent jobs write the same `input/` and `output/` files.
 - WebSocket: `etl_log_history` → `job_status_update` / `etl_log_entry` → `etl_log_complete` → close. Subscribes before reading history and status, waits for pub/sub messages with a 1 s timeout (no busy-wait), re-reads `job:{id}` every 10 s in case the final event was missed, and stops when the client leaves. Closes with `4004` **only for an unknown job** (no `job:{id}` and no logs); a known job without logs yet gets an empty `etl_log_history` and stays open. A job whose record expired but has logs gets its history then `etl_log_complete` with `final_status: null`. Jobs are recorded as `pending` at launch (`CeleryTaskLauncher.launch`), so they are known from the 202 on.
 
@@ -105,7 +104,7 @@ cd etlhub && ../test-venv/bin/python -m pytest tests -m "not integration"
 
 ## Adding a job type
 
-Five synchronized changes, in this order: service method → `run_<name>` wrapper → `task_<name>` + registry entry → router endpoint (202) → tests. Real templates for each step are in `etlhub-practices/references/templates.md`; the checklist is in `etlhub-practices/references/checklists.md`. A forgotten registry entry fails at request time with `ValueError("Unknown task type")`.
+Three changes: the script function in `ETL_JOBS` (`etl_use_cases.py`) → the job in `domain/pipeline.py` → one entry in the `ingest_router.py` table (202) → tests. Real templates for each step are in `etlhub-practices/references/templates.md`; the checklist is in `etlhub-practices/references/checklists.md`. A task type missing from `ETL_JOBS` fails at request time with `ValueError("Unknown task type")`.
 
 Adding a tracking endpoint: DTO in `domain/schemas/tracking.py` → method in `tracking_service.py` → route in `tracking_router.py`.
 

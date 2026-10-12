@@ -19,15 +19,15 @@ etlhub/
 │   ├── dependencies.py     #   Depends() providers
 │   └── celery_app.py       #   Celery instance (broker/backend Redis)
 ├── domain/                 # Business core, no technical dependencies
-│   ├── exceptions.py       #   ETLException, JobNotFoundError, ValidationError, TaskLaunchError
-│   ├── interfaces/         #   Ports (Protocol): JobRepository, TaskLauncher, EventPublisher…
+│   ├── exceptions.py       #   ETLException, JobNotFoundError, ValidationError, PipelineBlockedError
+│   ├── interfaces/         #   Ports (Protocol): JobRepository, TaskLauncher, PipelineGate…
 │   └── schemas/            #   Pydantic DTOs: ETLResponse, ForecastParams, JobStatus…
 ├── application/use_cases/  # Use cases
 │   ├── *_service.py        #   Services (generate job_id, delegate to TaskLauncher)
-│   ├── etl_use_cases.py    #   ETL script wrappers + stdout/stderr capture
+│   ├── etl_use_cases.py    #   ETL_JOBS table, stdout/stderr capture, notify_webhook
 │   └── validation_use_cases.py
 ├── infrastructure/         # Adapters (port implementations)
-│   ├── tasks.py            #   Celery tasks, CeleryTaskLauncher, DefaultWebhookNotifier
+│   ├── tasks.py            #   task_etl, task_forecast, CeleryTaskLauncher
 │   ├── job_store.py        #   JobStore (Redis + log files)
 │   ├── request_tracker.py  #   RequestTracker (SQLite logs/etlhub.db, 30 days)
 │   ├── config_store.py     #   ConfigStore (Redis hash)
@@ -38,7 +38,6 @@ etlhub/
 │   ├── auth/               #   DHIS2 authentication
 │   ├── middleware.py       #   CORS + request tracking
 │   └── etl_events.py       #   ETLEventManager (Redis pub/sub)
-└── presentation/           # Static HTML landing page
 ```
 
 ### Dependency Rules
@@ -115,7 +114,7 @@ Domain exceptions are translated to HTTP in `main.py`:
 |---|---|
 | `JobNotFoundError` | 404 |
 | `ValidationError` | 400 |
-| `TaskLaunchError` / `ETLException` | 500 |
+| `ETLException` | 500 |
 
 ## Development Recipes
 
@@ -125,62 +124,9 @@ Step-by-step, layer by layer:
 
 1. **Domain** — If needed, add a DTO to `domain/schemas/` and/or a port to `domain/interfaces/`.
 
-2. **Application / Service** — In the relevant service (e.g. `IngestionService`), add a method:
-   ```python
-   def new_task(self, webhook_url: str | None = None) -> str:
-       job_id = f"new_task_{uuid.uuid4().hex[:8]}"
-       self._task_launcher.launch("new_task", job_id, webhook_url=webhook_url)
-       return job_id
-   ```
+2. **Application** — Import the script function in `etl_use_cases.py` and add it to `ETL_JOBS` (`"new_task": (new_task, "new task")`). `task_etl`, `CeleryTaskLauncher` and `IngestionService.launch` then handle it. Add the job to `domain/pipeline.py` (`PIPELINE`, `RUN_TASKS`).
 
-3. **Application / Use Case** — In `etl_use_cases.py` (or `validation_use_cases.py`), add a wrapper:
-   ```python
-   def run_new_task(job_store=None, job_id=None) -> None:
-       _execute_etl_job(new_task_fn, job_store=job_store, job_id=job_id, name="new_task")
-   ```
-   The `_execute_etl_job` pattern captures `stdout`/`stderr` via `capture_stdout(job_id)` and raises `ETLException` on error.
-
-4. **Infrastructure / Task** — In `tasks.py`, add the Celery task:
-   ```python
-   @celery_app.task(bind=True)
-   def task_new_task(self, job_id: str, webhook_url: str | None = None):
-       _run_task(self, job_id, "Task description", run_new_task, webhook_url=webhook_url)
-   ```
-   Then register it in `CeleryTaskLauncher`:
-   ```python
-   self._registry = {
-       ...
-       "new_task": task_new_task,
-   }
-   ```
-
-5. **API / Router** — In the relevant router (e.g. `ingest_router.py`), add the endpoint:
-   ```python
-   @router.post(
-       "/new_task",
-       response_model=ETLResponse,
-       status_code=202,
-       summary="Description",
-       description=(
-           "Launches the task in the background. "
-           "Pass `webhook_url` to be notified when the job completes."
-       ),
-       response_description="Task accepted and queued in background.",
-   )
-   async def api_new_task(
-       webhook_url: str | None = Query(None),
-       service: IngestionService = Depends(get_ingestion_service),
-   ):
-       job_id = service.new_task(webhook_url)
-       return ETLResponse(
-           status="accepted",
-           message="New task started in background",
-           job_id=job_id,
-           webhook_url=webhook_url,
-       )
-   ```
-
-6. **Main** — The router is already included via `app.include_router(...)` in `main.py` if it uses an existing router. Otherwise, add a new `APIRouter` and include it.
+3. **API / Router** — Add one entry to the table at the bottom of `ingest_router.py` (or call `add_launch_route` from another router). It registers `POST /new_task`, 202, `ETLResponse`, with `webhook_url` and `confirm`.
 
 ### Adding a Tracking Endpoint
 
@@ -243,16 +189,16 @@ To test a new router:
 
 ### Use Cases (ETL script wrappers)
 
-- Always go through `_execute_etl_job(fn, job_store=…, job_id=…)`
-- `capture_stdout(job_id)` redirects `sys.stdout`/`sys.stderr` to `_JobLogger`
+- Always go through `run_etl_job(task_type, job_store, job_id)` → `_execute_etl_job`
+- `_execute_etl_job` redirects `sys.stdout`/`sys.stderr` to `_JobLogger`
 - `_JobLogger` writes to memory, `logs/{job_id}.log`, and publishes to Redis with level inferred from text (INFO/ERROR/WARNING/DEBUG)
 - Exception raised as `ETLException(f"{name} failed: {e}")`
 
 ### Celery Tasks (infrastructure)
 
-- Use `_run_task(self, job_id, task_name, run_fn, webhook_url=…)` as the template
+- Every job goes through `_run_task(job_id, task_name, run_fn, webhook_url)` (`task_etl`, `task_forecast`)
 - `_update_task_status` merges with existing record (don't overwrite `started`, `logs`)
-- `_send_webhook` sends JSON POST `{job_id, status, message, logs_url}`
+- `notify_webhook` sends JSON POST `{job_id, status, message, logs_url}`
 - Task **must** raise exception after "error" status (so Celery marks it failed)
 
 ### Routers (api)

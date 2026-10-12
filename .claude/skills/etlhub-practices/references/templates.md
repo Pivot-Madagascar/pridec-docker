@@ -2,93 +2,42 @@
 
 Copy these patterns. Replace `new_task` with the job name. Everything below mirrors code that exists today.
 
-## 1. Service method (`application/use_cases/ingestion_service.py`)
+## 1. Job entry (`application/use_cases/etl_use_cases.py`)
+
+A Celery ETL job is one line in `ETL_JOBS`: `task_type -> (function, label of the status messages)`.
 
 ```python
-import uuid
+from etl.scripts.<module> import new_task
 
-from etlhub.domain.interfaces.task_launcher import TaskLauncher
-
-
-class IngestionService:
-    def __init__(self, task_launcher: TaskLauncher):
-        self._task_launcher = task_launcher
-
-    def new_task(self, webhook_url: str | None = None) -> str:
-        job_id = f"new_task_{uuid.uuid4().hex[:8]}"
-        self._task_launcher.launch("new_task", job_id, webhook_url=webhook_url)
-        return job_id
+ETL_JOBS = {
+    ...
+    "new_task": (new_task, "new task"),
+}
 ```
 
-The port (`domain/interfaces/task_launcher.py`):
+`run_etl_job(task_type, job_store, job_id, **kwargs)` runs it through `_execute_etl_job`: stdout/stderr captured into `_JobLogger`, `ETLException(f"{name} failed: {e}") from e` on failure, `job_store.save_logs(job_id, ...)` on success. Also add the job to `domain/pipeline.py` (`PIPELINE`, `RUN_TASKS`).
 
-```python
-@runtime_checkable
-class TaskLauncher(Protocol):
-    def launch(self, task_type: str, job_id: str, webhook_url: str | None = None, **kwargs) -> None: ...
-```
+## 2. Celery task (`infrastructure/tasks.py`) — nothing to add
 
-## 2. Use case wrapper (`application/use_cases/etl_use_cases.py`)
+`task_etl(task_type, job_id, webhook_url=None, **kwargs)` runs every `ETL_JOBS` entry through `_run_task`, and `CeleryTaskLauncher.launch` accepts every `ETL_JOBS` key (plus `forecast`); another key raises `ValueError(f"Unknown task type: {task_type}")`.
 
-```python
-def run_new_task(job_store=None, job_id=None) -> None:
-    _execute_etl_job(new_task_fn, job_store=job_store, job_id=job_id, name="new_task")
-```
+What `_run_task` does, so you do not repeat it: status `running` → `run_fn(job_store=..., job_id=...)` → status `success` (+ webhook) or, on exception, append the traceback to the job log, publish an ERROR log, status `error` (+ webhook), then **`raise`**. `task_forecast` also goes through it.
 
-`_execute_etl_job` captures stdout/stderr into `_JobLogger`, raises `ETLException(f"{name} failed: {e}") from e`, then calls `job_store.save_logs(job_id, buf.getvalue())`.
+## 3. Service (`application/use_cases/ingestion_service.py`) — nothing to add
 
-Import the script function at the top of the file with the others: `from etl.scripts.<module> import <fn>`.
-
-## 3. Celery task and registry (`infrastructure/tasks.py`)
-
-```python
-@celery_app.task(bind=True)
-def task_new_task(self, job_id: str, webhook_url: str | None = None):
-    _run_task(self, job_id, "Task description", run_new_task, webhook_url=webhook_url)
-```
-
-```python
-class CeleryTaskLauncher:
-    def __init__(self):
-        self._registry = {
-            ...
-            "new_task": task_new_task,
-        }
-```
-
-`launch` raises `ValueError(f"Unknown task type: {task_type}")` when the key is missing, so a forgotten registry entry fails at request time.
-
-What `_run_task` already does, so you do not repeat it: status `running` → `run_fn(job_store=..., job_id=...)` → status `success` (+ webhook) or, on exception, save traceback, publish ERROR log, status `error` (+ webhook), then **`raise`**. Do not write a new task body by hand. (`task_forecast` does, and it is the known duplication.)
+`IngestionService.launch(task_type, webhook_url=None, confirm=False, **kwargs)` generates `f"{task_type}_{uuid.uuid4().hex[:8]}"` and calls `task_launcher.launch(...)`.
 
 ## 4. Router endpoint (`api/routers/etl/ingest_router.py`)
 
+One entry in the table at the bottom of the file (or an `add_launch_route(router, ...)` call in another router):
+
 ```python
-@router.post(
-    "/new_task",
-    response_model=ETLResponse,
-    status_code=202,
-    summary="Short summary",
-    description=(
-        "Launches the task in the background. "
-        "Executes `etl/scripts/<module>.py` asynchronously. "
-        "Pass `webhook_url` to be notified when the job completes."
-    ),
-    response_description="Task accepted and queued in background.",
-)
-async def api_new_task(
-    webhook_url: str | None = Query(None),
-    service: IngestionService = Depends(get_ingestion_service),
-):
-    job_id = service.new_task(webhook_url)
-    return ETLResponse(
-        status="accepted",
-        message="New task started in background",
-        job_id=job_id,
-        webhook_url=webhook_url,
-    )
+("new_task", "Short summary",
+ "Launches the task in the background. Executes `etl/scripts/<module>.py` asynchronously. ",
+ "Task accepted and queued in background.", "New task started in background"),
 ```
 
-The handler is `async def` but only calls a non-blocking `.delay()`. That is the only reason it is safe. Never put the work itself in the handler.
+It registers `POST /new_task` (202, `ETLResponse`, query params `webhook_url` and `confirm`). The `confirm` description is `CONFIRM_RELAUNCH` by default, `CONFIRM_OVERWRITE` (from `api/routers/__init__.py`) for jobs that overwrite forecast inputs. The handler only calls a non-blocking `.delay()`: never put the work itself in it.
 
 ## 5. Dependency providers (`core/dependencies.py`)
 
@@ -159,11 +108,11 @@ def job_store(monkeypatch):
 @pytest.fixture
 def webhooks(monkeypatch):
     sent = []
-    monkeypatch.setattr(tasks, "_send_webhook", lambda url, **kwargs: sent.append(kwargs))
+    monkeypatch.setattr(tasks, "notify_webhook", lambda url, job_id, status, message: sent.append({"status": status}))
     return sent
 ```
 
-Call the task body with `tasks.task_xxx.run(job_id, ..., webhook_url="http://hook")` (no broker needed). Assert both the stored record and `webhooks[-1]["status"]`. For failures use `pytest.raises(...)`: the task must re-raise.
+Call the task body with `tasks.task_etl.run(task_type, job_id, webhook_url="http://hook")` (or `tasks.task_forecast.run(...)`) (no broker needed). Assert both the stored record and `webhooks[-1]["status"]`. For failures use `pytest.raises(...)`: the task must re-raise.
 
 Note: `"http://hook"` would be rejected by the webhook validator (M4) if the test goes through a real `CeleryTaskLauncher.launch`. Task-level tests call `.run()` directly and are not affected.
 
