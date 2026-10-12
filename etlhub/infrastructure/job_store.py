@@ -1,23 +1,13 @@
 import json
-import io
 from pathlib import Path
-import sys
-import contextlib
 from etlhub.core.config import get_settings
 from etlhub.infrastructure.redis_client import get_redis
 
 
 class JobStore:
-    _redis_client = None
-
-    def _get_redis(self):
-        if self._redis_client is None:
-            self._redis_client = get_redis()
-        return self._redis_client
-
     def get(self, job_id: str) -> dict | None:
         try:
-            redis_client = self._get_redis()
+            redis_client = get_redis()
             data = redis_client.get(f"job:{job_id}")
             if data:
                 return json.loads(data)
@@ -27,7 +17,7 @@ class JobStore:
 
     def set(self, job_id: str, data: dict) -> None:
         try:
-            redis_client = self._get_redis()
+            redis_client = get_redis()
             redis_client.setex(
                 f"job:{job_id}",
                 86400,
@@ -38,7 +28,7 @@ class JobStore:
 
     def save_logs(self, job_id: str, logs: str) -> None:
         try:
-            redis_client = self._get_redis()
+            redis_client = get_redis()
             redis_client.setex(
                 f"etl_logs:{job_id}",
                 86400,
@@ -56,7 +46,7 @@ class JobStore:
 
     def get_logs(self, job_id: str) -> str | None:
         try:
-            redis_client = self._get_redis()
+            redis_client = get_redis()
             data = redis_client.get(f"etl_logs:{job_id}")
             if data:
                 return data

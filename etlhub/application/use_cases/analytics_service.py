@@ -1,47 +1,31 @@
 import uuid
 
-from etlhub.application.use_cases.etl_use_cases import run_post_forecast, run_update_key
+from etlhub.application.use_cases.etl_use_cases import notify_webhook, run_etl_job
 from etlhub.domain.interfaces.job_repository import JobRepository
-from etlhub.domain.interfaces.task_launcher import TaskLauncher
-from etlhub.domain.interfaces.webhook_notifier import WebhookNotifier
+from etlhub.domain.interfaces.pipeline_gate import PipelineGate
 from etlhub.domain.exceptions import ETLException
 from etlhub.domain.schemas import ETLResponse
 
 
 class AnalyticsService:
-    def __init__(self, task_launcher: TaskLauncher, job_repo: JobRepository, webhook_notifier: WebhookNotifier):
-        self._task_launcher = task_launcher
+    """post_forecast and update_key: run synchronously, inside the pipeline gate."""
+
+    def __init__(self, job_repo: JobRepository, gate: PipelineGate):
         self._job_repo = job_repo
-        self._webhook_notifier = webhook_notifier
+        self._gate = gate
 
-    def build_analytics(self, webhook_url: str | None = None) -> str:
-        job_id = f"build_analytics_{uuid.uuid4().hex[:8]}"
-        self._task_launcher.launch("build_analytics", job_id, webhook_url=webhook_url)
-        return job_id
+    def _run(self, task_type: str, message: str, webhook_url: str | None, confirm: bool) -> ETLResponse:
+        job_id = f"{task_type}_{uuid.uuid4().hex[:8]}"
+        with self._gate.run(task_type, job_id, confirm):  # PipelineBlockedError propagates as is
+            try:
+                run_etl_job(task_type, self._job_repo, job_id)
+            except ETLException as e:
+                raise ETLException(f"{task_type} failed: {e}") from e
+        notify_webhook(webhook_url, job_id, "success", message)
+        return ETLResponse(status="success", message=message, job_id=job_id, webhook_url=webhook_url)
 
-    def post_forecast(self, webhook_url: str | None = None) -> ETLResponse:
-        job_id = f"post_forecast_{uuid.uuid4().hex[:8]}"
-        try:
-            run_post_forecast(job_store=self._job_repo, job_id=job_id)
-            result = ETLResponse(status="success", message="Forecast posted successfully", job_id=job_id, webhook_url=webhook_url)
-        except ETLException as e:
-            raise ETLException(f"post_forecast failed: {e}") from e
-        if webhook_url:
-            self._webhook_notifier.send(webhook_url, job_id=job_id, status="success", message="Forecast posted successfully", logs_url=f"/api/tracking/etl-logs/{job_id}")
-        return result
+    def post_forecast(self, webhook_url: str | None = None, confirm: bool = False) -> ETLResponse:
+        return self._run("post_forecast", "Forecast posted successfully", webhook_url, confirm)
 
-    def calc_csb_alerts(self, webhook_url: str | None = None) -> str:
-        job_id = f"calc_csb_alerts_{uuid.uuid4().hex[:8]}"
-        self._task_launcher.launch("calc_csb_alerts", job_id, webhook_url=webhook_url)
-        return job_id
-
-    def update_key(self, webhook_url: str | None = None) -> ETLResponse:
-        job_id = f"update_key_{uuid.uuid4().hex[:8]}"
-        try:
-            run_update_key(job_store=self._job_repo, job_id=job_id)
-            result = ETLResponse(status="success", message="Key updated successfully", job_id=job_id, webhook_url=webhook_url)
-        except ETLException as e:
-            raise ETLException(f"update_key failed: {e}") from e
-        if webhook_url:
-            self._webhook_notifier.send(webhook_url, job_id=job_id, status="success", message="Key updated successfully", logs_url=f"/api/tracking/etl-logs/{job_id}")
-        return result
+    def update_key(self, webhook_url: str | None = None, confirm: bool = False) -> ETLResponse:
+        return self._run("update_key", "Key updated successfully", webhook_url, confirm)

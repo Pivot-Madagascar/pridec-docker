@@ -12,13 +12,13 @@ class ForecastService:
         self._task_launcher = task_launcher
         self._job_repo = job_repo
 
-    def launch(self, params: ForecastParams, webhook_url: str | None = None) -> str:
+    def launch(self, params: ForecastParams, webhook_url: str | None = None, confirm: bool = False) -> str:
         job_id = f"forecast_{uuid.uuid4().hex[:8]}"
         self._task_launcher.launch("forecast", job_id, params={
             "config_valid_path": params.config_valid_path,
             "input_valid_path": params.input_valid_path,
             "polygon_valid_path": params.polygon_valid_path,
-        }, webhook_url=webhook_url)
+        }, webhook_url=webhook_url, confirm=confirm)
         return job_id
 
     def get_status(self, job_id: str) -> dict[str, Any]:

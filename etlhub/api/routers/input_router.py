@@ -2,6 +2,7 @@ import csv
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
+from etlhub.api.routers import CONFIRM_RELAUNCH
 from etlhub.application.use_cases.input_upload_service import InputName, InputUploadService
 from etlhub.core.dependencies import get_input_upload_service
 from etlhub.domain.exceptions import ValidationError
@@ -29,11 +30,12 @@ def _read_limited(file: UploadFile) -> bytes:
 def upload_input_file(
     name: InputName,
     file: UploadFile = File(...),
+    confirm: bool = CONFIRM_RELAUNCH,
     service: InputUploadService = Depends(get_input_upload_service),
 ) -> dict[str, str]:
     # Sync handler on purpose: FastAPI runs it in a threadpool, so file I/O does not block the loop.
     try:
-        return {"saved": service.save(name, _read_limited(file))}
+        return {"saved": service.save(name, _read_limited(file), confirm)}
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -59,10 +61,11 @@ def input_files_status(
 )
 def delete_input_file(
     name: InputName,
+    confirm: bool = CONFIRM_RELAUNCH,
     service: InputUploadService = Depends(get_input_upload_service),
 ) -> dict[str, str]:
     try:
-        return {"deleted": service.delete(name)}
+        return {"deleted": service.delete(name, confirm)}
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=f"{name} is not in input/") from exc
 

@@ -31,5 +31,6 @@ def test_list_requests(override_dependencies):
 
 
 def test_home_endpoint(client):
-    response = client.get("/")
-    assert response.status_code == 200
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code == 307
+    assert response.headers["location"] == "/docs"
