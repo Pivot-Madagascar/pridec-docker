@@ -1,55 +1,57 @@
-# Contrôle des checkpoints : diagrammes
+# Checkpoint control: diagrams
 
-Ce document rassemble en schémas tout ce qu'etlhub contrôle (conception cible, révisée le 2026-10-12).
-Le workflow (3 phases, commandes `pridec`, ordre des étapes) suit la **documentation de référence** (`pivot_forecast.sh`), qui fait foi ;
-ce document n'ajoute que la couche de contrôle d'etlhub par-dessus (verrou, checkpoints, cycles, confirmations).
-Les règles sont résumées dans [pipeline-checkpoints-guide.md](pipeline-checkpoints-guide.md),
-et la conception complète est dans [pipeline-checkpoints.md](pipeline-checkpoints.md).
+This document gathers, as diagrams, everything etlhub controls (target design, revised 2026-10-12).
+The workflow (3 phases, `pridec` commands, step order) follows the **reference documentation** (`pivot_forecast.sh`), which is authoritative;
+this document only adds etlhub's control layer on top of it (lock, checkpoints, cycles, confirmations).
+The rules are summarized in [pipeline-checkpoints-guide.md](pipeline-checkpoints-guide.md), and the full design is in [pipeline-checkpoints.md](pipeline-checkpoints.md).
 
-| # | Diagramme | Question |
+> Implemented except `calc_orgunit_alerts` (still 501), the test-mode scope and the level check of `external_data`:
+> see the status at the top of [pipeline-checkpoints.md](pipeline-checkpoints.md).
+
+| # | Diagram | Question |
 |---|---|---|
-| 1 | Le parcours complet | Quelles étapes, quels items, et les 9 runs de forecast en détail ? |
-| 2 | Un run de forecast | Comment un couple va-t-il de l'ouverture à `post_forecast` ? |
-| 3 | Le contrôle d'un lancement | Que vérifie le serveur avant d'accepter un job ? |
-| 4 | Les fichiers d'entrée | Que se passe-t-il quand on téléverse ou supprime `config.json` ou `external_data.csv` ? |
-| 5 | La vie d'un item | Comment passe-t-on de `pending` à `success`, et comment en revient-on ? |
-| 6 | La vie d'un run et d'un cycle | Quand s'ouvrent-ils et quand se ferment-ils ? |
+| 1 | The full path | Which steps, which items, and the 9 forecast runs in detail? |
+| 2 | A forecast run | How does a pair go from opening to `post_forecast`? |
+| 3 | Launch control | What does the server check before accepting a job? |
+| 4 | Input files | What happens when `config.json` or `external_data.csv` is uploaded or deleted? |
+| 5 | The life of an item | How does an item go from `pending` to `success`, and how does it go back? |
+| 6 | The life of a run and of a cycle | When do they open and when do they close? |
 
-| Règle | Contenu |
+| Rule | Content |
 |---|---|
-| R1 | Tout item est obligatoire ; `config.json` est un item par maladie ; `external_data.csv` est un item par niveau (fkt, csb). Les deux se téléversent depuis l'interface. |
-| R2 | Un item exige que ses prérequis soient en `success`. |
-| R3 | Un seul job à la fois. Le verrou n'expire jamais (`DELETE /pipeline/lock`). |
-| R4 | Une étape n'est valide que si tous ses items sont en `success` et que la précédente est valide. |
-| R5 | Défaire ce qui était validé exige `confirm=true`. |
-| R6 | Un seul run de forecast ouvert à la fois. |
+| R1 | Every item is mandatory; `config.json` is one item per disease; `external_data.csv` is one item per level (fkt, csb). Both are uploaded from the user interface. |
+| R2 | An item requires its prerequisites to be in `success`. |
+| R3 | Only one job at a time. The lock never expires (`DELETE /pipeline/lock`). |
+| R4 | A step is valid only if all its items are in `success` and the previous step is valid. |
+| R5 | Undoing something that was validated requires `confirm=true`. |
+| R6 | Only one forecast run open at a time. |
 
 ---
 
-## 1. Le parcours complet d'un cycle
+## 1. The full path of a cycle
 
-Légende :
-- **Vert** : un item, avec un statut en base.
-- **Jaune** : une décision humaine (item).
-- **Violet** : un run de forecast, résumé ici ; son détail est dans le diagramme 2.
-- **Flèche pleine** : prérequis contrôlé par le serveur (R2).
-- **Flèche double** : passage d'une étape à la suivante (R4).
+Legend:
+- **Green**: an item, with a status in the database.
+- **Yellow**: a human decision (item).
+- **Purple**: a forecast run, summarized here; its detail is in diagram 2.
+- **Solid arrow**: prerequisite checked by the server (R2).
+- **Double arrow**: transition from one step to the next (R4).
 
-Chaque case de run indique les fichiers d'entrée qu'elle utilise ; les uploads eux-mêmes sont détaillés dans le diagramme 2.
+Each run box shows the input files it uses; the uploads themselves are detailed in diagram 2.
 
 ```mermaid
 flowchart TB
-    START(["Premier lancement du mois<br/>ouvre le cycle (YYYYMM)"])
+    START(["First launch of the month<br/>opens the cycle (YYYYMM)"])
 
     subgraph S1["① data_import · 5 items"]
         direction LR
         gee["import_gee"] --> ba1["build_analytics"]
         pcom["import_pivot_com"] --> chk
         pcsb["import_pivot_csb"] --> chk
-        chk{"approve_imports<br/>(décision : cas COM &lt; 100,<br/>cas CSB &lt; limite)"} --> ba1
+        chk{"approve_imports<br/>(decision: COM cases &lt; 100,<br/>CSB cases &lt; limit)"} --> ba1
     end
 
-    subgraph S2["② forecast · 9 runs, un seul ouvert à la fois (R6) · 71 items"]
+    subgraph S2["② forecast · 9 runs, only one open at a time (R6) · 71 items"]
         direction TB
         subgraph SADJ["ADJ · OU_LEVEL 6"]
             direction LR
@@ -63,7 +65,7 @@ flowchart TB
             r5["run COM/Diarrhea<br/>pridec_historic_COMDiarrhea<br/>config_diarrhea.json · external_data/fkt<br/>7 items"]
             r6["run COM/Respinf<br/>pridec_historic_COMRespinf<br/>config_respiratory.json · external_data/fkt<br/>7 items"]
         end
-        subgraph SCSB["CSB · OU_LEVEL 5 · ALERT_NAME CSB&lt;maladie&gt;Vigilance"]
+        subgraph SCSB["CSB · OU_LEVEL 5 · ALERT_NAME CSB&lt;disease&gt;Vigilance"]
             direction LR
             r7["run CSB/Malaria<br/>pridec_historic_CSBMalaria<br/>config_malaria.json · external_data/csb<br/>8 items"]
             r8["run CSB/Diarrhea<br/>pridec_historic_CSBDiarrhea<br/>config_diarrhea.json · external_data/csb<br/>8 items"]
@@ -77,11 +79,11 @@ flowchart TB
         ba2["build_analytics"] --> key["update_key"]
     end
 
-    END(["3 étapes valides<br/>cycle fermé jusqu'au mois suivant<br/>application PRIDE-C à jour"])
+    END(["All 3 steps valid<br/>cycle closed until next month<br/>PRIDE-C application up to date"])
 
     START --> S1
-    S1 ==>|"étape ① valide (R4)"| S2
-    S2 ==>|"9 post_forecast en success (R4)"| S3
+    S1 ==>|"step ① valid (R4)"| S2
+    S2 ==>|"9 post_forecast in success (R4)"| S3
     S3 ==> END
 
     classDef item fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
@@ -94,17 +96,17 @@ flowchart TB
     class START,END edge
 ```
 
-> **Quand se font les uploads ?** Il n'y a pas d'étape d'upload : les fichiers se téléversent depuis l'interface **pendant les runs**,
-> un par un, et ils sont **tous obligatoires**. `config.json` est téléversé dans le **premier run ouvert de la maladie** (ADJ, COM ou CSB, peu importe),
-> puis remis automatiquement dans `input/` pour ses 2 autres runs ; le serveur y écrit `forecast_start`, comme le fait `jq` dans `pivot_forecast.sh`.
-> Même principe pour `external_data.csv`, **par niveau** : téléversé dans le premier run du niveau (fokontany : ADJ ou COM ; CSB), puis remis aux autres runs de ce niveau.
-> Soit, sur un cycle, 3 uploads de `config.json` et 2 de `external_data.csv`. Les fichiers de `forecast_assets/` du dépôt servent de modèles.
+> **When do uploads happen?** There is no upload step: files are uploaded from the user interface **during the runs**,
+> one at a time, and they are **all mandatory**. `config.json` is uploaded in the **first open run of the disease** (ADJ, COM or CSB, whichever comes first),
+> then automatically copied back into `input/` for its 2 other runs; the server writes `forecast_start` into it, as `jq` does in `pivot_forecast.sh`.
+> Same principle for `external_data.csv`, **per level**: uploaded in the first run of the level (fokontany: ADJ or COM; CSB), then copied back to the other runs of that level.
+> Over one cycle, that makes 3 uploads of `config.json` and 2 of `external_data.csv`. The files in the repository's `forecast_assets/` serve as templates.
 
-> **`build_analytics`** doit passer par l'API etlhub. Lancé à la main depuis l'interface DHIS2, etlhub ne le voit pas et l'étape ① reste non valide.
+> **`build_analytics`** must go through the etlhub API. If launched manually from the DHIS2 interface, etlhub does not see it and step ① stays invalid.
 
-### Les 9 runs
+### The 9 runs
 
-| # | Run | `DISEASE_CODE` | `OU_LEVEL` | `ALERT_NAME` | Item config (fichier attendu) | Item external_data | Items du run |
+| # | Run | `DISEASE_CODE` | `OU_LEVEL` | `ALERT_NAME` | Config item (expected file) | external_data item | Items in the run |
 |---|---|---|---|---|---|---|---|
 | 1 | `ADJ/Malaria` | `pridec_historic_ADJMalaria` | 6 (fokontany) | — | `config/Malaria` (`config_malaria.json`) | `external_data/fkt` | 7 |
 | 2 | `ADJ/Diarrhea` | `pridec_historic_ADJDiarrhea` | 6 | — | `config/Diarrhea` (`config_diarrhea.json`) | `external_data/fkt` | 7 |
@@ -116,48 +118,48 @@ flowchart TB
 | 8 | `CSB/Diarrhea` | `pridec_historic_CSBDiarrhea` | 5 | `CSBDiarrheaVigilance` | `config/Diarrhea` (`config_diarrhea.json`) | `external_data/csb` | 8 |
 | 9 | `CSB/Respinf` | `pridec_historic_CSBRespinf` | 5 | `CSBRespinfVigilance` | `config/Respinf` (`config_respiratory.json`) | `external_data/csb` | 8 |
 
-L'interface d'upload affiche le fichier attendu pour chaque maladie (en particulier `config_respiratory.json` pour `Respinf`).
+The upload interface shows the expected file for each disease (in particular `config_respiratory.json` for `Respinf`).
 
-Au total, l'étape ② compte 71 items : 3 `config/<maladie>` + 2 `external_data/<niveau>` + 6 × 7 + 3 × 8.
-Uploads par cycle : 3 `config.json` et 2 `external_data.csv`, tous obligatoires.
+In total, step ② has 71 items: 3 `config/<disease>` + 2 `external_data/<level>` + 6 × 7 + 3 × 8.
+Uploads per cycle: 3 `config.json` and 2 `external_data.csv`, all mandatory.
 
 ---
 
-## 2. Un run de forecast
+## 2. A forecast run
 
-Le même modèle pour les 9 couples. Les flèches sont des prérequis contrôlés (R2).
+The same model applies to all 9 pairs. Arrows are checked prerequisites (R2).
 
-Légende : **vert** = item ; **bleu** = upload (item) ; **jaune** = décision humaine.
-Ce que chaque job lit et écrit :
+Legend: **green** = item; **blue** = upload (item); **yellow** = human decision.
+What each job reads and writes:
 
-| Item | Lit | Écrit |
+| Item | Reads | Writes |
 |---|---|---|
-| `config/<maladie>` (upload, une fois par maladie) | — | `input/config.json`, avec `forecast_start` écrit par le serveur ; conservé et remis pour les autres runs de la maladie |
-| `external_data/<niveau>` (upload, une fois par niveau) | — | `input/external_data.csv`, conservé et remis pour les autres runs du même niveau |
+| `config/<disease>` (upload, once per disease) | — | `input/config.json`, with `forecast_start` written by the server; kept and copied back for the disease's other runs |
+| `external_data/<level>` (upload, once per level) | — | `input/external_data.csv`, kept and copied back for the other runs of the same level |
 | `fetch_disease` | `DISEASE_CODE`, `OU_LEVEL`, `PARENT_OU` | `input/disease_data.json` |
 | `fetch_climate` | `OU_LEVEL`, `PARENT_OU` | `input/climate_data.json` |
 | `fetch_geojson` | `OU_LEVEL`, `PARENT_OU` | `input/orgUnit_poly.geojson` |
-| `validate_inputs` | les fichiers ci-dessus | `input/config_valid.json`, `input_valid.json`, `polygon_valid.geojson` |
-| `forecast` | les 3 fichiers `*_valid` | `output/forecast.json`, `output/forecast_report.html` |
-| `calc_orgunit_alerts` (CSB) | `ALERT_NAME` | seuils d'alerte (commande CLI `pridec etl calc_orgUnit_alerts`) |
-| `approve` | `output/forecast_report.html` (lu par l'utilisateur) | décision |
+| `validate_inputs` | the files above | `input/config_valid.json`, `input_valid.json`, `polygon_valid.geojson` |
+| `forecast` | the 3 `*_valid` files | `output/forecast.json`, `output/forecast_report.html` |
+| `calc_orgunit_alerts` (CSB) | `ALERT_NAME` | alert thresholds (CLI command `pridec etl calc_orgUnit_alerts`) |
+| `approve` | `output/forecast_report.html` (read by the user) | decision |
 | `post_forecast` | `output/forecast.json` | DHIS2 (PRIDE-C) |
 
 ```mermaid
 flowchart LR
-    OPEN(["POST /pipeline/runs<br/>source + disease<br/>vide input/ et output/, remet les fichiers déjà téléversés<br/>fixe DISEASE_CODE, OU_LEVEL, ALERT_NAME"])
+    OPEN(["POST /pipeline/runs<br/>source + disease<br/>empties input/ and output/, copies back already uploaded files<br/>sets DISEASE_CODE, OU_LEVEL, ALERT_NAME"])
 
-    cfg["config.json · config/maladie<br/>(upload si 1er run de la maladie,<br/>sinon déjà remis)<br/>forecast_start écrit par le serveur"]
-    ext["external_data.csv · external_data/niveau<br/>(upload si 1er run du niveau,<br/>sinon déjà remis)"]
+    cfg["config.json · config/disease<br/>(upload if 1st run of the disease,<br/>otherwise already copied back)<br/>forecast_start written by the server"]
+    ext["external_data.csv · external_data/level<br/>(upload if 1st run of the level,<br/>otherwise already copied back)"]
     fd["fetch_disease"]
     fc["fetch_climate"]
     fg["fetch_geojson"]
     val["validate_inputs"]
     fct["forecast"]
-    coa["calc_orgunit_alerts<br/>CSB seulement"]
-    apr{"approve<br/>(décision)"}
+    coa["calc_orgunit_alerts<br/>CSB only"]
+    apr{"approve<br/>(decision)"}
     post["post_forecast"]
-    CLOSE(["run fermé<br/>un autre couple peut s'ouvrir"])
+    CLOSE(["run closed<br/>another pair can be opened"])
 
     OPEN --> cfg & ext & fd & fc & fg
     cfg --> val
@@ -169,7 +171,7 @@ flowchart LR
     fct -->|"ADJ, COM"| apr
     fct -->|"CSB"| coa --> apr
     apr -->|"approve"| post --> CLOSE
-    apr -->|"reject : forecast et suite → pending"| fct
+    apr -->|"reject: forecast and following → pending"| fct
 
     classDef item fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
     classDef upload fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
@@ -179,48 +181,48 @@ flowchart LR
     class apr human
 ```
 
-**Abandonner** (`DELETE /pipeline/runs/current`) : le run passe `abandoned`, ses items repassent en `pending`, rien n'est publié.
+**Abandon** (`DELETE /pipeline/runs/current`): the run becomes `abandoned`, its items go back to `pending`, nothing is published.
 
-**Invalidation dans le run** : relancer ou remplacer un item remet en `pending` tout ce qui en dépend
-(par exemple, relancer `fetch_climate` remet `validate_inputs`, `forecast`, … en `pending`).
+**Invalidation within the run**: relaunching or replacing an item resets everything that depends on it to `pending`
+(for example, relaunching `fetch_climate` resets `validate_inputs`, `forecast`, … to `pending`).
 
 ---
 
-## 3. Le contrôle d'un lancement
+## 3. Launch control
 
-Ce chemin s'applique à chaque lancement de job : Celery (`/import_*`, `/fetch_*`, `/validate_inputs`, `/build_analytics`,
-`/forecast/`), synchrone (`/post_forecast`, `/update_key`), et `/calc_orgunit_alerts`. Tout se passe dans une seule transaction
-SQLite (`BEGIN IMMEDIATE`) ; un refus n'écrit rien.
+This path applies to every job launch: Celery (`/import_*`, `/fetch_*`, `/validate_inputs`, `/build_analytics`,
+`/forecast/`), synchronous (`/post_forecast`, `/update_key`), and `/calc_orgunit_alerts`. Everything happens in a single SQLite
+transaction (`BEGIN IMMEDIATE`); a refusal writes nothing.
 
 ```mermaid
 flowchart TD
-    A(["Lancement d'un job"]) --> L{"Verrou libre ? (R3)"}
-    L -- non --> E1["409 · one job at a time<br/>(jamais d'expiration : DELETE /pipeline/lock)"]
-    L -- oui --> C{"Quel cycle ?"}
-    C -- "cycle du mois en cours" --> C1["cycle du mois<br/>(un run ouvert d'un mois précédent est abandonné)"]
-    C -- "nouveau mois (l'ancien cycle, fini ou non, reste tel quel)" --> C2["nouveau cycle = mois courant"]
-    C -- "dernier fini ce mois-ci" --> E2["409 · cycle complete"]
+    A(["Job launch"]) --> L{"Lock free? (R3)"}
+    L -- no --> E1["409 · one job at a time<br/>(never expires: DELETE /pipeline/lock)"]
+    L -- yes --> C{"Which cycle?"}
+    C -- "current month's cycle" --> C1["current month's cycle<br/>(an open run from a previous month is abandoned)"]
+    C -- "new month (the old cycle, finished or not, is left as is)" --> C2["new cycle = current month"]
+    C -- "last one finished this month" --> E2["409 · cycle complete"]
     C1 --> T
     C2 --> T
-    T{"Job d'un run ?<br/>(fetch_*, validate_inputs, forecast,<br/>calc_orgunit_alerts, post_forecast)"}
-    T -- oui --> R{"Run ouvert ? (R6)"}
-    R -- non --> E3["409 · needs an open forecast run"]
-    R -- oui --> RI["item = couple du run : job"]
-    T -- non --> SL["emplacement : le premier lançable pas en success,<br/>sinon le dernier lançable<br/>(build_analytics : 2 emplacements)"]
+    T{"Run job?<br/>(fetch_*, validate_inputs, forecast,<br/>calc_orgunit_alerts, post_forecast)"}
+    T -- yes --> R{"Run open? (R6)"}
+    R -- no --> E3["409 · needs an open forecast run"]
+    R -- yes --> RI["item = run's pair : job"]
+    T -- no --> SL["slot: the first launchable one not in success,<br/>otherwise the last launchable one<br/>(build_analytics: 2 slots)"]
     RI --> P
     SL --> P
-    P{"Étape accessible (R4)<br/>et prérequis en success (R2) ?"}
-    P -- non --> E4["409 · needs … first"]
-    P -- oui --> S{"Item déjà en success ?"}
-    S -- non --> OK
-    S -- oui --> CF{"confirm=true ? (R5)"}
-    CF -- non --> E5["409 · confirmation_required<br/>+ impact (rien n'est écrit)"]
-    CF -- oui --> OK
-    OK["Dépendants du run → pending<br/>verrou pris · item → running<br/>job d'un run : contexte écrit dans la config dynamique"]
-    OK --> J["Le job s'exécute"]
-    J --> FIN{"Fin du job"}
-    FIN -- succès --> SUC["item → success · verrou rendu<br/>post_forecast : run fermé"]
-    FIN -- échec --> ERR["item → error · verrou rendu"]
+    P{"Step accessible (R4)<br/>and prerequisites in success (R2)?"}
+    P -- no --> E4["409 · needs … first"]
+    P -- yes --> S{"Item already in success?"}
+    S -- no --> OK
+    S -- yes --> CF{"confirm=true? (R5)"}
+    CF -- no --> E5["409 · confirmation_required<br/>+ impact (nothing is written)"]
+    CF -- yes --> OK
+    OK["Run dependents → pending<br/>lock taken · item → running<br/>run job: context written to the dynamic config"]
+    OK --> J["The job runs"]
+    J --> FIN{"Job end"}
+    FIN -- success --> SUC["item → success · lock released<br/>post_forecast: run closed"]
+    FIN -- failure --> ERR["item → error · lock released"]
 
     classDef refuse fill:#ffebee,stroke:#c62828,color:#b71c1c
     classDef accept fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
@@ -228,32 +230,32 @@ flowchart TD
     class OK,SUC accept
 ```
 
-**Ouvrir un run** (`POST /pipeline/runs`) suit les mêmes premières vérifications (verrou, cycle), puis :
-étape ② accessible, aucun run ouvert (sinon 409), et `confirm=true` si le couple a déjà un run fermé dans le cycle.
+**Opening a run** (`POST /pipeline/runs`) goes through the same first checks (lock, cycle), then:
+step ② accessible, no run open (otherwise 409), and `confirm=true` if the pair already has a closed run in the cycle.
 
 ---
 
-## 4. Les fichiers d'entrée
+## 4. Input files
 
-`POST` et `DELETE /input/files/{config|external_data}`, depuis l'interface.
+`POST` and `DELETE /input/files/{config|external_data}`, from the user interface.
 
 ```mermaid
 flowchart TD
-    A(["Upload ou suppression<br/>config.json / external_data.csv"]) --> L{"Verrou libre ?"}
-    L -- non --> E1["409 · one job at a time"]
-    L -- oui --> R{"Run ouvert ?"}
-    R -- non --> E2["409 · needs an open forecast run"]
-    R -- oui --> LV{"Upload de external_data.csv :<br/>fichier conforme au niveau du run ?"}
-    LV -- non --> E0["422 · file does not match the run level"]
-    LV -- "oui, ou autre cas" --> V{"Fichier déjà utilisé ?<br/>validate_inputs du run en success,<br/>ou forecast réussi d'un run qui le partage"}
-    V -- non --> OK
-    V -- oui --> CF{"confirm=true ? (R5)"}
-    CF -- non --> E3["409 · confirmation_required + impact"]
-    CF -- oui --> OK
-    OK["Upload de config.json : forecast_start écrit par le serveur<br/>Fichier écrit ou supprimé dans input/ et uploads/cycle/<br/>run ouvert seulement : validate_inputs et suite → pending<br/>(les autres runs gardent leur success)"]
-    OK --> K{"Quel fichier ?"}
-    K -- config.json --> K1["upload : config/maladie → success<br/>suppression : config/maladie → pending"]
-    K -- external_data.csv --> K2["upload : external_data/niveau → success<br/>suppression : external_data/niveau → pending"]
+    A(["Upload or deletion<br/>config.json / external_data.csv"]) --> L{"Lock free?"}
+    L -- no --> E1["409 · one job at a time"]
+    L -- yes --> R{"Run open?"}
+    R -- no --> E2["409 · needs an open forecast run"]
+    R -- yes --> LV{"Upload of external_data.csv:<br/>file matches the run's level?"}
+    LV -- no --> E0["422 · file does not match the run level"]
+    LV -- "yes, or other case" --> V{"File already used?<br/>run's validate_inputs in success,<br/>or successful forecast of a run that shares it"}
+    V -- no --> OK
+    V -- yes --> CF{"confirm=true? (R5)"}
+    CF -- no --> E3["409 · confirmation_required + impact"]
+    CF -- yes --> OK
+    OK["Upload of config.json: forecast_start written by the server<br/>File written or deleted in input/ and uploads/cycle/<br/>open run only: validate_inputs and following → pending<br/>(other runs keep their success)"]
+    OK --> K{"Which file?"}
+    K -- config.json --> K1["upload: config/disease → success<br/>deletion: config/disease → pending"]
+    K -- external_data.csv --> K2["upload: external_data/level → success<br/>deletion: external_data/level → pending"]
 
     classDef refuse fill:#ffebee,stroke:#c62828,color:#b71c1c
     class E0,E1,E2,E3 refuse
@@ -261,85 +263,85 @@ flowchart TD
 
 ---
 
-## 5. La vie d'un item
+## 5. The life of an item
 
 ```mermaid
 stateDiagram-v2
     [*] --> pending
-    pending --> running : lancement accepté (verrou, prérequis, run)
-    error --> running : relance, sans confirmation
-    success --> running : relance avec confirm=true (R5)
-    running --> success : job terminé
-    running --> error : job en échec, ou DELETE /pipeline/lock
-    success --> pending : un prérequis du run est relancé ou remplacé
-    success --> pending : rejet du forecast, abandon du run, réouverture du couple
-    error --> pending : un prérequis du run est relancé, ou abandon du run
+    pending --> running : launch accepted (lock, prerequisites, run)
+    error --> running : relaunch, no confirmation
+    success --> running : relaunch with confirm=true (R5)
+    running --> success : job finished
+    running --> error : job failed, or DELETE /pipeline/lock
+    success --> pending : a prerequisite in the run is relaunched or replaced
+    success --> pending : forecast rejected, run abandoned, pair reopened
+    error --> pending : a prerequisite in the run is relaunched, or run abandoned
 ```
 
-L'**étape** n'est pas un état stocké : elle est recalculée à chaque lecture.
+The **step** is not a stored state: it is recomputed on every read.
 
 ```mermaid
 flowchart LR
-    A["Tous les items de l'étape en success ?"] -- non --> N["étape non valide<br/>étapes suivantes : non accessibles"]
-    A -- oui --> B["Étape précédente valide ?"]
-    B -- non --> N
-    B -- oui --> V["étape valide (done)<br/>étape suivante : accessible"]
+    A["All items of the step in success?"] -- no --> N["step not valid<br/>following steps: not accessible"]
+    A -- yes --> B["Previous step valid?"]
+    B -- no --> N
+    B -- yes --> V["step valid (done)<br/>next step: accessible"]
 ```
 
-Entre étapes, rien n'est remis à zéro : si l'étape ① redevient non valide, les `success` de l'étape ② restent
-en base et comptent de nouveau dès que l'étape ① est revalidée.
+Nothing is reset between steps: if step ① becomes invalid again, the `success` statuses of step ② stay
+in the database and count again as soon as step ① is revalidated.
 
 ---
 
-## 6. La vie d'un run et d'un cycle
+## 6. The life of a run and of a cycle
 
 ```mermaid
 stateDiagram-v2
-    [*] --> open : POST /pipeline/runs (aucun autre run ouvert)
-    open --> closed : post_forecast en success
+    [*] --> open : POST /pipeline/runs (no other run open)
+    open --> closed : post_forecast in success
     open --> abandoned : DELETE /pipeline/runs/current
-    closed --> open : réouverture avec confirm=true (items remis à pending)
-    abandoned --> open : réouverture, sans confirmation
+    closed --> open : reopening with confirm=true (items reset to pending)
+    abandoned --> open : reopening, no confirmation
 ```
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Ouvert : premier lancement du mois<br/>cycle = mois courant
-    Ouvert --> Ouvert : lancements et runs du mois
-    Ouvert --> Inacheve : changement de mois avant la fin<br/>(run ouvert abandonné)
-    Inacheve --> [*] : reste dans l'historique ;<br/>le mois suivant a son propre cycle
-    Ouvert --> Ferme : les 3 étapes sont valides
-    Ferme --> Ferme : tout lancement du même mois → 409 cycle complete
-    Ferme --> [*] : premier lancement du mois suivant<br/>ouvre le cycle suivant
+    [*] --> Open : first launch of the month<br/>cycle = current month
+    Open --> Open : launches and runs of the month
+    Open --> Unfinished : month changes before the end<br/>(open run abandoned)
+    Unfinished --> [*] : stays in the history;<br/>the next month has its own cycle
+    Open --> Closed : all 3 steps are valid
+    Closed --> Closed : any launch in the same month → 409 cycle complete
+    Closed --> [*] : first launch of the next month<br/>opens the next cycle
 ```
 
-Limites :
-- Un cycle non terminé à la fin du mois reste inachevé ; un worker tué bloque tout jusqu'à `DELETE /pipeline/lock`.
-- **Mode test** (`PUT /pipeline/mode`) : mêmes règles et mêmes schémas ; les checkpoints sont gardés dans Redis seulement,
-  et revenir en production les efface (avec `confirm=true` s'il y en a). Ce mode passe `DRYRUN=True` à `import_gee`
-  (import partiel rapide) et à `post_forecast` (aucune écriture dans PRIDE-C). À ne pas confondre avec l'option `DRYRUN`
-  de chaque commande `pridec`, dont l'effet varie d'une commande à l'autre.
-- `DELETE /output/reset` et les jobs lancés en ligne de commande échappent à ces contrôles.
+Limits:
+- A cycle not finished by the end of the month stays unfinished; a killed worker blocks everything until `DELETE /pipeline/lock`.
+- **Test mode** (`PUT /pipeline/mode`): same rules and same diagrams; checkpoints are kept in Redis only,
+  and switching back to production erases them (with `confirm=true` if there are any). This mode passes `DRYRUN=True` to `import_gee`
+  (quick partial import) and to `post_forecast` (no write to PRIDE-C). Not to be confused with the `DRYRUN` option
+  of each `pridec` command, whose effect varies from one command to another.
+- `DELETE /output/reset` and jobs launched from the command line bypass these controls.
 
 ---
 
-## Points ouverts
+## Open points
 
 | Point | Question |
 |---|---|
-| `forecast_start` | Quelle valeur `jq` écrit-il dans `pivot_forecast.sh` (mois courant, mois suivant, dernier mois de données) ? Le serveur doit écrire la même. |
-| `approve_imports` | Quelle est la limite pour les cas CSB ? |
-| Mode test et `forecast` | Le mode test doit-il utiliser `forecast_assets/test_config.json` (Ranger + Naive) ? |
-| `calc_orgunit_alerts` | Job Celery ou synchrone ? Que publie-t-il exactement ? |
-| Contrôle de niveau de `external_data` | Quelles colonnes distinguent un fichier fkt d'un fichier csb ? |
+| `forecast_start` | Which value does `jq` write in `pivot_forecast.sh` (current month, next month, last month of data)? The server must write the same one. |
+| `approve_imports` | What is the limit for CSB cases? |
+| Test mode and `forecast` | Should test mode use `forecast_assets/test_config.json` (Ranger + Naive)? |
+| `calc_orgunit_alerts` | Celery or synchronous job? What exactly does it publish? |
+| Level check for `external_data` | Which columns distinguish an fkt file from a csb file? |
 
-## Changements depuis la version du 2026-10-09
+## Changes since the 2026-10-09 version
 
-- Phase 3 alignée sur la référence : `build_analytics` → `update_key` (`calc_csb_alerts` et le second `build_analytics` retirés).
-- `calc_orgunit_alerts` actif dans les runs CSB (plus de 501).
-- `external_data.csv` obligatoire, désormais un item par niveau ; l'étape ② passe à 71 items.
-- `forecast_start` écrit par le serveur à l'upload de `config.json`, au lieu d'un refus 422.
-- Contrôle de niveau à l'upload de `external_data.csv`.
-- Fichier de config attendu affiché par maladie (`config_respiratory.json` pour `Respinf`).
-- Décision `approve_imports` ajoutée en phase 1 ; `build_analytics` uniquement par l'API.
-- Mode test distingué de l'option `DRYRUN` des commandes.
+- Phase 3 aligned with the reference: `build_analytics` → `update_key` (`calc_csb_alerts` and the second `build_analytics` removed).
+- `calc_orgunit_alerts` active in CSB runs (no more 501).
+- `external_data.csv` mandatory, now one item per level; step ② goes to 71 items.
+- `forecast_start` written by the server when `config.json` is uploaded, instead of a 422 refusal.
+- Level check when `external_data.csv` is uploaded.
+- Expected config file shown per disease (`config_respiratory.json` for `Respinf`).
+- `approve_imports` decision added in phase 1; `build_analytics` only through the API.
+- Test mode distinguished from the commands' `DRYRUN` option.
