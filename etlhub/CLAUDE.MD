@@ -8,8 +8,8 @@ FastAPI service (port 8111) that exposes the PRIDE-C ETL scripts (`etl/scripts/*
 
 - `core/` — config, `dependencies.py` (composition root), `celery_app.py`
 - `domain/` — exceptions, ports (`interfaces/`), Pydantic DTOs (`schemas/`)
-- `application/use_cases/` — `*_service.py` (generate `job_id`, call `TaskLauncher`), `etl_use_cases.py`, `validation_use_cases.py`
-- `infrastructure/` — `tasks.py` (Celery + `CeleryTaskLauncher`), `job_store.py`, `request_tracker.py`, `config_store.py`, `forecast_runner.py`
+- `application/use_cases/` — `*_service.py` (generate `job_id`, call `TaskLauncher`), `etl_use_cases.py` (`ETL_JOBS`, stdout capture, `notify_webhook`), `validation_use_cases.py`
+- `infrastructure/` — `tasks.py` (`task_etl`, `task_forecast`, `CeleryTaskLauncher`), `job_store.py`, `request_tracker.py`, `config_store.py`, `forecast_runner.py`
 - `api/` — `routers/`, `websockets/etl_logs.py`, `auth/` (DHIS2), `middleware.py`, `etl_events.py`
 - `tests/` — `api/` and `infrastructure/`
 
@@ -24,9 +24,9 @@ Siblings in the repo:
 - **Never print or copy secrets.** `.env`, `.env.debug` and `.gee-private-key.json` exist locally. Mention variable names only.
 - **The `etlui` contracts are frozen.** `ETLResponse` = `{status, message, job_id, webhook_url}`. `JobStatus` = `{status, job_id, started, completed, logs, message}`. `job_id` = `<task_type>_<uuid4 hex[:8]>`. WebSocket messages: `etl_log_history`, `job_status_update`, `etl_log_entry`, `etl_log_complete`, close code `4004`. Any change must be mirrored in `etlui/src/composables/useWebSocketLogger.ts` and `useEtlPipeline.ts` in the same change.
 - **Layering target**: `api` → `application`, `core` · `application` → `domain` · `infrastructure` → `domain`, `application` · `domain` → nothing. Do not add new violations. Existing ones are known debt (`etlhub/docs/known-issues.md`): do not refactor them unless asked. Real violations to avoid: `application` or `infrastructure` importing `etlhub.api.*`, and `api` using `infrastructure` without injection. Tolerated in practice, pending the team's confirmation: `api` → `domain` DTOs, any layer → `core` settings, `core/dependencies.py` as composition root, `application` → `etl.scripts` wrappers.
-- **Adding a job type = 4 synchronized changes**: service method (generates the `job_id`, calls `task_launcher.launch`), `@celery_app.task` in `tasks.py` using `_run_task`, entry in `CeleryTaskLauncher._registry`, router returning 202 with `ETLResponse`. Use case wrappers go through `_execute_etl_job`.
+- **Adding a Celery job type = 3 changes**: script function in `ETL_JOBS` (`etl_use_cases.py`; `task_etl`, `CeleryTaskLauncher` and `IngestionService.launch` then accept it), the job in `domain/pipeline.py`, one entry in the `ingest_router.py` table (or `add_launch_route`), which returns 202 with `ETLResponse`. Shared `confirm` query params live in `api/routers/__init__.py`.
 - **No new blocking work inside an `async def` handler.** Use Celery.
-- **Do not move or rename `etl/scripts` modules**, and do not touch the `os.chdir` (in `main.py` only) or the `sys.path` changes (`main.py` and `validation_use_cases.py`). Worker and API depend on them, and scripts write under `os.getcwd()/input|output`.
+- **Do not move or rename `etl/scripts` modules**, and do not touch the `os.chdir` (in `main.py` only) or the `sys.path` changes (`main.py`; the worker gets the repo root through `python -m`). Worker and API depend on them, and scripts write under `os.getcwd()/input|output`.
 
 ## Gotchas
 
@@ -35,11 +35,11 @@ Siblings in the repo:
 - `/post_forecast` and `/update_key` are **synchronous**: they block the event loop and redirect the global `stdout`. All other launch endpoints go through Celery (202).
 - Dynamic config (`app:config:dynamic`: `DHIS_URL`, `DHIS_TOKEN`, `PARENT_OU`, `OU_LEVEL`, `DISEASE_CODE`) is read by the forecast container **and** by `etl/scripts/config.py` (also `DRYRUN`, `LOG_LEVEL`). The old `ARCHITECTURE.md` says otherwise: it is wrong.
 - `JobStore`, `RequestTracker` and event publishing use `except Exception: pass`. A job missing from Redis does not mean it failed, and Redis being down leaves no trace.
-- On an ETL failure, `save_logs` replaces the job log (file and Redis) with the traceback only.
+- On a job failure, `_run_task` appends the traceback to the job log (file and Redis).
 - The WebSocket closes with `4004` only for an unknown job; jobs are `pending` from the 202 on, so the socket stays open for them. Forecast logs are written only at the end: during a forecast the socket carries status updates only.
 - `etlui` sends a JSON body to `/fetch_disease` and `/validate_inputs`, but the backend reads query parameters only. The body is silently ignored.
 - Forecast: `HOST_PWD` is read from `Settings.host_pwd`: it must be exported in the worker's environment (the root `.env` loaded later by `load_dotenv()` is not seen) and must be a **host** path containing `.env`. A missing `.env` marks the job `error`. Forecast paths must be under `input/` (422 otherwise). The worker needs the Docker socket. There is no timeout. A temp file `/tmp/forecast_{id}.env` holds secrets during the run. The image tag is `0.1.0` (the OpenAPI text says `latest`).
-- No timeout and no lock anywhere. A killed worker leaves `job:{id}` at `running` until the 24h TTL. Two simultaneous jobs can write the same `input/` and `output/` files.
+- One job at a time, in cycle order: every launch, upload and input delete goes through the pipeline gate (`CheckpointStore`, SQLite `logs/etlhub.db`) and gets **409** otherwise. Three steps (`data_import`, `forecast`, `system_update`); the forecast step is 9 runs (source × disease), one open at a time (`POST /pipeline/runs`), and run jobs need it (409 otherwise). **Opening a run empties `input/` and `output/`** and writes `DISEASE_CODE` / `OU_LEVEL` into the dynamic config at each run job. A new job type must be added to `domain/pipeline.py` (`PIPELINE`, and `RUN_TASKS` if it belongs to a run), or `resolve_slot` raises. A step counts only if the previous one does (`progress()` is chained), and undoing a `success` needs `?confirm=true` (409 `confirmation_required` with `impact` otherwise); launch routes pass `confirm` down to the gate. API messages are in English. The cycle is always the calendar month (an unfinished cycle stays unfinished, its open run is abandoned). Test mode = `DRYRUN=true` via `PUT /pipeline/mode`: checkpoints live in Redis only (in-memory SQLite serialized in `pipeline:dry_run:db`), leaving it discards them with `confirm=true`. `POST /calc_orgunit_alerts` is a 501 (no script): CSB runs cannot complete. A killed worker keeps the lock until `DELETE /pipeline/lock` (it never expires), and `job:{id}` at `running` until the 24h TTL. No timeout on the jobs themselves. Tests get the real gate on a temp db (`checkpoint_store` fixture) or `OpenGate`.
 - `GET /api/config/` returns `DHIS_TOKEN` in clear, and the middleware logs full URLs: never put a secret in a query string.
 - Redis job state expires after 24h. Older jobs only exist in `logs/`.
 - Only `/api/config/*` and `/auth/me` require `get_current_user`. Do not assume other routers are protected.

@@ -37,20 +37,20 @@ Deployment outside a development machine is **not documented**: no etlhub Docker
 |---|---|
 | `core/` | `config.py`, `dependencies.py` (composition root), `celery_app.py` |
 | `domain/` | exceptions, `Protocol` ports, Pydantic DTOs |
-| `application/use_cases/` | services (generate the `job_id`), `run_*` wrappers, stdout capture |
+| `application/use_cases/` | services (generate the `job_id`), `ETL_JOBS` table, stdout capture, webhook |
 | `infrastructure/` | `tasks.py`, `job_store.py`, `request_tracker.py`, `config_store.py`, `forecast_runner.py` |
 | `api/` | routers, WebSocket, DHIS2 auth, middleware, `etl_events.py` |
 
 Intended direction: `api` → `application`, `core` · `application` → `domain` · `infrastructure` → `domain`, `application` · `domain` → nothing. Adapters are singletons (`@lru_cache`); services are built per request (`Depends`).
 
-Actual deviations: `application` and `infrastructure` import `etlhub.api.etl_events` (the `EventPublisher` port is never injected); `core` has a dead import towards `api`; `api` uses `ConfigStore` and `get_request_tracker` without injection; `api` calls `etl.scripts` (`get_dhis_url`). Above all, the coupling with the rest of the repository is **circular**: `etlhub` imports `etl.scripts.*`, and `etl/scripts/config.py` imports `etlhub.infrastructure.config_store`. This relies on `sys.path` and on `os.chdir` (`main.py`).
+Actual deviations: `application` and `infrastructure` import `etlhub.api.etl_events` (no event port); `api` uses `ConfigStore` and `get_request_tracker` without injection; `api` calls `etl.scripts` (`get_dhis_url`). Above all, the coupling with the rest of the repository is **circular**: `etlhub` imports `etl.scripts.*`, and `etl/scripts/config.py` imports `etlhub.infrastructure.config_store`. This relies on `sys.path` and on `os.chdir` (`main.py`).
 
 Outside the written rule but widespread: `api` → `domain` (DTOs), `infrastructure` and `application` → `core` (configuration), `core/dependencies.py` as composition root, `application` → `etl.scripts` (wrappers). The team must say whether they are tolerated. The domain imports only `typing` and `pydantic`. Measurements and method rules: `DEVELOPMENT.md`.
 
 ## 4. Job lifecycle
 
 1. `POST /<job>?webhook_url=…` → the service generates `job_id = <type>_<8 hex>` and calls `TaskLauncher.launch` → **202** response `{status, message, job_id, webhook_url}`.
-2. The worker runs `_run_task`: `job:{id}` becomes `running`, the script runs with stdout/stderr captured (`_JobLogger`), each fragment is published on `etl_logs:{id}` and appended to `logs/{id}.log`.
+2. The worker runs `task_etl` (or `task_forecast`) → `_run_task`: `job:{id}` becomes `running`, the script runs with stdout/stderr captured (`_JobLogger`), each fragment is published on `etl_logs:{id}` and appended to `logs/{id}.log`.
 3. End: `job:{id}` becomes `success` or `error`, a message is published on `etl_status:{id}`, and the webhook is POSTed if one was given. On error the task re-raises the exception.
 4. The front opens `WS /api/tracking/etl-logs/{job_id}`: `etl_log_history` → `job_status_update` / `etl_log_entry` → `etl_log_complete` → close. Subscribes before reading history and status, waits for pub/sub messages with a 1 s timeout (no busy-wait), re-reads `job:{id}` every 10 s in case the final event was missed, and stops when the client leaves. Closes with `4004` **only for an unknown job** (no `job:{id}` and no logs); a known job without logs yet gets an empty `etl_log_history` and stays open. A job whose record expired but has logs gets its history then `etl_log_complete` with `final_status: null`. Jobs are recorded as `pending` at launch (`CeleryTaskLauncher.launch`), so they are known from the 202 on.
 
@@ -97,7 +97,7 @@ Documented order (`README.md`): imports → `build_analytics` → `fetch_*` → 
 | `calc_csb_alerts` | DHIS2 `analytics` | DHIS2 `dataValueSets` | post_forecast, build_analytics |
 | `update_key` | — | DHIS2 datastore `pridec/pridec_update` | last |
 
-Concurrency: no lock and no deduplication. Two simultaneous `fetch_*`, `validate_inputs` or `forecast` runs write the same files without protection; imports resend the same values on every run, so deduplication depends on DHIS2.
+Concurrency: **one job at a time**, in cycle order, **one forecast run (source × disease) at a time** (`domain/pipeline.py`, `infrastructure/checkpoint_store.py`, tables `checkpoints`, `pipeline_lock`, `forecast_runs` in `logs/etlhub.db`). A launch while a job runs, before its prerequisites are in `success`, or a run job without an open run, gets 409. The lock is taken at launch and freed by `_update_task_status` (success/error); it never expires: `DELETE /pipeline/lock` frees it. Opening a run empties `input/` and `output/`; each run job gets the run's `DISEASE_CODE` / `OU_LEVEL` written into the dynamic config before it starts. `DELETE /output/reset` does not take it. No deduplication: imports resend the same values on every run, so deduplication depends on DHIS2. See `docs/pipeline-checkpoints.md`.
 
 ## 8. Security (summary)
 

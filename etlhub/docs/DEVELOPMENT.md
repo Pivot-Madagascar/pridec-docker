@@ -25,17 +25,17 @@
 ### Clean architecture
 
 - The domain imports only `typing` and `pydantic`.
-- 5 ports exist. `JobRepository`, `TaskLauncher`, `WebhookNotifier` and `RequestTrackerProtocol` are injected but also bypassed (`JobStore()` in `tasks.py`, `_send_webhook()`, `get_request_tracker()`). `EventPublisher` has no explicit implementer and is never injected.
+- 4 ports exist. `JobRepository`, `TaskLauncher`, `PipelineGate` and `RequestTrackerProtocol` are injected but also bypassed (`JobStore()` in `tasks.py`, `get_request_tracker()`). Webhooks and events have no port.
 - Imports that cross the written rule: `application` → `api` (deferred, `etl_use_cases.py:40`), `infrastructure` → `api` (deferred, `tasks.py:52,79`, `forecast_runner.py:172,177`), `api` → `infrastructure` without injection (`middleware.py:12`, `config_router.py:9`), `api` → `etl.scripts`, `application` → `etl.scripts` (11 imports). Widespread but not covered by the written rule: `api` → `domain` (5 files), `infrastructure` → `core` (4), `application` → `core` (2); `core/dependencies.py` is the composition root.
-- SOLID, as visible in the code. **S**: one service per functional area, but `tasks.py` mixes Celery tasks, webhooks, status and events, and `run_rscript` is 104 lines. **O**: a job is one entry in `CeleryTaskLauncher._registry`, but also a method in a service and an import in `etl_use_cases.py`. **I**: ports are small, except `JobRepository.load_from_file`. **D**: services depend on `Protocol`s, with the bypasses above. **L**: no violation shown.
+- SOLID, as visible in the code. **S**: one service per functional area, but `tasks.py` mixes Celery tasks, webhooks, status and events, and `run_rscript` is 104 lines. **O**: a Celery job is one entry in `ETL_JOBS` plus one row in the `ingest_router.py` table. **I**: ports are small, except `JobRepository.load_from_file`. **D**: services depend on `Protocol`s, with the bypasses above. **L**: no violation shown.
 
 ### Clean code
 
 - 56 files, 2,715 lines, 158 functions; no file over 200 lines.
-- Longest: `get_home_html` 168 (HTML), `run_rscript` 104 (branch count ≈ 24), `run_validate_inputs` 78 (≈ 17, 8 parameters), `get_dhis2_user_info` 71 (≈ 23).
+- Longest: `run_rscript` 104 (branch count ≈ 24), `validate_input_files` (6 parameters), `get_dhis2_user_info` 71 (≈ 23).
 - 42 `except Exception`, 21 of them with only `pass`; 8 `print(`; 18 one-letter names; no `# noqa`, no `# type: ignore`.
 - Return type annotated: api 27 %, application 82 %, infrastructure 50 %, core and domain 100 %. Docstrings: 7 on 158 functions. Code and logs are in English.
-- Duplicates: 8 identical 4-line service methods, `post_forecast` / `update_key`, `_get_redis` twice.
+- Duplicates: removed on 2026-10-12 (service methods, Celery tasks, routes, Redis client caches).
 - No linter, formatter, type checker or hook is configured.
 
 ## 2. Rules for new code (proposed, to be confirmed)
@@ -55,7 +55,7 @@
 
 **Clean code (new or changed functions)**
 10. At most 50 lines, 10 branches and 4 parameters. Existing functions above that are debt, not a precedent.
-11. No `except … pass`: log with the job id. No `print(` except job output inside `capture_stdout`.
+11. No `except … pass`: log with the job id. No `print(` except job output captured by `_execute_etl_job`.
 12. Annotate parameters and return type. Add a docstring only when the reason is not obvious.
 13. Do not copy a duplicated block: extend the registry or extract a helper.
 14. English for identifiers, comments and logs.
