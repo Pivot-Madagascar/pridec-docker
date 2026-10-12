@@ -102,8 +102,8 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import ActionCard from '@/views/LandingPage/components/ActionCard.vue'
-import FileDropzone from '@/views/LandingPage/components/FileDropzone.vue'
+import ActionCard from '@/views/Dashboard/components/ActionCard.vue'
+import FileDropzone from '@/views/Dashboard/components/FileDropzone.vue'
 import { CONFIG_FILES, step, toCard } from '@/config/pipeline'
 import { DISEASES, SOURCES, type Checkpoints, type Disease, type Source } from '@/types/pipeline'
 import type { InputName, ServerFile } from '@/types/inputs'
