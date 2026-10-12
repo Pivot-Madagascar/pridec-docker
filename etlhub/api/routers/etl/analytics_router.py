@@ -15,11 +15,6 @@ add_launch_route(
     "Executes `etl/scripts/build_analytics.py` asynchronously. ",
     "Analytics build task accepted and queued in background.", "Build analytics task started in background",
 )
-add_launch_route(
-    router, "calc_csb_alerts", "Calculate and publish CSB alerts",
-    "Executes `etl/scripts/calc_CSB_alerts.py` asynchronously. Returns a `job_id` for progress tracking. ",
-    "CSB alert calculation task accepted and queued in background.", "Calculate CSB alerts task started in background",
-)
 
 
 @router.post(

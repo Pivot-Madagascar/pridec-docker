@@ -44,7 +44,7 @@
       <div class="run-files">
         <div>
           <p class="file-status">
-            config.json for {{ diseaseOf(run.couple) }}:
+            config.json for {{ diseaseOf(run.couple) }} (expected file: <code>{{ CONFIG_FILES[diseaseOf(run.couple)] }}</code>):
             <strong :class="`status-${configItem?.status ?? 'pending'}`">{{ configItem?.status ?? 'pending' }}</strong>
             (shared by the 3 runs of this disease)
           </p>
@@ -64,12 +64,14 @@
         </div>
         <div>
           <p class="file-status">
-            external_data.csv ({{ levelOf(run.couple) }} level, optional): <strong>{{ run.external_data }}</strong>
+            external_data.csv for the {{ levelOf(run.couple) }} level:
+            <strong :class="`status-${externalItem?.status ?? 'pending'}`">{{ externalItem?.status ?? 'pending' }}</strong>
+            (shared by the runs of this level)
           </p>
           <FileDropzone
             v-model="files.external_data"
             label="external_data.csv"
-            description="External covariates of this org unit level (CSV, optional)"
+            description="External covariates of this org unit level (CSV)"
             accept=".csv,text/csv"
             :server-file="serverFiles.external_data"
             :uploading="busy"
@@ -102,7 +104,7 @@
 import { computed, reactive, ref } from 'vue'
 import ActionCard from '@/views/LandingPage/components/ActionCard.vue'
 import FileDropzone from '@/views/LandingPage/components/FileDropzone.vue'
-import { step, toCard } from '@/config/pipeline'
+import { CONFIG_FILES, step, toCard } from '@/config/pipeline'
 import { DISEASES, SOURCES, type Checkpoints, type Disease, type Source } from '@/types/pipeline'
 import type { InputName, ServerFile } from '@/types/inputs'
 
@@ -136,10 +138,11 @@ const run = computed(() => props.state?.run ?? null)
 const blocked = computed(() => props.busy || props.state?.lock != null)
 const itemOf = (name: string) => forecastStep.value?.items.find(i => i.item === name)
 const configItem = computed(() => run.value && itemOf(`config/${diseaseOf(run.value.couple)}`))
+const externalItem = computed(() => run.value && itemOf(`external_data/${run.value.couple.startsWith('CSB/') ? 'csb' : 'fkt'}`))
 const approveItem = computed(() => run.value && itemOf(`${run.value.couple}:approve`))
 const forecastItem = computed(() => run.value && itemOf(`${run.value.couple}:forecast`))
 
-// The run's jobs, as cards (config and approve have their own controls above and below).
+// The run's jobs, as cards (the uploads and approve have their own controls above and below).
 const jobCards = computed(() =>
   (forecastStep.value?.items ?? [])
     .filter(i => run.value && i.item.startsWith(`${run.value.couple}:`) && !i.item.endsWith(':approve'))

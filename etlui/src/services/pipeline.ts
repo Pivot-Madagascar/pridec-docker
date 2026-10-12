@@ -33,6 +33,11 @@ export async function decideRun(decision: 'approve' | 'reject'): Promise<void> {
   await api.post('/pipeline/runs/current/approve', { decision })
 }
 
+// POST /pipeline/imports/approve: approve unlocks build_analytics (step 1), reject sends the approval back to pending.
+export async function decideImports(decision: 'approve' | 'reject'): Promise<void> {
+  await api.post('/pipeline/imports/approve', { decision })
+}
+
 // PUT /pipeline/mode: test mode = DRYRUN=true; leaving it discards the test checkpoints (confirm when there are any).
 export async function setMode(dryRun: boolean, confirm = false): Promise<boolean> {
   const response = await api.put<{ dry_run: boolean }>('/pipeline/mode', { dry_run: dryRun }, withConfirm(confirm))

@@ -2,8 +2,8 @@ import itertools
 
 import pytest
 
-from etlhub.domain.exceptions import ConfirmationRequiredError, PipelineBlockedError, ValidationError
-from etlhub.domain.pipeline import COUPLES, PIPELINE, check_forecast_start, run_items
+from etlhub.domain.exceptions import ConfirmationRequiredError, PipelineBlockedError
+from etlhub.domain.pipeline import COUPLES, PIPELINE, run_items
 
 _ids = itertools.count()
 
@@ -16,8 +16,10 @@ def _pass(store, task, confirm=False):
 
 
 def _import(store):
-    for task in ("import_pivot_csb", "import_gee", "import_pivot_com", "build_analytics"):
+    for task in ("import_pivot_csb", "import_gee", "import_pivot_com"):
         _pass(store, task)
+    store.decide_imports("approve")
+    _pass(store, "build_analytics")
 
 
 FILES = {"config": "config.json", "external_data": "external_data.csv"}
@@ -35,10 +37,13 @@ def _upload(store, name="config", confirm=False, removed=False, content="{}"):
 
 
 def _prepare(store, couple):
-    """Opens the run and passes everything up to approve (excluded). config only for the disease's first run."""
+    """Opens the run and passes everything up to approve (excluded). Files only in the first run that shares them."""
     store.open_run(couple)
-    if _status(store.progress(), "forecast", f"config/{couple.split('/')[1]}") != "success":
+    state = store.progress()
+    if _status(state, "forecast", f"config/{couple.split('/')[1]}") != "success":
         _upload(store)
+    if _status(state, "forecast", f"external_data/{'csb' if couple.startswith('CSB/') else 'fkt'}") != "success":
+        _upload(store, "external_data")
     for task in ("fetch_disease", "fetch_climate", "fetch_geojson", "validate_inputs", "forecast"):
         _pass(store, task)
     if couple.startswith("CSB/"):
@@ -72,9 +77,11 @@ def month(monkeypatch):
 
 # --- definition -------------------------------------------------------------------------
 
-def test_the_target_pipeline_has_three_steps_and_69_forecast_items():
+def test_the_target_pipeline_has_three_steps_and_71_forecast_items():
     assert list(PIPELINE) == ["data_import", "forecast", "system_update"]
-    assert len(PIPELINE["forecast"]) == 69  # 3 configs (one per disease) + 6 x 7 + 3 x 8
+    assert len(PIPELINE["data_import"]) == 5
+    assert len(PIPELINE["forecast"]) == 71  # 3 configs + 2 external_data + 6 x 7 + 3 x 8
+    assert list(PIPELINE["system_update"]) == ["build_analytics", "update_key"]
     assert len(run_items("COM/Malaria")) == 7
     assert "CSB/Malaria:calc_orgunit_alerts" in run_items("CSB/Malaria")
 
@@ -90,15 +97,31 @@ def test_a_new_cycle_starts_at_data_import(checkpoint_store):
 
 # --- R2, R3, R4 ---------------------------------------------------------------------------
 
-def test_imports_run_in_any_order_and_build_analytics_waits_for_the_three(checkpoint_store):
+def test_imports_run_in_any_order_and_build_analytics_waits_for_their_approval(checkpoint_store):
     _pass(checkpoint_store, "import_pivot_com")
     with pytest.raises(PipelineBlockedError, match="data_import/import_gee"):
         checkpoint_store.start("build_analytics", "early")
+    with pytest.raises(PipelineBlockedError, match="data_import/import_pivot_csb"):
+        checkpoint_store.decide_imports("approve")
 
-    for task in ("import_pivot_csb", "import_gee", "build_analytics"):
+    for task in ("import_pivot_csb", "import_gee"):
         _pass(checkpoint_store, task)
+    with pytest.raises(PipelineBlockedError, match="data_import/approve_imports"):
+        checkpoint_store.start("build_analytics", "unapproved")
+    checkpoint_store.decide_imports("approve")
+    _pass(checkpoint_store, "build_analytics")
 
     assert _step(checkpoint_store.progress(), "data_import")["done"] is True
+
+
+def test_rejecting_the_imports_sends_the_approval_back_to_pending(checkpoint_store):
+    _import(checkpoint_store)
+
+    checkpoint_store.decide_imports("reject")
+
+    state = checkpoint_store.progress()
+    assert _status(state, "data_import", "approve_imports") == "pending"
+    assert state["current_step"] == "data_import"
 
 
 def test_one_job_at_a_time_and_the_lock_never_expires(checkpoint_store):
@@ -238,6 +261,7 @@ def test_a_csb_run_needs_calc_orgunit_alerts_before_approval(checkpoint_store):
     _import(checkpoint_store)
     checkpoint_store.open_run("CSB/Malaria")
     _upload(checkpoint_store)
+    _upload(checkpoint_store, "external_data")
     for task in ("fetch_disease", "fetch_climate", "fetch_geojson", "validate_inputs", "forecast"):
         _pass(checkpoint_store, task)
 
@@ -261,6 +285,7 @@ def test_config_is_free_to_replace_until_validate_inputs_succeeds(checkpoint_sto
     checkpoint_store.open_run("COM/Malaria")
     _upload(checkpoint_store)
     _upload(checkpoint_store)  # no confirmation: nothing validated yet
+    _upload(checkpoint_store, "external_data")
     for task in ("fetch_disease", "fetch_climate", "fetch_geojson", "validate_inputs"):
         _pass(checkpoint_store, task)
 
@@ -284,19 +309,26 @@ def test_deleting_config_resets_it(checkpoint_store):
     assert _status(checkpoint_store.progress(), "forecast", "config/Malaria") == "pending"
 
 
-def test_external_data_is_optional_and_recorded_on_the_run(checkpoint_store):
+def test_external_data_is_a_mandatory_item_per_level(checkpoint_store):
     _import(checkpoint_store)
-    _prepare(checkpoint_store, "ADJ/Respinf")
-    assert checkpoint_store.progress()["run"]["external_data"] == "none"
+    checkpoint_store.open_run("ADJ/Respinf")
+    _upload(checkpoint_store)
+    for task in ("fetch_disease", "fetch_climate", "fetch_geojson"):
+        _pass(checkpoint_store, task)
+    with pytest.raises(PipelineBlockedError, match="external_data/fkt"):
+        checkpoint_store.start("validate_inputs", "v")
+    _upload(checkpoint_store, "external_data")
+    _pass(checkpoint_store, "validate_inputs")
 
     with pytest.raises(ConfirmationRequiredError):
         _upload(checkpoint_store, "external_data")
     _upload(checkpoint_store, "external_data", confirm=True)
-
     state = checkpoint_store.progress()
-    assert state["run"]["external_data"] == "uploaded"
+    assert _status(state, "forecast", "external_data/fkt") == "success"
     assert _status(state, "forecast", "ADJ/Respinf:validate_inputs") == "pending"
-    assert _status(state, "forecast", "ADJ/Respinf:forecast") == "pending"
+
+    _upload(checkpoint_store, "external_data", removed=True)
+    assert _status(checkpoint_store.progress(), "forecast", "external_data/fkt") == "pending"
 
 
 def test_a_failed_upload_marks_config_error_and_frees_the_lock(checkpoint_store):
@@ -365,24 +397,20 @@ def _all_runs(store):
         _full_run(store, couple)
 
 
-def test_build_analytics_fills_its_three_slots_in_order(checkpoint_store):
+def test_build_analytics_fills_its_two_slots_in_order(checkpoint_store):
     _all_runs(checkpoint_store)
 
-    first = _pass(checkpoint_store, "build_analytics")
-    with pytest.raises(ConfirmationRequiredError):  # after_alerts not launchable yet: a relaunch of the first
-        checkpoint_store.start("build_analytics", "too_early")
-    _pass(checkpoint_store, "calc_csb_alerts")
     second = _pass(checkpoint_store, "build_analytics")
 
     update = {i["item"]: i["job_id"] for i in _step(checkpoint_store.progress(), "system_update")["items"]}
-    assert (update["build_analytics"], update["build_analytics_after_alerts"]) == (first, second)
-    with pytest.raises(ConfirmationRequiredError):  # all three in success: a relaunch of the last
+    assert update["build_analytics"] == second
+    with pytest.raises(ConfirmationRequiredError):  # both in success: a relaunch of the last
         checkpoint_store.start("build_analytics", "third")
 
 
 def test_the_whole_cycle_completes_then_closes_until_next_month(checkpoint_store, month):
     _all_runs(checkpoint_store)
-    for task in ("build_analytics", "calc_csb_alerts", "build_analytics", "update_key"):
+    for task in ("build_analytics", "update_key"):
         _pass(checkpoint_store, task)
 
     state = checkpoint_store.progress()
@@ -410,22 +438,6 @@ def test_a_new_month_starts_a_new_cycle_and_abandons_the_open_run(checkpoint_sto
     assert _step(old, "data_import")["done"] is True
 
 
-@pytest.mark.parametrize("forecast_start, cycle, ok", [
-    ("202610", "202610", True),
-    (202610, "202610", True),
-    (None, "202610", True),        # absent: validate_inputs takes the current month
-    (None, "202609", False),       # absent, but the cycle started last month
-    ("202601", "202610", False),
-])
-def test_config_forecast_start_must_match_the_cycle(forecast_start, cycle, ok):
-    if ok:
-        check_forecast_start(forecast_start, cycle, "202610")
-    else:
-        with pytest.raises(ValidationError):
-            check_forecast_start(forecast_start, cycle, "202610")
-
-
-
 # --- files shared between runs ----------------------------------------------------------
 
 def test_a_disease_config_is_uploaded_once_and_restored_for_its_other_runs(checkpoint_store, tmp_path):
@@ -449,12 +461,13 @@ def test_external_data_is_kept_per_level(checkpoint_store, tmp_path):
     _upload(checkpoint_store, "external_data", content="orgUnit,period\nfkt,202610\n")
     checkpoint_store.abandon_run()
 
-    run = checkpoint_store.open_run("COM/Respinf")  # same level (fokontany)
-    assert run["external_data"] == "uploaded"
+    checkpoint_store.open_run("COM/Respinf")  # same level (fokontany)
     assert "fkt" in (tmp_path / "input" / "external_data.csv").read_text()
     checkpoint_store.abandon_run()
 
-    assert checkpoint_store.open_run("CSB/Malaria")["external_data"] == "none"  # other level
+    checkpoint_store.open_run("CSB/Malaria")  # other level: nothing restored
+    assert not (tmp_path / "input" / "external_data.csv").exists()
+    assert _status(checkpoint_store.progress(), "forecast", "external_data/csb") == "pending"
 
 
 def test_replacing_a_used_config_resets_only_the_open_run(checkpoint_store):

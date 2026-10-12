@@ -1,8 +1,8 @@
 """The pipeline cycle: steps, items with their prerequisites, forecast runs. Pure, no I/O.
 
 Rules (etlhub/docs/pipeline-checkpoints.md):
-- R1 every item is mandatory (external_data.csv is optional, so it is not an item);
-  config.json is one item per disease (config/<disease>), shared by the disease's 3 runs;
+- R1 every item is mandatory; config.json is one item per disease (config/<disease>), shared by the
+  disease's 3 runs; external_data.csv is one item per org unit level (external_data/<fkt|csb>);
 - R2 an item starts only when its prerequisites (inside its step) are in success;
 - R3 one job at a time (enforced by the store);
 - R4 a step is done when all its items are in success AND the previous step is done;
@@ -11,7 +11,7 @@ Rules (etlhub/docs/pipeline-checkpoints.md):
 """
 from datetime import datetime
 
-from etlhub.domain.exceptions import ConfirmationRequiredError, PipelineBlockedError, ValidationError
+from etlhub.domain.exceptions import ConfirmationRequiredError, PipelineBlockedError
 
 SOURCES = ("ADJ", "COM", "CSB")
 DISEASES = ("Malaria", "Diarrhea", "Respinf")
@@ -23,7 +23,7 @@ Rows = dict[tuple[str, str], dict]  # {(step, item): {"status", "job_id", "updat
 
 
 def run_context(couple: str) -> dict[str, str | None]:
-    """Variables injected into every job of the run (like pivot_workflow.sh)."""
+    """Variables injected into every job of the run (like pivot_forecast.sh)."""
     source, disease = couple.split("/")
     return {
         "DISEASE_CODE": f"pridec_historic_{source}{disease}",
@@ -45,14 +45,20 @@ def config_item(couple: str) -> str:
     return f"config/{disease_of(couple)}"
 
 
+def external_data_item(couple: str) -> str:
+    """external_data.csv is uploaded once per org unit level, in the first run of that level."""
+    return f"external_data/{level_of(couple)}"
+
+
 def run_items(couple: str) -> dict[str, list[str]]:
-    """The items of one forecast run and their prerequisites (config/<disease> is shared, not listed here)."""
+    """The items of one forecast run and their prerequisites (the shared uploads are not listed here)."""
     c = couple
     items = {
         f"{c}:fetch_disease": [],
         f"{c}:fetch_climate": [],
         f"{c}:fetch_geojson": [],
-        f"{c}:validate_inputs": [config_item(c), f"{c}:fetch_disease", f"{c}:fetch_climate", f"{c}:fetch_geojson"],
+        f"{c}:validate_inputs": [config_item(c), external_data_item(c),
+                                 f"{c}:fetch_disease", f"{c}:fetch_climate", f"{c}:fetch_geojson"],
         f"{c}:forecast": [f"{c}:validate_inputs"],
     }
     last = f"{c}:forecast"
@@ -67,18 +73,17 @@ def run_items(couple: str) -> dict[str, list[str]]:
 PIPELINE: dict[str, dict[str, list[str]]] = {  # step -> {item: prerequisites}, in cycle order
     "data_import": {
         "import_gee": [], "import_pivot_com": [], "import_pivot_csb": [],
-        "build_analytics": ["import_gee", "import_pivot_com", "import_pivot_csb"],
+        "approve_imports": ["import_pivot_com", "import_pivot_csb"],  # human decision: COM and CSB case counts
+        "build_analytics": ["import_gee", "approve_imports"],
     },
     "forecast": {**{f"config/{d}": [] for d in DISEASES},  # 3 uploads, one per disease
-                 **{k: v for c in COUPLES for k, v in run_items(c).items()}},  # + 66 run items = 69
+                 **{f"external_data/{lv}": [] for lv in ("fkt", "csb")},  # + 2 uploads, one per level
+                 **{k: v for c in COUPLES for k, v in run_items(c).items()}},  # + 66 run items = 71
     "system_update": {
         "build_analytics": [],
-        "calc_csb_alerts": ["build_analytics"],
-        "build_analytics_after_alerts": ["calc_csb_alerts"],
-        "update_key": ["build_analytics_after_alerts"],
+        "update_key": ["build_analytics"],
     },
 }
-SLOT_TASK = {"build_analytics_after_alerts": "build_analytics"}  # item -> the job that runs it
 RUN_TASKS = {"fetch_disease", "fetch_climate", "fetch_geojson", "validate_inputs", "forecast",
              "calc_orgunit_alerts", "post_forecast"}
 STEPS = list(PIPELINE)
@@ -93,7 +98,7 @@ def status(rows: Rows, step: str, item: str) -> str:
 
 
 def cycle_for_launch(active: str | None, active_complete: bool, month: str) -> str:
-    """The cycle (= forecast_start, YYYYMM) a launch belongs to: always the calendar month.
+    """The cycle (YYYYMM) a launch belongs to: always the calendar month.
 
     A new month starts a new cycle automatically; an unfinished previous cycle stays unfinished.
     A complete cycle is closed for the rest of its month: a month runs only once.
@@ -101,16 +106,6 @@ def cycle_for_launch(active: str | None, active_complete: bool, month: str) -> s
     if active == month and active_complete:
         raise PipelineBlockedError(f"Cycle {active} is complete: the next cycle starts next month")
     return month
-
-
-def check_forecast_start(forecast_start: object, cycle: str, month: str) -> None:
-    """config.json must forecast the cycle. Absent: validate_inputs uses the current month."""
-    if forecast_start is None:
-        if cycle != month:
-            raise ValidationError(f"config.json has no forecast_start: it must be {cycle}, the current cycle")
-        return
-    if str(forecast_start) != cycle:
-        raise ValidationError(f"config.json forecast_start is {forecast_start}, the current cycle is {cycle}")
 
 
 def accessible_steps(rows: Rows) -> set[str]:
@@ -124,8 +119,8 @@ def accessible_steps(rows: Rows) -> set[str]:
 
 
 def run_scope(couple: str | None) -> set[str]:
-    """What the open run may touch: its own items and its disease's config."""
-    return set(run_items(couple)) | {config_item(couple)} if couple else set()
+    """What the open run may touch: its own items, its disease's config and its level's external_data."""
+    return set(run_items(couple)) | {config_item(couple), external_data_item(couple)} if couple else set()
 
 
 def blocking_reason(rows: Rows, step: str, item: str, open_couple: str | None = None) -> str | None:
@@ -156,7 +151,7 @@ def dependents(item: str) -> list[str]:
 def resolve_slot(task: str, rows: Rows, open_couple: str | None) -> tuple[str, str]:
     """The checkpoint (step, item) a launch counts for. Raises PipelineBlockedError.
 
-    A run job counts for the open run. build_analytics has three slots: the first launchable one
+    A run job counts for the open run. build_analytics has two slots: the first launchable one
     not in success, else the last launchable one (a relaunch, R5).
     """
     if task in RUN_TASKS:
@@ -167,7 +162,7 @@ def resolve_slot(task: str, rows: Rows, open_couple: str | None) -> tuple[str, s
             raise PipelineBlockedError(f"{task} is not part of run {open_couple}")
         candidates = [("forecast", item)]
     else:
-        candidates = [(s, i) for s in STEPS for i in PIPELINE[s] if s != "forecast" and SLOT_TASK.get(i, i) == task]
+        candidates = [(s, i) for s in STEPS for i in PIPELINE[s] if s != "forecast" and i == task]
         if not candidates:
             raise ValueError(f"{task} is not a pipeline job")
     ready = [c for c in candidates if blocking_reason(rows, *c, open_couple) is None]
@@ -228,7 +223,7 @@ def require_input_confirmation(name: str, couple: str, rows: Rows, confirm: bool
              and status(rows, "forecast", f"{c}:forecast") == "success"]
     if confirm or (status(rows, "forecast", validate) != "success" and not stale):
         return reset
-    item = config_item(couple) if name == "config" else f"external_data/{level_of(couple)}"
+    item = config_item(couple) if name == "config" else external_data_item(couple)
     raise ConfirmationRequiredError(
         f"{item} was already used: resend with confirm=true to replace it",
         impact("forecast", item, rows, reset, stale))

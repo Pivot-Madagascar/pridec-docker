@@ -7,8 +7,6 @@ const CARDS: Record<string, { label: string; icon: string; iconClass: string }> 
   import_pivot_com: { label: 'Import Pivot COM', icon: ICONS.users, iconClass: 'icon-green' },
   import_pivot_csb: { label: 'Import Pivot CSB', icon: ICONS.clipboardList, iconClass: 'icon-purple' },
   build_analytics: { label: 'Build Analytics', icon: ICONS.chartPie, iconClass: 'icon-emerald' },
-  build_analytics_after_alerts: { label: 'Build Analytics (after alerts)', icon: ICONS.chartPie, iconClass: 'icon-emerald' },
-  calc_csb_alerts: { label: 'CSB Alerts', icon: ICONS.bell, iconClass: 'icon-amber' },
   update_key: { label: 'Update Key', icon: ICONS.key, iconClass: 'icon-slate' },
   fetch_disease: { label: 'Fetch Disease', icon: ICONS.beaker, iconClass: 'icon-teal' },
   fetch_climate: { label: 'Fetch Climate', icon: ICONS.cloud, iconClass: 'icon-sky' },
@@ -24,10 +22,14 @@ const STATUS_TEXT = { pending: 'Waiting', running: 'Running…', success: '✓ D
 /** 'CSB/Malaria:forecast' -> 'forecast' */
 const nameOf = (item: string) => item.split(':').pop()!
 
-/** 'build_analytics_after_alerts' runs the build_analytics job. */
-export function jobOf(item: string): string {
-  const name = nameOf(item)
-  return name === 'build_analytics_after_alerts' ? 'build_analytics' : name
+/** The job a checkpoint launches: its name ('CSB/Malaria:forecast' -> 'forecast'). */
+export const jobOf = nameOf
+
+/** config.json file expected for each disease (shown next to the upload). */
+export const CONFIG_FILES: Record<string, string> = {
+  Malaria: 'config_malaria.json',
+  Diarrhea: 'config_diarrhea.json',
+  Respinf: 'config_respiratory.json'
 }
 
 export function step(state: Checkpoints | null, name: StepName) {

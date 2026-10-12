@@ -84,6 +84,19 @@ def test_approve_through_the_api(client, checkpoint_store):
     assert client.post("/pipeline/runs/current/approve", json={"decision": "maybe"}).status_code == 422
 
 
+def test_imports_approval_through_the_api(client, checkpoint_store):
+    for task in ("import_pivot_com", "import_pivot_csb"):
+        checkpoint_store.start(task, task)
+        checkpoint_store.finish(task, "success")
+
+    response = client.post("/pipeline/imports/approve", json={"decision": "approve"})
+
+    assert response.json() == {"decision": "approve"}
+    items = client.get("/pipeline/checkpoints").json()["steps"][0]["items"]
+    assert next(i for i in items if i["item"] == "approve_imports")["status"] == "success"
+    assert client.post("/pipeline/imports/approve", json={"decision": "maybe"}).status_code == 422
+
+
 def test_relaunch_of_a_success_returns_the_impact_then_accepts_confirm(client, checkpoint_store, queue):
     checkpoint_store.start("import_gee", "first")
     checkpoint_store.finish("first", "success")
@@ -108,15 +121,18 @@ def test_upload_without_a_run_is_refused_and_writes_nothing(upload_app, tmp_path
     assert not (tmp_path / "input" / "config.json").exists()
 
 
-def test_config_for_another_month_is_refused_with_422(upload_app, tmp_path, checkpoint_store):
+def test_the_server_writes_forecast_start_into_config(upload_app, tmp_path, checkpoint_store):
+    import json
+    from etlhub.domain import pipeline
     _import(checkpoint_store)
     checkpoint_store.open_run("COM/Malaria")
 
-    response = TestClient(upload_app).post("/input/files/config", files={"file": ("c.json", b'{"forecast_start": "199001"}')})
+    response = TestClient(upload_app).post(
+        "/input/files/config", files={"file": ("c.json", b'{"forecast_start": "199001", "month_lag": 3}')})
 
-    assert response.status_code == 422
-    assert "199001" in response.json()["detail"]
-    assert not (tmp_path / "input" / "config.json").exists()
+    assert response.status_code == 200
+    written = json.loads((tmp_path / "input" / "config.json").read_text())
+    assert written == {"forecast_start": pipeline.this_month(), "month_lag": 3}
 
 
 def test_calc_orgunit_alerts_is_not_implemented(client):

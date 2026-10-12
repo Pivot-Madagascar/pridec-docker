@@ -18,7 +18,7 @@ Line numbers in the references come from an inspection of the repository. Re-run
 
 1. **Read the template, copy the pattern.** Every job type follows the same five layers (service → use case → Celery task → registry → router). Do not invent a variant.
 2. **One concern per change.** A migration from `references/migrations.md` is its own change. Do not mix it with a feature.
-3. **Smallest diff.** The project has no linter and little test coverage: large refactors cannot be verified. Prefer additive changes.
+3. **Smallest diff, with ponytail.** Every implementation uses the ponytail skill (root `CLAUDE.md`). The project has no linter and little test coverage: large refactors cannot be verified. Prefer additive changes, and mark deliberate shortcuts with a `ponytail:` comment.
 4. **Test with the change.** Behaviour and its test ship in the same commit. For a new endpoint, task, service or bug fix, write the failing test first (a proposed practice, see `etlhub/docs/DEVELOPMENT.md`): the history shows 0 of 22 source commits added a test first, so never claim TDD, say what you did. Touching an area listed as untested in `CLAUDE.md` requires a test in the same change.
 5. **Ask before deciding.** Items under "Decisions pending" are product or ops choices. Present the options and wait.
 

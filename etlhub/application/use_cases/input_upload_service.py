@@ -8,8 +8,6 @@ from typing import Literal
 
 from etlhub.domain.exceptions import ValidationError
 from etlhub.domain.interfaces.pipeline_gate import PipelineGate
-from etlhub.domain import pipeline
-from etlhub.domain.pipeline import check_forecast_start
 
 CONFIG_NAME = "config.json"
 EXTERNAL_DATA_NAME = "external_data.csv"
@@ -38,6 +36,16 @@ def _check_external_data(content: bytes) -> None:
         raise ValidationError(f"{EXTERNAL_DATA_NAME} is missing columns: {', '.join(sorted(missing))}")
 
 
+def with_forecast_start(content: bytes, cycle: str) -> bytes:
+    """config.json with forecast_start set to the cycle (YYYYMM), the default validate_inputs uses when absent.
+
+    ponytail: the cycle is the current month; switch to pivot_forecast.sh's value once confirmed (open point).
+    """
+    data = json.loads(content)
+    data["forecast_start"] = cycle
+    return json.dumps(data, indent=4, ensure_ascii=False).encode("utf-8")
+
+
 def _write_atomic(path: Path, content: bytes) -> None:
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_bytes(content)
@@ -57,13 +65,13 @@ class InputUploadService:
     def save(self, name: InputName, content: bytes, confirm: bool = False) -> str:
         """Checks then replaces one input file. Raises ValidationError, leaving the old file in place.
 
-        Needs an open forecast run (PipelineBlockedError). config is the item {couple}:config and must
-        forecast the cycle (ValidationError); external_data is optional. After validate_inputs is in success,
-        a change needs confirm (ConfirmationRequiredError).
+        Needs an open forecast run (PipelineBlockedError). config is the item config/<disease>: the server writes
+        forecast_start into it (like jq in pivot_forecast.sh); external_data is the item external_data/<level>.
+        After validate_inputs is in success, a change needs confirm (ConfirmationRequiredError).
         """
         CHECKS[name](content)
         if name == "config":
-            check_forecast_start(json.loads(content).get("forecast_start"), self._gate.launch_cycle(), pipeline.this_month())
+            content = with_forecast_start(content, self._gate.launch_cycle())
         with self._gate.change_input(name, confirm):
             self.input_dir.mkdir(parents=True, exist_ok=True)
             file_name = FILE_NAMES[name]

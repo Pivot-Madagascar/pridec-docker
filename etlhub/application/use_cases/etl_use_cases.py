@@ -15,7 +15,6 @@ from etl.scripts.fetch_pridec_disease import fetch_disease
 from etl.scripts.fetch_pridec_geojson import fetch_geojson
 from etl.scripts.build_analytics import build_analytics
 from etl.scripts.post_forecast import post_forecast
-from etl.scripts.calc_CSB_alerts import calc_csb_alerts
 from etl.scripts.update_pridec_key import update_key
 
 # Jobs run by the Celery worker: task_type -> (function, label of the job status messages).
@@ -27,7 +26,6 @@ ETL_JOBS = {
     "fetch_disease": (fetch_disease, "disease data fetch"),
     "fetch_geojson": (fetch_geojson, "GeoJSON fetch"),
     "build_analytics": (build_analytics, "analytics build"),
-    "calc_csb_alerts": (calc_csb_alerts, "CSB alerts calculation"),
     "validate_inputs": (validate_input_files, "validate inputs"),
 }
 # Run synchronously by the API (AnalyticsService).

@@ -19,6 +19,13 @@ def input_dir(app, tmp_path):
     app.dependency_overrides.clear()
 
 
+def _saved_config() -> bytes:
+    """CONFIG as written in input/: the server adds forecast_start = the cycle."""
+    from etlhub.application.use_cases.input_upload_service import with_forecast_start
+    from etlhub.domain.pipeline import this_month
+    return with_forecast_start(CONFIG, this_month())
+
+
 def _upload(app, name: str, content: bytes):
     return TestClient(app).post(f"/input/files/{name}", files={"file": ("anything", content)})
 
@@ -37,7 +44,7 @@ def test_upload_writes_only_the_named_file(app, input_dir, name, content, saved)
 
     assert response.status_code == 200
     assert response.json() == {"saved": f"input/{saved}"}
-    assert (input_dir / saved).read_bytes() == content
+    assert (input_dir / saved).read_bytes() == (_saved_config() if name == "config" else content)
     assert [p.name for p in input_dir.iterdir()] == [saved]
 
 
@@ -46,7 +53,7 @@ def test_upload_replaces_the_existing_file(app, input_dir):
 
     _upload(app, "config", CONFIG)
 
-    assert (input_dir / "config.json").read_bytes() == CONFIG
+    assert (input_dir / "config.json").read_bytes() == _saved_config()
 
 
 def test_upload_requires_a_file(app, input_dir):
@@ -108,7 +115,7 @@ def test_files_status_after_upload(app, input_dir):
     body = TestClient(app).get("/input/files").json()
 
     assert body["config"]["exists"] is True
-    assert body["config"]["size"] == len(CONFIG)
+    assert body["config"]["size"] == len(_saved_config())
     assert body["external_data"]["size"] == len(CSV)
     assert "modified" in body["config"]
 

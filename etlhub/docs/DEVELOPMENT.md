@@ -54,6 +54,8 @@
 9. Tolerated until the team decides otherwise: `api` → `domain` DTOs, any layer → `core` settings, `core/dependencies.py` as composition root, `application` → `etl.scripts` wrappers.
 
 **Clean code (new or changed functions)**
+
+0. Work with the ponytail skill (root `CLAUDE.md`): reuse before writing, shortest working diff, `ponytail:` comment on a deliberate shortcut.
 10. At most 50 lines, 10 branches and 4 parameters. Existing functions above that are debt, not a precedent.
 11. No `except … pass`: log with the job id. No `print(` except job output captured by `_execute_etl_job`.
 12. Annotate parameters and return type. Add a docstring only when the reason is not obvious.

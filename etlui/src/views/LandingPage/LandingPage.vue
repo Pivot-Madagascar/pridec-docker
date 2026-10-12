@@ -22,6 +22,14 @@
           <div class="action-grid">
             <ActionCard v-for="card in cards('data_import')" :key="card.key" :action="card" @action-click="launchItem" />
           </div>
+          <div class="imports-approval">
+            <span class="approval-text">
+              Imports approval: <strong :class="`status-${approveImports?.status ?? 'pending'}`">{{ approveImports?.status ?? 'pending' }}</strong>
+              · check the case counts first: COM &lt; 100, CSB under the limit
+            </span>
+            <button type="button" class="approval-btn approval-btn-primary" :disabled="busy || state?.lock != null || !approveImports?.launchable" @click="decideImports('approve')">Approve imports</button>
+            <button type="button" class="approval-btn" :disabled="busy || state?.lock != null || approveImports?.status !== 'success'" @click="decideImports('reject')">Reject</button>
+          </div>
         </template>
 
         <template #content-forecast>
@@ -93,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 
 import Accordion from '@/views/LandingPage/components/Accordion.vue'
 import ActionCard from '@/views/LandingPage/components/ActionCard.vue'
@@ -125,7 +133,7 @@ const accordionItems = [
 const { activityLog, addActivity } = useActivityLog()
 const {
   state, serverFiles, busy, pending, refresh, confirm, cancel,
-  launch, openRun, abandonRun, decide, setMode, releaseLock, upload, remove
+  launch, openRun, abandonRun, decide, decideImports, setMode, releaseLock, upload, remove
 } = usePipeline(addActivity)
 
 const {
@@ -142,7 +150,10 @@ const showReportModal = ref(false)
 const pendingDelete = ref<InputName | null>(null)
 const pendingRelease = ref(false)
 
-const cards = (name: StepName) => (step(state.value, name)?.items ?? []).map(i => toCard(i, state.value, busy.value))
+// approve_imports is a decision (Approve / Reject buttons), not a job card.
+const cards = (name: StepName) =>
+  (step(state.value, name)?.items ?? []).filter(i => i.item !== 'approve_imports').map(i => toCard(i, state.value, busy.value))
+const approveImports = computed(() => step(state.value, 'data_import')?.items.find(i => i.item === 'approve_imports'))
 
 // A card's key is its checkpoint ('CSB/Malaria:forecast'); the server resolves which checkpoint a job counts for.
 const launchItem = (item: string) => launch(jobOf(item), labelOf(item))
@@ -184,6 +195,49 @@ onMounted(refresh)
   color: #94a3b8;
   font-size: 0.875rem;
   margin-bottom: 1.5rem;
+}
+
+.imports-approval {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.approval-text {
+  font-size: 0.8125rem;
+  color: #94a3b8;
+}
+
+.approval-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+}
+
+.approval-btn-primary {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #fff;
+}
+
+.approval-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.status-success {
+  color: #34d399;
+}
+
+.status-error {
+  color: #f87171;
 }
 
 .lock-banner {

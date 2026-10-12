@@ -20,7 +20,7 @@ Siblings in the repo:
 
 ## Rules
 
-- **Never call real endpoints against a real DHIS2 or the host.** `/import_*`, `/build_analytics`, `/calc_csb_alerts`, `/post_forecast`, `/update_key` write to DHIS2. `/forecast/` runs `docker run`. `DELETE /output/reset` runs `rm -rf output/`. None of them is authenticated. Manual runs need `DRYRUN=true`. Tests use `app.dependency_overrides`, never a real Celery or Redis.
+- **Never call real endpoints against a real DHIS2 or the host.** `/import_*`, `/build_analytics`, `/post_forecast`, `/update_key` write to DHIS2. `/forecast/` runs `docker run`. `DELETE /output/reset` runs `rm -rf output/`. None of them is authenticated. Manual runs need `DRYRUN=true`. Tests use `app.dependency_overrides`, never a real Celery or Redis.
 - **Never print or copy secrets.** `.env`, `.env.debug` and `.gee-private-key.json` exist locally. Mention variable names only.
 - **The `etlui` contracts are frozen.** `ETLResponse` = `{status, message, job_id, webhook_url}`. `JobStatus` = `{status, job_id, started, completed, logs, message}`. `job_id` = `<task_type>_<uuid4 hex[:8]>`. WebSocket messages: `etl_log_history`, `job_status_update`, `etl_log_entry`, `etl_log_complete`, close code `4004`. Any change must be mirrored in `etlui/src/composables/useWebSocketLogger.ts` and `useEtlPipeline.ts` in the same change.
 - **Layering target**: `api` → `application`, `core` · `application` → `domain` · `infrastructure` → `domain`, `application` · `domain` → nothing. Do not add new violations. Existing ones are known debt (`etlhub/docs/known-issues.md`): do not refactor them unless asked. Real violations to avoid: `application` or `infrastructure` importing `etlhub.api.*`, and `api` using `infrastructure` without injection. Tolerated in practice, pending the team's confirmation: `api` → `domain` DTOs, any layer → `core` settings, `core/dependencies.py` as composition root, `application` → `etl.scripts` wrappers.
@@ -59,6 +59,7 @@ Python 3.12 (use `test-venv`; the system `python3` is 3.11). Run from the repo r
 
 ## Method for new code (proposed, see `etlhub/docs/DEVELOPMENT.md`)
 
+- Work with the **ponytail** skill (root `CLAUDE.md`): reuse what `etlhub` already has (registries, `add_launch_route`, `PipelineGate`) before writing anything new; mark deliberate shortcuts with `ponytail:`.
 - Behaviour and its test ship in the same commit. For a new endpoint, task, service or bug fix, write the failing test first. History shows this has not been the practice so far (0 of 22 source commits added a test first), so say what you did instead of claiming TDD.
 - Assert behaviour, not only `status_code` (18 of 31 tests only check it).
 - New or changed functions: at most 50 lines and 4 parameters, annotated, no `except … pass`, no `print(`.

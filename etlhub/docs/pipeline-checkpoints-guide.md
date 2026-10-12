@@ -5,7 +5,8 @@ Ce guide explique en bref comment etlhub suit et contrôle le pipeline mensuel (
 - La conception complète, et ce qui est déjà implémenté, sont dans [pipeline-checkpoints.md](pipeline-checkpoints.md).
 - Les schémas sont dans [pipeline-checkpoints-diagrams.md](pipeline-checkpoints-diagrams.md).
 
-> Le code suit encore la version du 2026-10-09 : voir l'état et les écarts en tête de [pipeline-checkpoints.md](pipeline-checkpoints.md).
+> Le code applique cette révision, sauf `calc_orgunit_alerts` (toujours 501), le périmètre du mode test et le contrôle
+> de niveau de `external_data` : voir l'état en tête de [pipeline-checkpoints.md](pipeline-checkpoints.md).
 
 ## En une phrase
 
@@ -145,11 +146,12 @@ Le bouton **« Mode test » (test = OUI)** d'etlui bascule etlhub en mode test.
 | POST | `/pipeline/runs` | Ouvre le run d'un couple |
 | DELETE | `/pipeline/runs/current` | Abandonne le run ouvert |
 | POST | `/pipeline/runs/current/approve` | `{"decision": "approve" \| "reject"}` |
+| POST | `/pipeline/imports/approve` | `{"decision": "approve" \| "reject"}` : décision `approve_imports` de l'étape ① |
 | PUT | `/pipeline/mode` | `{"dry_run": true \| false}` : mode test ou production (`confirm=true` pour quitter le test avec des données) |
 | DELETE | `/pipeline/lock` | Libère le verrou d'un job dont le worker a été tué ; l'item `running` passe en `error` |
 | POST | `/calc_orgunit_alerts` | Job des runs CSB, entre `forecast` et `approve` |
 
-Toutes ces routes exigent une session etlui. La route de la décision `approve_imports` reste à définir.
+Toutes ces routes exigent une session etlui.
 
 ## Limites connues
 

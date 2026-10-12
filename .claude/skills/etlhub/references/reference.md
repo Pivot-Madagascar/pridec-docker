@@ -11,7 +11,7 @@ Re-check against the code before relying on a line number or a default.
 | POST | `/import_gee`, `/import_pivot_com`, `/import_pivot_csb` | `ingest_router` | Celery, 202 | — |
 | POST | `/fetch_climate`, `/fetch_disease`, `/fetch_geojson` | `ingest_router` | Celery, 202 | — |
 | POST | `/validate_inputs` | `validation_router` | Celery, 202 | — |
-| POST | `/build_analytics`, `/calc_csb_alerts` | `analytics_router` | Celery, 202 | — |
+| POST | `/build_analytics` | `analytics_router` | Celery, 202 | — |
 | POST | `/post_forecast`, `/update_key` | `analytics_router` | **Inline, blocks the event loop** | — |
 | POST | `/forecast/` | `forecast_router` | Celery → `docker run`, 202 | — |
 | GET | `/forecast/status/{job_id}` | `forecast_router` | Redis → `logs/{job_id}.json` | — |
@@ -23,7 +23,7 @@ Re-check against the code before relying on a line number or a default.
 | POST | `/auth/logout` | `auth_router` | Revokes the DHIS2 token, 204, clears the cookie | — |
 | GET | `/auth/me` | `auth_router` | Redis | **Session** |
 | GET | `/output/forecast_report.html[/exists]` | `forecast_report_router` | File | — |
-| POST | `/input/files/{config\|external_data}` | `input_router` | Sync, multipart field `file` (≤ 10 MB) → replaces `input/config.json` or `input/external_data.csv`. 413 too big, 422 invalid JSON object / CSV without `orgUnit`,`period` / other name / `forecast_start` ≠ running cycle | — |
+| POST | `/input/files/{config\|external_data}` | `input_router` | Sync, multipart field `file` (≤ 10 MB) → replaces `input/config.json` or `input/external_data.csv`. 413 too big, 422 invalid JSON object / CSV without `orgUnit`,`period` / other name. The server writes `forecast_start` = the cycle into `config.json` | — |
 | GET | `/input/files` | `input_router` | Sync. `{config, external_data}` → `{exists, size?, modified?}` | — |
 | GET | `/input/files/config/preview` | `input_router` | Sync, content of `input/config.json`. 404 absent, 422 not a JSON object | — |
 | GET | `/input/files/external_data/preview?limit=100` | `input_router` | Sync, `{columns, rows, total_rows, period_range, org_units}`: first `limit` (1–500) rows, summary over the whole file read line by line. 404 absent | — |
@@ -31,6 +31,7 @@ Re-check against the code before relying on a line number or a default.
 | GET | `/pipeline/checkpoints?cycle=YYYYMM` | `pipeline_router` | SQLite (Redis in test mode), default cycle = the current month. `{cycle, cycle_state, current_step, run, lock, dry_run, steps[{step, done, accessible, items[{item, status, job_id, updated_at, launchable}]}]}` | Session |
 | POST | `/pipeline/runs` | `pipeline_router` | Body `{source, disease}`, `?confirm`. Opens the forecast run of a couple (one at a time), empties `input/` and `output/`. 201 run, 409, 422 unknown couple | Session |
 | DELETE | `/pipeline/runs/current` | `pipeline_router` | Abandons the open run, its items → pending. `{abandoned: couple}` | Session |
+| POST | `/pipeline/imports/approve` | `pipeline_router` | Body `{decision: approve\|reject}`. The `approve_imports` decision of step data_import, prerequisite of `build_analytics`. `{decision}` | Session |
 | POST | `/pipeline/runs/current/approve` | `pipeline_router` | Body `{decision: approve\|reject}`. `{couple, decision}` | Session |
 | PUT | `/pipeline/mode` | `pipeline_router` | Body `{dry_run}`, `?confirm`. Writes `DRYRUN` to the dynamic config; test mode keeps checkpoints in Redis (`pipeline:dry_run:db`) only; leaving it discards them (needs confirm when there are any). 409 while a job runs | Session |
 | DELETE | `/pipeline/lock` | `pipeline_router` | Frees the job lock (killed worker; the lock never expires), its running checkpoint → `error`. `{released: job_id\|null}` | Session |
@@ -38,9 +39,9 @@ Re-check against the code before relying on a line number or a default.
 | DELETE | `/output/reset` | `forecast_report_router` | `rm -rf output/` | `.output_sig` exists (not real auth) |
 | GET | `/` | `main.py` | 307 redirect to `/docs` | — |
 
-Every launch (`/import_*`, `/fetch_*`, `/validate_inputs`, `/build_analytics`, `/calc_csb_alerts`, `/post_forecast`, `/update_key`, `/forecast/`) and `POST`/`DELETE /input/files/{name}` go through the pipeline gate (`etlhub/docs/pipeline-checkpoints.md`): **409** `{message}` while another job runs, when a prerequisite is not in `success`, or for a forecast-run job (`/fetch_*`, `/validate_inputs`, `/forecast/`, `/post_forecast`, input files) without an open run. Undoing a `success` needs `?confirm=true`, otherwise **409** `{code: "confirmation_required", message, impact{item, step, current_step, reset_items, blocked_steps, kept_items}}` and nothing is written. All messages are in English.
+Every launch (`/import_*`, `/fetch_*`, `/validate_inputs`, `/build_analytics`, `/post_forecast`, `/update_key`, `/forecast/`) and `POST`/`DELETE /input/files/{name}` go through the pipeline gate (`etlhub/docs/pipeline-checkpoints.md`): **409** `{message}` while another job runs, when a prerequisite is not in `success`, or for a forecast-run job (`/fetch_*`, `/validate_inputs`, `/forecast/`, `/post_forecast`, input files) without an open run. Undoing a `success` needs `?confirm=true`, otherwise **409** `{code: "confirmation_required", message, impact{item, step, current_step, reset_items, blocked_steps, kept_items}}` and nothing is written. All messages are in English.
 
-The table above is the code today (2026-10-09 design). The pipeline design was revised on 2026-10-12 and is **not implemented yet** (`etlhub/docs/pipeline-checkpoints.md` §8, steps 15–21): `/calc_csb_alerts` leaves the pipeline (phase 3 = `build_analytics` → `update_key`); a decision item `approve_imports` gates `build_analytics` in phase 1 (route to define); `external_data/<fkt|csb>` becomes a mandatory item, and an upload whose level does not match the run gets 422; `config.json` uploads get `forecast_start` written by the server instead of the 422; test mode passes `DRYRUN=True` to `import_gee` and `post_forecast` only.
+Pipeline revision of 2026-10-12 (`etlhub/docs/pipeline-checkpoints.md` §8): applied, except `/calc_orgunit_alerts` (still 501), the test-mode scope (`DRYRUN` stays global; target: `import_gee` and `post_forecast` only) and the level check of `external_data` uploads (target: 422 on a mismatch).
 
 Router prefixes (`main.py`): `ingest`, `analytics`, `validation`, `auth` have none; `forecast` `/forecast`; `tracking` `/api/tracking`; `forecast_report` `/output`; `input` `/input`; `config` `/api/config`. `auth_router` has no OpenAPI tag.
 
