@@ -42,6 +42,8 @@ build.log
 #output of docker workflow
 output/
 input/
+uploads/
+.output_sig
 */output/
 */input/
 logs/
