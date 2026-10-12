@@ -1,9 +1,9 @@
-import uuid
 from fastapi import APIRouter, Query, Depends
 
-from etlhub.application.use_cases.validation_service import ValidationService
+from etlhub.api.routers import CONFIRM_OVERWRITE
+from etlhub.application.use_cases.ingestion_service import IngestionService
 from etlhub.domain.schemas import ETLResponse
-from etlhub.core.dependencies import get_validation_service
+from etlhub.core.dependencies import get_ingestion_service
 
 router = APIRouter(tags=["Validation"])
 
@@ -29,10 +29,13 @@ async def api_validate_inputs(
     orgunit_poly_path: str | None = Query(None, description="Path to orgUnit_poly.geojson"),
     input_dir: str | None = Query(None, description="Base input directory (default: input/)"),
     webhook_url: str | None = Query(None, description="Optional webhook callback URL"),
-    service: ValidationService = Depends(get_validation_service),
+    confirm: bool = CONFIRM_OVERWRITE,
+    service: IngestionService = Depends(get_ingestion_service),
 ):
-    job_id = service.validate_inputs(
+    job_id = service.launch(
+        "validate_inputs",
         webhook_url=webhook_url,
+        confirm=confirm,
         config_path=config_path,
         external_data_path=external_data_path,
         disease_data_path=disease_data_path,

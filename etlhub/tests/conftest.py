@@ -12,6 +12,8 @@ sys.modules['pivot_dhis_tools'] = MagicMock()
 sys.modules['earthengine_api'] = MagicMock()
 sys.modules['geopandas'] = MagicMock()
 
+from contextlib import contextmanager
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -20,6 +22,64 @@ from fastapi.testclient import TestClient
 def _request_log_db(tmp_path, monkeypatch):
     from etlhub.infrastructure import request_tracker
     monkeypatch.setattr(request_tracker, "_request_tracker", request_tracker.RequestTracker(tmp_path / "etlhub.db"))
+
+
+@pytest.fixture(autouse=True)
+def checkpoint_store(tmp_path, monkeypatch):
+    """The real pipeline gate, on a temporary db: launches never touch logs/etlhub.db."""
+    from etlhub.infrastructure import checkpoint_store as module
+    # data_dir = tmp_path: input/ and output/ are emptied when a run opens, uploads/ keeps the uploaded files.
+    mode = {"dry_run": False}  # production by default; tests switch it through store.set_mode or mode[...]
+    store = module.CheckpointStore(
+        tmp_path / "etlhub.db", data_dir=tmp_path, apply_context=lambda ctx: store.contexts.append(ctx),
+        dry_run=lambda: mode["dry_run"], set_dry_run=lambda value: mode.update(dry_run=value), blob=FakeBlob(),
+    )
+    store.contexts = []  # run contexts the jobs received (instead of Redis)
+    store.mode = mode
+    monkeypatch.setattr(module, "_checkpoint_store", store)
+    return store
+
+
+class FakeBlob:
+    """Redis key of the test-mode checkpoint db, in memory."""
+
+    def __init__(self):
+        self.data = None
+
+    def get(self):
+        return self.data
+
+    def set(self, data):
+        self.data = data
+
+    def delete(self):
+        self.data = None
+
+    def lock(self):
+        from contextlib import nullcontext
+        return nullcontext()
+
+
+class OpenGate:
+    """Pipeline gate that lets everything through: for tests that are not about the pipeline order."""
+
+    def start(self, task, job_id, confirm=False):
+        pass
+
+    def finish(self, job_id, status):
+        pass
+
+    @contextmanager
+    def run(self, task, job_id, confirm=False):
+        yield
+
+    @contextmanager
+    def change_input(self, name, confirm=False, removed=False):
+        yield
+
+    def launch_cycle(self):
+        from etlhub.domain.pipeline import this_month
+        return this_month()
 
 
 TEST_USER = {"id": "u1", "email": None, "username": "tester", "displayName": "Tester"}
@@ -93,7 +153,7 @@ def override_dependencies(app, mock_task_launcher, mock_job_repository, mock_req
         return IngestionService(mock_task_launcher)
     
     def get_mock_analytics_service():
-        return AnalyticsService(mock_task_launcher, mock_job_repository, MagicMock())
+        return AnalyticsService(mock_job_repository, OpenGate())
     
     def get_mock_forecast_service():
         return ForecastService(mock_task_launcher, mock_job_repository)

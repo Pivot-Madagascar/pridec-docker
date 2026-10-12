@@ -27,7 +27,7 @@ def job_store(monkeypatch):
 @pytest.fixture
 def webhooks(monkeypatch):
     sent = []
-    monkeypatch.setattr(tasks, "_send_webhook", lambda url, **kwargs: sent.append(kwargs))
+    monkeypatch.setattr(tasks, "notify_webhook", lambda url, job_id, status, message: sent.append({"status": status}))
     return sent
 
 
@@ -83,8 +83,33 @@ def test_launch_records_the_job_as_pending_before_queueing(monkeypatch):
             records[job_id] = data
 
     monkeypatch.setattr(tasks, "JobStore", Store)
-    monkeypatch.setattr(tasks.task_import_gee, "delay", lambda *a, **k: queued.append((a, records.copy())))
+    monkeypatch.setattr(tasks.task_etl, "delay", lambda *a, **k: queued.append((a, records.copy())))
 
     tasks.CeleryTaskLauncher().launch("import_gee", "import_gee_1234abcd")
 
     assert queued[0][1]["import_gee_1234abcd"]["status"] == "pending"
+
+
+def test_generic_task_runs_the_job_with_its_kwargs(monkeypatch, job_store, webhooks):
+    calls = []
+    monkeypatch.setattr(tasks, "run_etl_job", lambda task_type, store, job_id, **kw: calls.append((task_type, job_id, kw)))
+
+    tasks.task_etl.run("validate_inputs", "validate_inputs_1", webhook_url="http://hook", input_dir="input/x")
+
+    assert calls == [("validate_inputs", "validate_inputs_1", {"input_dir": "input/x"})]
+    assert job_store.get("validate_inputs_1")["message"] == "validate inputs completed"
+    assert webhooks[-1]["status"] == "success"
+
+
+def test_a_gate_error_at_the_end_does_not_turn_a_success_into_an_error(monkeypatch, job_store, webhooks):
+    # In test mode the gate lives in Redis: a Redis error must not mark a successful job as failed.
+    class BrokenGate:
+        def finish(self, job_id, status):
+            raise ConnectionError("redis is down")
+    monkeypatch.setattr(tasks, "get_checkpoint_store", BrokenGate)
+    monkeypatch.setattr(tasks, "run_rscript", _fake_rscript("success"))
+
+    tasks.task_forecast.run("forecast_ok", {})
+
+    assert job_store.get("forecast_ok")["status"] == "success"
+    assert [w["status"] for w in webhooks] == ["success"]

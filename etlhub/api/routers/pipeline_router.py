@@ -1,0 +1,100 @@
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+
+from etlhub.core.dependencies import get_pipeline_gate
+from etlhub.domain.interfaces.pipeline_gate import PipelineGate
+
+router = APIRouter(prefix="/pipeline", tags=["Pipeline"])
+
+CONFIRM = Query(False, description="Required to undo something already in success (409 confirmation_required otherwise)")
+
+
+class RunRequest(BaseModel):
+    source: Literal["ADJ", "COM", "CSB"]
+    disease: Literal["Malaria", "Diarrhea", "Respinf"]
+
+
+class Decision(BaseModel):
+    decision: Literal["approve", "reject"]
+
+
+class Mode(BaseModel):
+    dry_run: bool
+
+
+@router.get(
+    "/checkpoints",
+    summary="Where the pipeline cycle stands",
+    description=(
+        "Per step: done, accessible and its items (status pending, running, success, error, and launchable). "
+        "`current_step` is the first step not done (null = cycle complete), `run` the open forecast run, "
+        "`lock` the running job. A launch that breaks a rule gets 409 and writes nothing."
+    ),
+)
+def get_checkpoints(
+    cycle: str | None = Query(None, pattern=r"^\d{6}$", description="YYYYMM (= forecast_start); the latest cycle by default"),
+    gate: PipelineGate = Depends(get_pipeline_gate),
+) -> dict:
+    return gate.progress(cycle)
+
+
+@router.post(
+    "/runs",
+    status_code=201,
+    summary="Open the forecast run of a source x disease",
+    description=(
+        "One run open at a time, step data_import done. Empties input/ and output/ and fixes DISEASE_CODE, "
+        "OU_LEVEL and ALERT_NAME for every job of the run. Reopening a couple already closed in the cycle "
+        "needs confirm=true and resets its items. The run closes when its post_forecast succeeds."
+    ),
+)
+def open_run(body: RunRequest, confirm: bool = CONFIRM, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
+    return gate.open_run(f"{body.source}/{body.disease}", confirm)
+
+
+@router.delete(
+    "/runs/current",
+    summary="Abandon the open forecast run",
+    description="Nothing is published; the run's items go back to pending.",
+)
+def abandon_run(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str]:
+    return {"abandoned": gate.abandon_run()}
+
+
+@router.post(
+    "/runs/current/approve",
+    summary="Approve or reject the open run's forecast",
+    description=(
+        "approve: the {couple}:approve checkpoint becomes success and unlocks post_forecast. "
+        "reject: forecast and what follows go back to pending, to be redone."
+    ),
+)
+def decide(body: Decision, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str]:
+    return {"couple": gate.decide(body.decision), "decision": body.decision}
+
+
+@router.put(
+    "/mode",
+    summary="Switch test mode (DRYRUN)",
+    description=(
+        "dry_run=true: the ETL scripts write nothing to DHIS2 (DRYRUN in the dynamic config) and the checkpoints are "
+        "kept in Redis only. dry_run=false: back to production; the test checkpoints are discarded, which needs "
+        "confirm=true when there are any. Refused while a job runs. GET /pipeline/checkpoints returns the mode."
+    ),
+)
+def set_mode(body: Mode, confirm: bool = CONFIRM, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
+    return gate.set_mode(body.dry_run, confirm)
+
+
+@router.delete(
+    "/lock",
+    summary="Free the pipeline lock",
+    description=(
+        "For a job whose worker was killed: frees the lock and marks its running checkpoint as error. "
+        "The lock never expires on its own. Returns the freed job_id, or null."
+    ),
+)
+def release_lock(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str | None]:
+    return {"released": gate.release_lock()}

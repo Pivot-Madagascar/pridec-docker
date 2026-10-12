@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Literal
 
 from etlhub.domain.exceptions import ValidationError
+from etlhub.domain.interfaces.pipeline_gate import PipelineGate
+from etlhub.domain import pipeline
+from etlhub.domain.pipeline import check_forecast_start
 
 CONFIG_NAME = "config.json"
 EXTERNAL_DATA_NAME = "external_data.csv"
@@ -47,15 +50,24 @@ CHECKS = {"config": _check_config, "external_data": _check_external_data}
 class InputUploadService:
     """Replaces the forecast input files after checking them."""
 
-    def __init__(self, input_dir: Path):
+    def __init__(self, input_dir: Path, gate: PipelineGate):
         self.input_dir = Path(input_dir)
+        self._gate = gate
 
-    def save(self, name: InputName, content: bytes) -> str:
-        """Checks then replaces one input file. Raises ValidationError, leaving the old file in place."""
+    def save(self, name: InputName, content: bytes, confirm: bool = False) -> str:
+        """Checks then replaces one input file. Raises ValidationError, leaving the old file in place.
+
+        Needs an open forecast run (PipelineBlockedError). config is the item {couple}:config and must
+        forecast the cycle (ValidationError); external_data is optional. After validate_inputs is in success,
+        a change needs confirm (ConfirmationRequiredError).
+        """
         CHECKS[name](content)
-        self.input_dir.mkdir(parents=True, exist_ok=True)
-        file_name = FILE_NAMES[name]
-        _write_atomic(self.input_dir / file_name, content)
+        if name == "config":
+            check_forecast_start(json.loads(content).get("forecast_start"), self._gate.launch_cycle(), pipeline.this_month())
+        with self._gate.change_input(name, confirm):
+            self.input_dir.mkdir(parents=True, exist_ok=True)
+            file_name = FILE_NAMES[name]
+            _write_atomic(self.input_dir / file_name, content)
         return f"input/{file_name}"
 
     def status(self) -> dict[str, dict]:
@@ -70,10 +82,11 @@ class InputUploadService:
             result[name] = {"exists": True, "size": stat.st_size, "modified": modified}
         return result
 
-    def delete(self, name: InputName) -> str:
-        """Raises FileNotFoundError when the file is not in input/."""
+    def delete(self, name: InputName, confirm: bool = False) -> str:
+        """Raises FileNotFoundError when the file is not in input/. The checkpoint must be redone."""
         file_name = FILE_NAMES[name]
-        (self.input_dir / file_name).unlink()
+        with self._gate.change_input(name, confirm, removed=True):  # PipelineBlockedError without an open run
+            (self.input_dir / file_name).unlink()
         return f"input/{file_name}"
 
     def preview_config(self) -> dict:

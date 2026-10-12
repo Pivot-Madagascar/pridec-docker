@@ -1,5 +1,6 @@
-from typing import Protocol, runtime_checkable, Any
+from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class TaskLauncher(Protocol):
-    def launch(self, task_type: str, job_id: str, webhook_url: str | None = None, **kwargs) -> None: ...
+    def launch(self, task_type: str, job_id: str, webhook_url: str | None = None, confirm: bool = False,
+               **kwargs) -> None: ...

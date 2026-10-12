@@ -9,11 +9,12 @@ CSV = b"orgUnit,period,rain\nOU1,202401,3.2\n"
 def input_dir(app, tmp_path):
     from etlhub.core.dependencies import get_input_upload_service
     from etlhub.application.use_cases.input_upload_service import InputUploadService
+    from tests.conftest import OpenGate
 
     # tmp_path itself also holds the request tracker db (autouse fixture).
     directory = tmp_path / "input"
     directory.mkdir()
-    app.dependency_overrides[get_input_upload_service] = lambda: InputUploadService(directory)
+    app.dependency_overrides[get_input_upload_service] = lambda: InputUploadService(directory, OpenGate())
     yield directory
     app.dependency_overrides.clear()
 

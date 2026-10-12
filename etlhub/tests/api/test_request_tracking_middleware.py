@@ -52,7 +52,7 @@ def test_tracked_endpoints_filter_by_path_prefix(app, recorded, monkeypatch):
     monkeypatch.setattr(get_settings(), "tracked_endpoints", "/input")
     client = TestClient(app)
 
-    client.get("/")
+    client.get("/docs")
     client.get("/input/files")
 
     assert [log["url"].split("testserver")[1] for log in recorded] == ["/input/files"]
@@ -62,8 +62,8 @@ def test_client_request_id_is_kept_only_if_it_is_a_uuid(app, recorded):
     client = TestClient(app)
     good = str(uuid.uuid4())
 
-    client.get("/", headers={"X-Request-ID": good})
-    response = client.get("/", headers={"X-Request-ID": "../other-request"})
+    client.get("/docs", headers={"X-Request-ID": good})
+    response = client.get("/docs", headers={"X-Request-ID": "../other-request"})
 
     assert recorded[0]["request_id"] == good
     assert recorded[1]["request_id"] != "../other-request"
@@ -83,7 +83,7 @@ def test_job_id_of_a_launch_is_recorded_and_the_body_is_intact(override_dependen
 
 
 def test_non_json_or_job_less_responses_have_no_job_id(app, recorded):
-    TestClient(app).get("/")             # HTML page
+    TestClient(app).get("/docs")         # HTML page
     TestClient(app).get("/input/files")  # JSON without job_id
 
     assert [log["job_id"] for log in recorded] == [None, None]

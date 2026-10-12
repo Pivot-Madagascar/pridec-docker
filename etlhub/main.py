@@ -1,7 +1,7 @@
 import os
 import sys
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(PROJECT_ROOT)
@@ -16,9 +16,11 @@ from etlhub.api.routers.tracking_router import router as tracking_router
 from etlhub.api.routers.forecast_report_router import router as forecast_report_router
 from etlhub.api.routers.config_router import router as config_router
 from etlhub.api.routers.input_router import router as input_router
+from etlhub.api.routers.pipeline_router import router as pipeline_router
 from etlhub.api.auth import auth_router, get_current_user
-from etlhub.presentation.html_templates import get_home_html
-from etlhub.domain.exceptions import ETLException, JobNotFoundError, ValidationError, TaskLaunchError
+from etlhub.domain.exceptions import (
+    ETLException, JobNotFoundError, ValidationError, PipelineBlockedError, ConfirmationRequiredError,
+)
 
 app = FastAPI(
     title="Hub Center API",
@@ -40,9 +42,16 @@ async def validation_error_handler(request: Request, exc: ValidationError):
     return JSONResponse(status_code=400, content={"message": str(exc)})
 
 
-@app.exception_handler(TaskLaunchError)
-async def task_launch_error_handler(request: Request, exc: TaskLaunchError):
-    return JSONResponse(status_code=500, content={"message": str(exc)})
+@app.exception_handler(ConfirmationRequiredError)
+async def confirmation_required_handler(request: Request, exc: ConfirmationRequiredError):
+    return JSONResponse(status_code=409, content={
+        "code": "confirmation_required", "message": str(exc), "impact": exc.impact,
+    })
+
+
+@app.exception_handler(PipelineBlockedError)
+async def pipeline_blocked_handler(request: Request, exc: PipelineBlockedError):
+    return JSONResponse(status_code=409, content={"message": str(exc)})
 
 
 @app.exception_handler(ETLException)
@@ -62,9 +71,10 @@ app.include_router(validation_router, dependencies=_session)
 app.include_router(forecast_report_router, dependencies=_session)
 app.include_router(config_router, dependencies=_session)
 app.include_router(input_router, dependencies=_session)
+app.include_router(pipeline_router, dependencies=_session)
 app.include_router(auth_router)
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=RedirectResponse)
 async def root():
-    return get_home_html()
+    return "/docs"

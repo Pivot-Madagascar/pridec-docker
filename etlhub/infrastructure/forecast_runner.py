@@ -1,7 +1,6 @@
 import subprocess
 import os
 import json
-import stat
 import tempfile
 from pathlib import Path
 from datetime import datetime
@@ -197,11 +196,6 @@ def run_rscript(job_id, params, job_store: JobStore):
         try:
             from etlhub.api.etl_events import get_etl_event_manager
             get_etl_event_manager().publish_log(job_id, "ERROR" if status.get("status") == "error" else "INFO", logs)
-        except Exception:
-            pass
-        try:
-            from etlhub.api.etl_events import get_etl_event_manager
-            get_etl_event_manager().publish_status(job_id, status.get("status"), status.get("message"))
         except Exception:
             pass
 

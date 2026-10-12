@@ -1,43 +1,15 @@
-import json
+import logging
 import traceback
-import urllib.request
-import urllib.error
 from datetime import datetime
 
 from etlhub.core.celery_app import celery_app
 from etlhub.domain.exceptions import ETLException
-from etlhub.application.use_cases.etl_use_cases import (
-    run_import_gee,
-    run_import_pivot_com,
-    run_import_pivot_csb,
-    run_fetch_climate,
-    run_fetch_disease,
-    run_fetch_geojson,
-    run_build_analytics,
-    run_calc_csb_alerts,
-)
-from etlhub.application.use_cases.validation_use_cases import run_validate_inputs
+from etlhub.application.use_cases.etl_use_cases import ETL_JOBS, notify_webhook, run_etl_job
 from etlhub.infrastructure.forecast_runner import run_rscript
 from etlhub.infrastructure.job_store import JobStore
+from etlhub.infrastructure.checkpoint_store import get_checkpoint_store
 
-
-def _send_webhook(webhook_url: str, job_id: str, status: str, message: str, logs_url: str | None = None):
-    try:
-        payload = json.dumps({
-            "job_id": job_id,
-            "status": status,
-            "message": message,
-            "logs_url": logs_url,
-        }).encode("utf-8")
-        req = urllib.request.Request(
-            webhook_url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        urllib.request.urlopen(req, timeout=10)
-    except Exception:
-        pass
+logger = logging.getLogger(__name__)
 
 
 def _update_task_status(job_store: JobStore, job_id: str, status: str, message: str = None, logs: str = None):
@@ -49,6 +21,12 @@ def _update_task_status(job_store: JobStore, job_id: str, status: str, message: 
     if logs:
         task_status["logs"] = logs
     job_store.set(job_id, task_status)
+    if status in ("success", "error"):
+        try:
+            get_checkpoint_store().finish(job_id, status)
+        except Exception:  # sqlite3, or Redis in test mode: the job's own status must not change
+            # The lock stays taken until DELETE /pipeline/lock frees it.
+            logger.exception("Could not record the end of %s in the pipeline checkpoints", job_id)
     try:
         from etlhub.api.etl_events import get_etl_event_manager
         get_etl_event_manager().publish_status(job_id, status, message)
@@ -56,24 +34,17 @@ def _update_task_status(job_store: JobStore, job_id: str, status: str, message: 
         pass
 
 
-def _run_task(self, job_id: str, task_name: str, run_fn, webhook_url: str | None = None):
+def _run_task(job_id: str, task_name: str, run_fn, webhook_url: str | None = None):
     job_store = JobStore()
     _update_task_status(job_store, job_id, "running", f"Starting {task_name}")
     try:
         run_fn(job_store=job_store, job_id=job_id)
         _update_task_status(job_store, job_id, "success", f"{task_name} completed")
-        if webhook_url:
-            _send_webhook(
-                webhook_url,
-                job_id=job_id,
-                status="success",
-                message=f"{task_name} completed",
-                logs_url=f"/api/tracking/etl-logs/{job_id}",
-            )
+        notify_webhook(webhook_url, job_id, "success", f"{task_name} completed")
     except Exception as e:
         tb = traceback.format_exc()
-        try:
-            job_store.save_logs(job_id, tb)
+        try:  # after the job's own output (a forecast's R logs), not instead of it
+            job_store.save_logs(job_id, (job_store.get_logs(job_id) or "") + tb)
         except Exception:
             pass
         try:
@@ -82,119 +53,44 @@ def _run_task(self, job_id: str, task_name: str, run_fn, webhook_url: str | None
         except Exception:
             pass
         _update_task_status(job_store, job_id, "error", str(e))
-        if webhook_url:
-            _send_webhook(
-                webhook_url,
-                job_id=job_id,
-                status="error",
-                message=str(e),
-                logs_url=f"/api/tracking/etl-logs/{job_id}",
-            )
+        notify_webhook(webhook_url, job_id, "error", str(e))
         raise
 
 
-@celery_app.task(bind=True)
-def task_import_gee(self, job_id: str, webhook_url: str | None = None):
-    _run_task(self, job_id, "GEE import", run_import_gee, webhook_url=webhook_url)
+@celery_app.task
+def task_etl(task_type: str, job_id: str, webhook_url: str | None = None, **kwargs):
+    """Every ETL_JOBS entry; kwargs go to the job function (validate_inputs paths)."""
+    _run_task(job_id, ETL_JOBS[task_type][1],
+              lambda job_store, job_id: run_etl_job(task_type, job_store, job_id, **kwargs), webhook_url)
 
 
-@celery_app.task(bind=True)
-def task_import_pivot_com(self, job_id: str, webhook_url: str | None = None):
-    _run_task(self, job_id, "Pivot COM import", run_import_pivot_com, webhook_url=webhook_url)
+def _forecast(job_store, job_id: str, params: dict) -> None:
+    # run_rscript saves the job record and the logs; the status it returns decides success.
+    result = run_rscript(job_id, params, job_store)
+    if result.get("status") != "success":
+        raise ETLException(result.get("message") or "Forecast container failed")
 
 
-@celery_app.task(bind=True)
-def task_import_pivot_csb(self, job_id: str, webhook_url: str | None = None):
-    _run_task(self, job_id, "Pivot CSB import", run_import_pivot_csb, webhook_url=webhook_url)
-
-
-@celery_app.task(bind=True)
-def task_fetch_climate(self, job_id: str, webhook_url: str | None = None):
-    _run_task(self, job_id, "climate data fetch", run_fetch_climate, webhook_url=webhook_url)
-
-
-@celery_app.task(bind=True)
-def task_fetch_disease(self, job_id: str, webhook_url: str | None = None):
-    _run_task(self, job_id, "disease data fetch", run_fetch_disease, webhook_url=webhook_url)
-
-
-@celery_app.task(bind=True)
-def task_fetch_geojson(self, job_id: str, webhook_url: str | None = None):
-    _run_task(self, job_id, "GeoJSON fetch", run_fetch_geojson, webhook_url=webhook_url)
-
-
-@celery_app.task(bind=True)
-def task_build_analytics(self, job_id: str, webhook_url: str | None = None):
-    _run_task(self, job_id, "analytics build", run_build_analytics, webhook_url=webhook_url)
-
-
-@celery_app.task(bind=True)
-def task_calc_csb_alerts(self, job_id: str, webhook_url: str | None = None):
-    _run_task(self, job_id, "CSB alerts calculation", run_calc_csb_alerts, webhook_url=webhook_url)
-
-
-@celery_app.task(bind=True)
-def task_validate_inputs(self, job_id: str, webhook_url: str | None = None, **kwargs):
-    _run_task(self, job_id, "validate inputs", lambda job_store, job_id: run_validate_inputs(
-        job_store=job_store, job_id=job_id, **kwargs
-    ), webhook_url=webhook_url)
-
-
-@celery_app.task(bind=True)
-def task_forecast(self, job_id: str, params: dict, webhook_url: str | None = None):
-    job_store = JobStore()
-    _update_task_status(job_store, job_id, "running", "Starting forecast pipeline")
-    try:
-        result = run_rscript(job_id, params, job_store)
-        if result.get("status") != "success":
-            raise ETLException(result.get("message") or "Forecast container failed")
-        _update_task_status(job_store, job_id, "success", "Forecast pipeline completed")
-        if webhook_url:
-            _send_webhook(
-                webhook_url,
-                job_id=job_id,
-                status="success",
-                message="Forecast pipeline completed",
-                logs_url=f"/api/tracking/etl-logs/{job_id}",
-            )
-    except Exception as e:
-        _update_task_status(job_store, job_id, "error", str(e))
-        if webhook_url:
-            _send_webhook(
-                webhook_url,
-                job_id=job_id,
-                status="error",
-                message=str(e),
-                logs_url=f"/api/tracking/etl-logs/{job_id}",
-            )
-        raise
+@celery_app.task
+def task_forecast(job_id: str, params: dict, webhook_url: str | None = None):
+    _run_task(job_id, "forecast pipeline", lambda job_store, job_id: _forecast(job_store, job_id, params), webhook_url)
 
 
 class CeleryTaskLauncher:
-    def __init__(self):
-        self._registry = {
-            "import_gee": task_import_gee,
-            "import_pivot_com": task_import_pivot_com,
-            "import_pivot_csb": task_import_pivot_csb,
-            "fetch_climate": task_fetch_climate,
-            "fetch_disease": task_fetch_disease,
-            "fetch_geojson": task_fetch_geojson,
-            "build_analytics": task_build_analytics,
-            "calc_csb_alerts": task_calc_csb_alerts,
-            "validate_inputs": task_validate_inputs,
-            "forecast": task_forecast,
-        }
-
-    def launch(self, task_type: str, job_id: str, webhook_url: str | None = None, **kwargs) -> None:
-        fn = self._registry.get(task_type)
-        if fn is None:
+    def launch(self, task_type: str, job_id: str, webhook_url: str | None = None, confirm: bool = False,
+               **kwargs) -> None:
+        if task_type != "forecast" and task_type not in ETL_JOBS:
             raise ValueError(f"Unknown task type: {task_type}")
+        gate = get_checkpoint_store()
+        gate.start(task_type, job_id, confirm)  # PipelineBlockedError -> 409, nothing queued
         # Known from the 202 on, before a worker picks it up: the log WebSocket and the
         # tracking page can follow it (an unknown job gets 4004).
         JobStore().set(job_id, {"job_id": job_id, "status": "pending", "message": "Queued"})
-        fn.delay(job_id, webhook_url=webhook_url, **kwargs)
-
-
-class DefaultWebhookNotifier:
-    def send(self, webhook_url: str, job_id: str, status: str, message: str, logs_url: str | None = None) -> None:
-        _send_webhook(webhook_url, job_id=job_id, status=status, message=message, logs_url=logs_url)
+        try:
+            if task_type == "forecast":
+                task_forecast.delay(job_id, webhook_url=webhook_url, **kwargs)
+            else:
+                task_etl.delay(task_type, job_id, webhook_url=webhook_url, **kwargs)
+        except Exception:
+            gate.finish(job_id, "error")
+            raise

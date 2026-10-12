@@ -1,35 +1,25 @@
 from fastapi import APIRouter, Query, Depends
+from fastapi.responses import JSONResponse
 
+from etlhub.api.routers import CONFIRM_RELAUNCH
+from etlhub.api.routers.etl.ingest_router import add_launch_route
 from etlhub.application.use_cases.analytics_service import AnalyticsService
 from etlhub.domain.schemas import ETLResponse
 from etlhub.core.dependencies import get_analytics_service
 
 router = APIRouter(tags=["Analytics"])
 
-
-@router.post(
-    "/build_analytics",
-    response_model=ETLResponse,
-    status_code=202,
-    summary="Build analytics table",
-    description=(
-        "Triggers the analytics table construction from ingested data. "
-        "Executes `etl/scripts/build_analytics.py` asynchronously. "
-        "Pass `webhook_url` to be notified when the job completes."
-    ),
-    response_description="Analytics build task accepted and queued in background.",
+add_launch_route(
+    router, "build_analytics", "Build analytics table",
+    "Triggers the analytics table construction from ingested data. "
+    "Executes `etl/scripts/build_analytics.py` asynchronously. ",
+    "Analytics build task accepted and queued in background.", "Build analytics task started in background",
 )
-async def api_build_analytics(
-    webhook_url: str | None = Query(None),
-    service: AnalyticsService = Depends(get_analytics_service),
-):
-    job_id = service.build_analytics(webhook_url)
-    return ETLResponse(
-        status="accepted",
-        message="Build analytics task started in background",
-        job_id=job_id,
-        webhook_url=webhook_url,
-    )
+add_launch_route(
+    router, "calc_csb_alerts", "Calculate and publish CSB alerts",
+    "Executes `etl/scripts/calc_CSB_alerts.py` asynchronously. Returns a `job_id` for progress tracking. ",
+    "CSB alert calculation task accepted and queued in background.", "Calculate CSB alerts task started in background",
+)
 
 
 @router.post(
@@ -55,34 +45,10 @@ async def api_build_analytics(
 )
 async def api_post_forecast(
     webhook_url: str | None = Query(None),
+    confirm: bool = CONFIRM_RELAUNCH,
     service: AnalyticsService = Depends(get_analytics_service),
 ):
-    return service.post_forecast(webhook_url)
-
-
-@router.post(
-    "/calc_csb_alerts",
-    response_model=ETLResponse,
-    status_code=202,
-    summary="Calculate and publish CSB alerts",
-    description=(
-        "Executes `etl/scripts/calc_CSB_alerts.py` "
-        "asynchronously. Returns a `job_id` for progress tracking. "
-        "Pass `webhook_url` to be notified when the job completes."
-    ),
-    response_description="CSB alert calculation task accepted and queued in background.",
-)
-async def api_calc_csb_alerts(
-    webhook_url: str | None = Query(None),
-    service: AnalyticsService = Depends(get_analytics_service),
-):
-    job_id = service.calc_csb_alerts(webhook_url)
-    return ETLResponse(
-        status="accepted",
-        message="Calculate CSB alerts task started in background",
-        job_id=job_id,
-        webhook_url=webhook_url,
-    )
+    return service.post_forecast(webhook_url, confirm)
 
 
 @router.post(
@@ -108,6 +74,23 @@ async def api_calc_csb_alerts(
 )
 async def api_update_key(
     webhook_url: str | None = Query(None),
+    confirm: bool = CONFIRM_RELAUNCH,
     service: AnalyticsService = Depends(get_analytics_service),
 ):
-    return service.update_key(webhook_url)
+    return service.update_key(webhook_url, confirm)
+
+
+@router.post(
+    "/calc_orgunit_alerts",
+    status_code=501,
+    summary="Calculate the org unit alerts of a CSB forecast run (not implemented)",
+    description=(
+        "Item {couple}:calc_orgunit_alerts of the CSB runs, between forecast and approve. "
+        "No script implements it yet (no etl/scripts module, nothing in pivot_dhis_tools): "
+        "CSB runs, and so the cycle, cannot complete until it exists."
+    ),
+)
+async def api_calc_orgunit_alerts():
+    return JSONResponse(status_code=501, content={
+        "message": "calc_orgunit_alerts is not implemented: no script exists for it yet",
+    })
