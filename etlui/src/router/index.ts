@@ -23,12 +23,6 @@ const router = createRouter({
       meta: { title: 'ETL Logs Stream' }
     },
     {
-      path: '/status/:jobId',
-      name: 'JobStatus',
-      component: () => import('@/views/JobStatus.vue'),
-      meta: { title: 'Job Status' }
-    },
-    {
       path: '/login',
       name: 'Login',
       component: () => import('@/views/Auth/LoginForm.vue'),

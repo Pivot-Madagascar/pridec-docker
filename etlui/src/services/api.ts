@@ -33,6 +33,16 @@ api.interceptors.response.use(
   }
 )
 
+// confirm=true only when the user approved the impact of a 409 confirmation_required (rule R5).
+export const withConfirm = (confirm: boolean) => (confirm ? { params: { confirm: true } } : undefined)
+
+export function errorMessage(err: unknown, fallback: string): string {
+  const data = (err as { response?: { data?: { message?: unknown; detail?: unknown } } })?.response?.data
+  // etlhub answers {message} for its 409/500/501 and {detail} for FastAPI's 404/422.
+  if (typeof data?.message === 'string') return data.message
+  return typeof data?.detail === 'string' ? data.detail : fallback
+}
+
 export interface RequestLog {
   request_id: string
   timestamp: string | null  // UTC ISO 8601, null on old entries

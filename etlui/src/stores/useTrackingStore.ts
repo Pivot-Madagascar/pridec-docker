@@ -12,31 +12,23 @@ export const useTrackingStore = defineStore('tracking', () => {
   const jobLogsLoading = ref(false)
   const jobLogsError = ref('')
 
-  async function fetchRequests(limit = 50, endpoint?: string) {
+  async function load(work: () => Promise<void>, fallback: string) {
     loading.value = true
     error.value = ''
     try {
-      const { data } = await trackingApi.listRequests(limit, endpoint)
-      requests.value = data
+      await work()
     } catch (e: any) {
-      error.value = e?.message || 'Failed to load tracking data'
+      error.value = e?.message || fallback
     } finally {
       loading.value = false
     }
   }
 
-  async function fetchRequest(requestId: string) {
-    loading.value = true
-    error.value = ''
-    try {
-      const { data } = await trackingApi.getRequest(requestId)
-      selected.value = data
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to load request detail'
-    } finally {
-      loading.value = false
-    }
-  }
+  const fetchRequests = (limit = 50, endpoint?: string) =>
+    load(async () => { requests.value = (await trackingApi.listRequests(limit, endpoint)).data }, 'Failed to load tracking data')
+
+  const fetchRequest = (requestId: string) =>
+    load(async () => { selected.value = (await trackingApi.getRequest(requestId)).data }, 'Failed to load request detail')
 
   async function fetchJobLogs(jobId: string) {
     jobLogsLoading.value = true

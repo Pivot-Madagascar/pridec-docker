@@ -1,5 +1,13 @@
 import { ref } from 'vue'
-import type { ActivityEntry } from '@/types/etl'
+
+export interface ActivityEntry {
+  id: number
+  action: string
+  message: string
+  time: string
+  success: boolean
+  jobId?: string
+}
 
 export function useActivityLog() {
   const activityLog = ref<ActivityEntry[]>([])

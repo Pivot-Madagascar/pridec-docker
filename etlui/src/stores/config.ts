@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { configService } from '@/services/config'
+import { errorMessage } from '@/services/api'
 import type { ConfigResponse, ConfigUpdate } from '@/types/config'
 
 export const useConfigStore = defineStore('config', () => {
@@ -8,43 +9,22 @@ export const useConfigStore = defineStore('config', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  async function fetchConfig() {
+  async function run(call: () => Promise<ConfigResponse>, fallback: string, rethrow = true) {
     loading.value = true
     error.value = null
     try {
-      config.value = await configService.get()
-    } catch (e: any) {
-      error.value = e?.response?.data?.detail || 'Failed to load config'
+      config.value = await call()
+    } catch (e) {
+      error.value = errorMessage(e, fallback)
+      if (rethrow) throw e
     } finally {
       loading.value = false
     }
   }
 
-  async function updateConfig(payload: ConfigUpdate) {
-    loading.value = true
-    error.value = null
-    try {
-      config.value = await configService.update(payload)
-    } catch (e: any) {
-      error.value = e?.response?.data?.detail || 'Failed to update config'
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function reloadConfig() {
-    loading.value = true
-    error.value = null
-    try {
-      config.value = await configService.reload()
-    } catch (e: any) {
-      error.value = e?.response?.data?.detail || 'Failed to reload config'
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
+  const fetchConfig = () => run(() => configService.get(), 'Failed to load config', false)
+  const updateConfig = (payload: ConfigUpdate) => run(() => configService.update(payload), 'Failed to update config')
+  const reloadConfig = () => run(() => configService.reload(), 'Failed to reload config')
 
   return { config, loading, error, fetchConfig, updateConfig, reloadConfig }
 })

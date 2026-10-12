@@ -1,12 +1,5 @@
 <template>
-  <!-- Native <dialog>: showModal() gives the backdrop, focus trap and Escape for free. -->
-  <dialog
-    ref="dialog"
-    class="confirm-dialog"
-    :aria-labelledby="titleId"
-    @cancel.prevent="!busy && emit('cancel')"
-    @click.self="!busy && emit('cancel')"
-  >
+  <BaseDialog :open="open" backdrop-close class="confirm-dialog" :aria-labelledby="titleId" @dismiss="!busy && emit('cancel')">
     <div class="confirm-body">
       <div class="confirm-icon">
         <Icon :path="ICONS.reset" class="icon-svg" />
@@ -19,18 +12,19 @@
     <div class="confirm-actions">
       <button type="button" class="confirm-btn" :disabled="busy" autofocus @click="emit('cancel')">Cancel</button>
       <button type="button" class="confirm-btn confirm-btn-danger" :disabled="busy" @click="emit('confirm')">
-        <span v-if="busy" class="confirm-spinner" aria-hidden="true"></span>
+        <span v-if="busy" class="confirm-spinner animate-spin" aria-hidden="true"></span>
         {{ busy ? 'Deleting…' : confirmLabel }}
       </button>
     </div>
-  </dialog>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, useId } from 'vue'
+import { useId } from 'vue'
 import Icon, { ICONS } from '@/components/Icons'
+import BaseDialog from './BaseDialog.vue'
 
-const props = defineProps<{
+defineProps<{
   open: boolean
   title: string
   confirmLabel: string
@@ -43,46 +37,13 @@ const emit = defineEmits<{
 }>()
 
 const titleId = useId()
-const dialog = ref<HTMLDialogElement>()
-
-watch(
-  () => props.open,
-  (open) => {
-    if (open && !dialog.value?.open) dialog.value?.showModal()
-    if (!open && dialog.value?.open) dialog.value.close()
-  },
-  { flush: 'post' }
-)
 </script>
 
 <style scoped>
 @reference "tailwindcss";
 
 .confirm-dialog {
-  margin: auto;
   width: min(28rem, calc(100vw - 2rem));
-  padding: 1.5rem;
-  background: #1e293b;
-  color: #e2e8f0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 1rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
-}
-
-.confirm-dialog::backdrop {
-  background: rgba(2, 6, 23, 0.7);
-  backdrop-filter: blur(2px);
-}
-
-.confirm-dialog[open] {
-  animation: confirm-in 0.15s ease-out;
-}
-
-@keyframes confirm-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.5rem) scale(0.98);
-  }
 }
 
 .confirm-body {
@@ -166,12 +127,5 @@ watch(
   border: 2px solid rgba(255, 255, 255, 0.4);
   border-top-color: #fff;
   border-radius: 50%;
-  animation: confirm-spin 0.8s linear infinite;
-}
-
-@keyframes confirm-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

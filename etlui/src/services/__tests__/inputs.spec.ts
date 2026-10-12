@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const post = vi.fn()
 const get = vi.fn()
 const del = vi.fn()
-vi.mock('@/services/api', () => ({
+vi.mock('@/services/api', async importOriginal => ({
+  ...(await importOriginal<object>()),
   default: {
     post: (...args: unknown[]) => post(...args),
     get: (...args: unknown[]) => get(...args),
@@ -46,7 +47,7 @@ describe('deleteInputFile', () => {
     del.mockResolvedValue({ data: { deleted: 'input/external_data.csv' } })
 
     expect(await deleteInputFile('external_data')).toBe('input/external_data.csv')
-    expect(del).toHaveBeenCalledWith('/input/files/external_data')
+    expect(del).toHaveBeenCalledWith('/input/files/external_data', undefined)
   })
 })
 
