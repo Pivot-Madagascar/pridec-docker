@@ -4,7 +4,7 @@ from etlhub.domain.interfaces.task_launcher import TaskLauncher
 
 
 class IngestionService:
-    """Queues any Celery ETL job (imports, fetches, build_analytics, calc_csb_alerts, validate_inputs)."""
+    """Queues any Celery ETL job (imports, fetches, build_analytics, validate_inputs)."""
 
     def __init__(self, task_launcher: TaskLauncher):
         self._task_launcher = task_launcher

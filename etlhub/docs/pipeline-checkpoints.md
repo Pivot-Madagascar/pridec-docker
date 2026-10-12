@@ -4,12 +4,14 @@
 >
 > - **Conception révisée le 2026-10-12** pour s'aligner sur la documentation de référence (`pivot_forecast.sh`) :
 >   voir « Changements depuis la version du 2026-10-09 » en fin de [diagrammes](pipeline-checkpoints-diagrams.md).
-> - **Implémenté côté etlhub : la version du 2026-10-09**, c'est-à-dire parcours en 3 étapes, runs de forecast (R6),
+> - **Implémenté côté etlhub** : la version du 2026-10-09 (parcours en 3 étapes, runs de forecast (R6),
 >   fichiers d'entrée par run, approbation, invalidation des dépendants dans un run, confirmation des relances (R5),
->   cycle mensuel, verrou global sans expiration. Code : `domain/pipeline.py`, `infrastructure/checkpoint_store.py`,
+>   cycle mensuel, verrou global sans expiration), plus la révision du 2026-10-12 sauf les étapes 19 et 20 et le
+>   contrôle de niveau de `external_data` (§8). Code : `domain/pipeline.py`, `infrastructure/checkpoint_store.py`,
 >   `api/routers/pipeline_router.py`. Tests : `tests/infrastructure/test_checkpoint_store.py`, `tests/api/test_pipeline_router.py`.
-> - **etlui** : fait pour la version du 2026-10-09 (§8, étape 12), vérifié avec une API simulée seulement.
-> - **À faire** : la révision du 2026-10-12 (§8, étapes 15 à 21) et les points ouverts (§6).
+> - **etlui** : fait (§8, étapes 12 et 21), vérifié avec une API simulée seulement.
+> - **À faire** : `calc_orgunit_alerts` (étape 19), le périmètre du mode test (étape 20), le contrôle de niveau de
+>   `external_data`, et les points ouverts (§6).
 >
 > Référence : la documentation de référence (`pivot_forecast.sh`) fait foi pour le workflow (3 phases, commandes `pridec`,
 > ordre des étapes). etlhub/etlui en est la version **manuelle** : l'utilisateur déclenche chaque action et téléverse
@@ -230,7 +232,7 @@ et fini en novembre reste dans le cycle d'octobre).
   `success` après l'exécution, `error` si elle lève une exception. `calc_orgunit_alerts` : Celery ou synchrone, à décider (§6).
 - **Uploads** : `PipelineGate.change_input()` dans `InputUploadService`, sous le verrou.
 - **Décisions** (`approve`, `approve_imports`) : `PipelineGate.decide()`, écriture directe (`job_id = NULL`).
-  La route de `approve_imports` reste à définir.
+  `approve_imports` : `POST /pipeline/imports/approve`.
 - **Fermeture du run** : dans `finish()`, quand l'item terminé est un `post_forecast` en `success`.
 
 ### 4.6 Les fichiers d'entrée (téléversés depuis l'interface)
@@ -385,7 +387,7 @@ Points ouverts :
 | Point | Question |
 |---|---|
 | `forecast_start` | Quelle valeur `jq` écrit-il dans `pivot_forecast.sh` (mois courant, mois suivant, dernier mois de données) ? Le serveur doit écrire la même. |
-| `approve_imports` | Quelle est la limite pour les cas CSB ? Quelle route pour la décision ? |
+| `approve_imports` | Quelle est la limite pour les cas CSB ? |
 | Mode test et `forecast` | Le mode test doit-il utiliser `forecast_assets/test_config.json` (Ranger + Naive) ? |
 | `calc_orgunit_alerts` | Job Celery ou synchrone ? Que publie-t-il exactement ? |
 | Contrôle de niveau de `external_data` | Quelles colonnes distinguent un fichier fkt d'un fichier csb ? |
@@ -417,7 +419,7 @@ Limites :
 
 ## 8. Ordre d'implémentation
 
-✅ = fait (socle 2026-10-08 → 09 ; version du 2026-10-09). ⬜ = à faire (révision du 2026-10-12).
+✅ = fait (socle 2026-10-08 → 09 ; version du 2026-10-09 ; révision du 2026-10-12). ⬜ = à faire.
 
 1. ✅ `domain/pipeline.py`, `infrastructure/checkpoint_store.py` (`checkpoints`, `pipeline_lock`, `BEGIN IMMEDIATE`).
 2. ✅ `CeleryTaskLauncher.launch()` → `start()` ; `_update_task_status` → `finish()`.
@@ -440,13 +442,18 @@ Limites :
     messages des 409 ; modale de constat sur `confirmation_required` puis renvoi avec `confirm=true`.
 13. ✅ **Documentation** : tableau des endpoints, `ARCHITECTURE.md`, `CLAUDE.MD`, `known-issues.md`, guide et diagrammes.
 14. ✅ **Bascule de mois automatique** et **mode test** (`PUT /pipeline/mode`, checkpoints en Redis, sortie confirmée).
-15. ⬜ **Phase 3** : `system_update` = `build_analytics` → `update_key` ; retirer `calc_csb_alerts` et `build_analytics_after_alerts` (2 emplacements de `build_analytics`).
-16. ⬜ **`approve_imports`** : item de décision dans `data_import`, prérequis de `build_analytics` ; route et limite CSB à définir.
-17. ⬜ **`external_data/<niveau>`** : item obligatoire, prérequis de `validate_inputs` ; contrôle de niveau à l'upload (422) ; retirer `forecast_runs.external_data`.
-18. ⬜ **`forecast_start`** : écrit par le serveur à l'upload de `config.json` (fin du refus 422), une fois la valeur confirmée.
-19. ⬜ **`calc_orgunit_alerts`** : brancher la commande `pridec etl calc_orgUnit_alerts` (fin du 501).
+15. ✅ **Phase 3** : `system_update` = `build_analytics` → `update_key` ; retirer `calc_csb_alerts` et `build_analytics_after_alerts` (2 emplacements de `build_analytics`).
+16. ✅ **`approve_imports`** : item de décision dans `data_import`, prérequis de `build_analytics` ;
+    `POST /pipeline/imports/approve` (`approve` / `reject`). La limite CSB n'est pas contrôlée par le serveur : l'utilisateur la vérifie.
+17. ✅ **`external_data/<niveau>`** : item obligatoire, prérequis de `validate_inputs` ; `forecast_runs.external_data` retiré
+    (les bases existantes gardent la colonne, inutilisée). ⬜ Contrôle de niveau à l'upload (422) : en attente des colonnes qui distinguent fkt et csb (§6).
+18. ✅ **`forecast_start`** : écrit par le serveur à l'upload de `config.json` (fin du refus 422). Valeur provisoire : le cycle
+    (mois courant), comme le défaut de `validate_inputs` ; à aligner sur `pivot_forecast.sh` une fois confirmé (§6).
+19. ⬜ **`calc_orgunit_alerts`** : brancher la commande `pridec etl calc_orgUnit_alerts` (fin du 501). Bloqué : aucun script
+    n'existe dans `etl/scripts/`.
 20. ⬜ **Mode test** : `DRYRUN=True` passé à `import_gee` et `post_forecast` seulement, distinct de l'option `DRYRUN` des commandes.
-21. ⬜ **etlui** : fichier attendu par maladie (`config_respiratory.json` pour `Respinf`), upload de `external_data` par niveau, décision `approve_imports`.
+    En attente de décision : les autres jobs écriraient alors dans DHIS2 en mode test, et le mode lui-même est aujourd'hui lu dans `DRYRUN`.
+21. ✅ **etlui** : fichier attendu par maladie (`config_respiratory.json` pour `Respinf`), upload de `external_data` par niveau, décision `approve_imports`.
 
 ---
 

@@ -17,6 +17,7 @@ Multi-service repo. Each service owns its details; this file only holds the map 
 - Python 3.12. Use `test-venv`; the system `python3` is 3.11.
 - Do not change a contract shared between `etlhub` and `etlui` on one side only.
 - Say what you could not verify. Do not guess.
+- Every implementation (feature, fix, refactor, review) is done with the **ponytail** skill (`/ponytail`, level `full`): understand the flow first, then climb the ladder (does it need to exist → already in the repo → stdlib → native → installed dependency → one line → minimum code), shortest working diff, no speculative abstraction. A deliberate shortcut with a known limit gets a `ponytail:` comment naming the limit and the upgrade path (`/ponytail-debt` lists them). Non-trivial logic leaves one runnable check. Ponytail never skips the rules above, input validation, error handling that prevents data loss, or security.
 
 ## Where things are documented
 

@@ -11,13 +11,11 @@ def test_build_analytics_returns_202(override_dependencies):
     assert response.status_code == 202
 
 
-def test_calc_csb_alerts_returns_202(override_dependencies):
+def test_calc_csb_alerts_is_no_longer_a_route(override_dependencies):
     from fastapi.testclient import TestClient
     from etlhub.main import app
-    
-    client = TestClient(app)
-    response = client.post("/calc_csb_alerts")
-    assert response.status_code == 202
+
+    assert TestClient(app).post("/calc_csb_alerts").status_code == 404
 
 
 def test_list_requests(override_dependencies):

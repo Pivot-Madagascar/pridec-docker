@@ -5,11 +5,13 @@ const getCheckpoints = vi.fn()
 const launchJob = vi.fn()
 const setMode = vi.fn()
 const decideRun = vi.fn()
+const decideImports = vi.fn()
 vi.mock('@/services/pipeline', () => ({
   getCheckpoints: (...args: unknown[]) => getCheckpoints(...args),
   launchJob: (...args: unknown[]) => launchJob(...args),
   setMode: (...args: unknown[]) => setMode(...args),
   decideRun: (...args: unknown[]) => decideRun(...args),
+  decideImports: (...args: unknown[]) => decideImports(...args),
   openRun: vi.fn(),
   abandonRun: vi.fn(),
   releaseLock: vi.fn()
@@ -43,11 +45,12 @@ function state(overrides: object = {}) {
 const OPEN_RUN = {
   current_step: 'forecast',
   run: { cycle: '202610', couple: 'COM/Malaria', state: 'open', disease_code: 'pridec_historic_COMMalaria', ou_level: '6',
-         alert_name: null, external_data: 'none', opened_at: 't' },
+         alert_name: null, opened_at: 't' },
   steps: [
     { step: 'data_import', done: true, accessible: true, items: [item('import_gee', 'success', true)] },
     { step: 'forecast', done: false, accessible: true, items: [
-      item('config/Malaria', 'success', true), item('COM/Malaria:fetch_disease', 'pending', true),
+      item('config/Malaria', 'success', true), item('external_data/fkt', 'success', true),
+      item('COM/Malaria:fetch_disease', 'pending', true),
       item('COM/Malaria:forecast'), item('COM/Malaria:approve'), item('ADJ/Malaria:fetch_disease')
     ] },
     { step: 'system_update', done: false, accessible: false, items: [] }
@@ -129,6 +132,33 @@ describe('LandingPage', () => {
     expect(runCards).toHaveLength(2) // fetch_disease and forecast of COM/Malaria; not ADJ/Malaria, not approve
     const approve = runs.findAll('button').find(b => b.text() === 'Approve')!
     expect(approve.attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it('shows the imports approval as a decision, not a job card', async () => {
+    getCheckpoints.mockResolvedValue(state({ steps: [
+      { step: 'data_import', done: false, accessible: true, items: [item('import_gee', 'success', true), item('approve_imports', 'pending', true), item('build_analytics')] },
+      { step: 'forecast', done: false, accessible: false, items: [] },
+      { step: 'system_update', done: false, accessible: false, items: [] }
+    ] }))
+    decideImports.mockResolvedValue(undefined)
+    const wrapper = await mountPage()
+
+    expect(wrapper.findAll('.action-card').map(c => c.text()).some(t => t.includes('approve_imports'))).toBe(false)
+    await wrapper.findAll('button').find(b => b.text() === 'Approve imports')!.trigger('click')
+    await flushPromises()
+    expect(decideImports).toHaveBeenCalledWith('approve')
+    wrapper.unmount()
+  })
+
+  it('shows the expected config file and the external_data status of the open run', async () => {
+    getCheckpoints.mockResolvedValue(state(OPEN_RUN))
+    const wrapper = await mountPage()
+
+    const files = wrapper.find('.run-files').text()
+    expect(files).toContain('config_malaria.json')
+    expect(files).toContain('external_data.csv for the fokontany level')
+    expect(files).toContain('success')
     wrapper.unmount()
   })
 })

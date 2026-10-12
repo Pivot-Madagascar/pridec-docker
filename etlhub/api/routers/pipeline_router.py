@@ -34,7 +34,7 @@ class Mode(BaseModel):
     ),
 )
 def get_checkpoints(
-    cycle: str | None = Query(None, pattern=r"^\d{6}$", description="YYYYMM (= forecast_start); the latest cycle by default"),
+    cycle: str | None = Query(None, pattern=r"^\d{6}$", description="YYYYMM; the current month by default"),
     gate: PipelineGate = Depends(get_pipeline_gate),
 ) -> dict:
     return gate.progress(cycle)
@@ -73,6 +73,19 @@ def abandon_run(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, st
 )
 def decide(body: Decision, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str]:
     return {"couple": gate.decide(body.decision), "decision": body.decision}
+
+
+@router.post(
+    "/imports/approve",
+    summary="Approve or reject the imports (step data_import)",
+    description=(
+        "After import_pivot_com and import_pivot_csb, check the case counts (COM < 100, CSB < limit). "
+        "approve: approve_imports becomes success and unlocks build_analytics. reject: back to pending."
+    ),
+)
+def decide_imports(body: Decision, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str]:
+    gate.decide_imports(body.decision)
+    return {"decision": body.decision}
 
 
 @router.put(

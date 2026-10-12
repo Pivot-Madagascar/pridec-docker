@@ -13,8 +13,8 @@ from etlhub.core.config import get_settings
 from etlhub.domain import pipeline
 from etlhub.domain.exceptions import ConfirmationRequiredError, ETLException, PipelineBlockedError
 from etlhub.domain.pipeline import (
-    accessible_steps, blocking_reason, config_item, cycle_for_launch, dependents, disease_of, impact, level_of,
-    progress, require_confirmation, require_input_confirmation, resolve_slot, run_context, run_items, status,
+    accessible_steps, blocking_reason, config_item, cycle_for_launch, dependents, disease_of, external_data_item,
+    impact, level_of, progress, require_confirmation, require_input_confirmation, resolve_slot, run_context, run_items, status,
 )
 from etlhub.infrastructure.config_store import ConfigStore
 from etlhub.infrastructure.redis_client import get_redis
@@ -49,14 +49,14 @@ CREATE TABLE IF NOT EXISTS forecast_runs (
     disease_code  TEXT NOT NULL,
     ou_level      TEXT NOT NULL,
     alert_name    TEXT,
-    external_data TEXT NOT NULL DEFAULT 'none',
     opened_at     TEXT NOT NULL,
     closed_at     TEXT,
     PRIMARY KEY (cycle, couple, opened_at)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS one_open_run ON forecast_runs(state) WHERE state = 'open';
 """
-_RUN_COLUMNS = ("cycle", "couple", "state", "disease_code", "ou_level", "alert_name", "external_data", "opened_at")
+# Databases created before 2026-10-12 also have an external_data column (DEFAULT 'none'): unused, inserts skip it.
+_RUN_COLUMNS = ("cycle", "couple", "state", "disease_code", "ou_level", "alert_name", "opened_at")
 
 
 def _now() -> str:
@@ -291,18 +291,22 @@ class CheckpointStore:
         if run is None:
             raise PipelineBlockedError(f"Changing {name} needs an open forecast run (POST /pipeline/runs)")
         couple = run["couple"]
-        if name == "config" and not removed:
-            reason = blocking_reason(rows, "forecast", config_item(couple), couple)
+        if not removed:
+            reason = blocking_reason(rows, "forecast", self._input_item(name, couple), couple)
             if reason:
                 raise PipelineBlockedError(reason)
         return couple, require_input_confirmation(name, couple, rows, confirm)
+
+    @staticmethod
+    def _input_item(name: str, couple: str) -> str:
+        return config_item(couple) if name == "config" else external_data_item(couple)
 
     @contextmanager
     def change_input(self, name: str, confirm: bool = False, removed: bool = False) -> Iterator[None]:
         """Upload (or delete, removed=True) of config.json / external_data.csv in the open run, under the lock.
 
-        config is the item config/<disease>, shared by the disease's 3 runs; external_data is optional, one file
-        per org unit level, recorded on the run. The file written in input/ is also kept in uploads/<cycle>/ and
+        config is the item config/<disease>, shared by the disease's 3 runs; external_data is the item
+        external_data/<level>, shared by the runs of its org unit level. The file written in input/ is also kept in uploads/<cycle>/ and
         copied back when another run of the same disease (config) or level (external_data) opens.
         A change resets the open run from validate_inputs on, and needs confirm once that file was used.
         """
@@ -313,20 +317,17 @@ class CheckpointStore:
             cycle = self._launch_cycle(conn)
             couple, reset = self._check_input_change(conn, cycle, name, confirm, removed)
             self._take_lock(conn, job_id, f"{action} {name}")
-            if name == "config" and not removed:
-                self._upsert(conn, cycle, "forecast", config_item(couple), job_id, "running")
+            item = self._input_item(name, couple)
+            if not removed:
+                self._upsert(conn, cycle, "forecast", item, job_id, "running")
         try:
             yield
             with self._transaction() as conn:
                 self._reset(conn, cycle, reset)
-                if name == "config":
-                    if removed:
-                        self._reset(conn, cycle, [config_item(couple)])
-                    else:
-                        self._upsert(conn, cycle, "forecast", config_item(couple), job_id, "success")
+                if removed:
+                    self._reset(conn, cycle, [item])
                 else:
-                    conn.execute("UPDATE forecast_runs SET external_data = ? WHERE state = 'open'",
-                                 ("none" if removed else "uploaded",))
+                    self._upsert(conn, cycle, "forecast", item, job_id, "success")
                 self._keep(cycle, name, couple, removed)
                 conn.execute("DELETE FROM pipeline_lock WHERE job_id = ?", (job_id,))
         except BaseException:  # the change itself or its recording: the lock must not stay taken
@@ -372,29 +373,21 @@ class CheckpointStore:
             self._reset(conn, cycle, items)
             context = run_context(couple)
             self._clear_workdirs()  # inside the transaction: if it fails, the run is not opened
-            external = self._restore(cycle, couple, rows)
+            self._restore(cycle, couple, rows)
             run = {"cycle": cycle, "couple": couple, "state": "open", "disease_code": context["DISEASE_CODE"],
-                   "ou_level": context["OU_LEVEL"], "alert_name": context["ALERT_NAME"], "external_data": external,
+                   "ou_level": context["OU_LEVEL"], "alert_name": context["ALERT_NAME"],
                    "opened_at": datetime.now().isoformat(timespec="microseconds")}
             conn.execute(f"INSERT INTO forecast_runs ({', '.join(_RUN_COLUMNS)})"
                          f" VALUES ({', '.join('?' * len(_RUN_COLUMNS))})", tuple(run[c] for c in _RUN_COLUMNS))
         return run
 
-    def _restore(self, cycle: str, couple: str, rows: pipeline.Rows) -> str:
-        """Copies the disease's config and the level's external_data, uploaded earlier in the cycle, into input/.
-
-        Returns the run's external_data state (uploaded | none).
-        """
-        config = self._kept_file(cycle, "config", couple)
-        external = self._kept_file(cycle, "external_data", couple)
-        if config.is_file() and status(rows, "forecast", config_item(couple)) == "success":
-            self._input_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(config, self._input_dir / "config.json")
-        if not external.is_file():
-            return "none"
-        self._input_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(external, self._input_dir / "external_data.csv")
-        return "uploaded"
+    def _restore(self, cycle: str, couple: str, rows: pipeline.Rows) -> None:
+        """Copies the disease's config and the level's external_data, uploaded earlier in the cycle, into input/."""
+        for name, file_name in (("config", "config.json"), ("external_data", "external_data.csv")):
+            kept = self._kept_file(cycle, name, couple)
+            if kept.is_file() and status(rows, "forecast", self._input_item(name, couple)) == "success":
+                self._input_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(kept, self._input_dir / file_name)
 
     def abandon_run(self) -> str:
         """Abandons the open run: nothing is published, its items go back to pending. Returns the couple."""
@@ -428,6 +421,24 @@ class CheckpointStore:
                     raise PipelineBlockedError(f"Nothing to reject: {forecast} is not in success")
                 self._reset(conn, cycle, [forecast, *dependents(forecast)])
         return couple
+
+    def decide_imports(self, decision: str) -> None:
+        """approve_imports (step data_import): approve unlocks build_analytics, reject sends it back to pending.
+
+        The user checks the COM and CSB case counts of the imports before approving.
+        """
+        with self._transaction() as conn:
+            self._check_lock_free(conn)
+            cycle = self._launch_cycle(conn)
+            rows = self._rows(conn, cycle)
+            if decision == "approve":
+                reason = blocking_reason(rows, "data_import", "approve_imports")
+                if reason:
+                    raise PipelineBlockedError(reason)
+                self._upsert(conn, cycle, "data_import", "approve_imports", None, "success")
+            else:
+                conn.execute("DELETE FROM checkpoints WHERE cycle = ? AND step = 'data_import' AND item = 'approve_imports'",
+                             (cycle,))
 
     # --- reading and unlocking ------------------------------------------------------------
 

@@ -4,7 +4,7 @@ export type ItemStatus = 'pending' | 'running' | 'success' | 'error'
 export type StepName = 'data_import' | 'forecast' | 'system_update'
 
 export interface PipelineItem {
-  item: string // 'import_gee', 'config/Malaria', 'CSB/Malaria:forecast'…
+  item: string // 'import_gee', 'config/Malaria', 'external_data/fkt', 'CSB/Malaria:forecast'…
   status: ItemStatus
   job_id: string | null
   updated_at: string | null
@@ -25,7 +25,6 @@ export interface ForecastRun {
   disease_code: string
   ou_level: string
   alert_name: string | null
-  external_data: 'none' | 'uploaded'
   opened_at: string
 }
 

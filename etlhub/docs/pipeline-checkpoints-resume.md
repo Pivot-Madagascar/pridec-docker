@@ -1,7 +1,7 @@
 # Pipeline checkpoints : l'essentiel
 
 etlhub note ce qui a **vraiment réussi** dans le pipeline du mois, et **refuse** ce qui sort des règles
-(conception cible, révisée le 2026-10-12 ; le code suit encore la version du 2026-10-09).
+(conception révisée le 2026-10-12, appliquée sauf `calc_orgunit_alerts`, le périmètre du mode test et le contrôle de niveau de `external_data`).
 Le workflow lui-même suit la documentation de référence (`pivot_forecast.sh`), qui fait foi.
 Plus de détails : [guide](pipeline-checkpoints-guide.md) · [diagrammes](pipeline-checkpoints-diagrams.md) · [conception](pipeline-checkpoints.md).
 
@@ -82,7 +82,8 @@ Le bouton **« Mode test » (test = OUI)** d'etlui bascule etlhub en mode test (
 
 ## Limites actuelles
 
-- **Le code n'applique pas encore la révision du 2026-10-12** : voir l'état en tête de [pipeline-checkpoints.md](pipeline-checkpoints.md).
+- **`calc_orgunit_alerts` répond encore 501** (aucun script) : les runs CSB, donc le cycle, ne peuvent pas se terminer.
+- Le mode test agit encore sur tous les scripts (`DRYRUN` global), et le niveau de `external_data.csv` n'est pas encore contrôlé.
 - **Interface** (etlui) : branchée depuis le 2026-10-09 ; elle n'a pas été testée contre un vrai etlhub, seulement avec une API simulée. Le tableau de bord d'etlui n'a plus de bouton « reset output » (`DELETE /output/reset` reste disponible dans l'API).
 - Un cycle qui n'est pas fini à la fin du mois reste inachevé : rien ne le termine à sa place.
 - `DELETE /output/reset` et la ligne de commande (`./pridec`) échappent à ces contrôles.

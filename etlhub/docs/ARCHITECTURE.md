@@ -82,8 +82,7 @@ Worth knowing:
 ## 7. Data pipeline
 
 The workflow follows the reference documentation (`pivot_forecast.sh`, 3 phases); `etlui` does not automate it: one step per click, and the pipeline gate enforces the order (see Concurrency below and `docs/pipeline-checkpoints.md`).
-- **Code today (2026-10-09 design):** ① imports → `build_analytics`; ② 9 runs (`fetch_*` → `validate_inputs` → `forecast` → `calc_orgunit_alerts` (CSB, 501) → `approve` → `post_forecast`); ③ `build_analytics` → `calc_csb_alerts` → `build_analytics` → `update_key`.
-- **Target (revised 2026-10-12, not implemented):** ① adds the `approve_imports` decision before `build_analytics`; ② makes `external_data/<level>` a mandatory item and runs `calc_orgunit_alerts` (`pridec etl calc_orgUnit_alerts`); ③ becomes `build_analytics` → `update_key` (no `calc_csb_alerts`).
+① imports → `approve_imports` (decision, `POST /pipeline/imports/approve`) → `build_analytics`; ② 9 runs (`config/<disease>` + `external_data/<level>` uploads, `fetch_*` → `validate_inputs` → `forecast` → `calc_orgunit_alerts` (CSB, still 501: no script) → `approve` → `post_forecast`); ③ `build_analytics` → `update_key`. `calc_csb_alerts` is no longer exposed (its script stays in `etl/scripts/`).
 
 | Step | Reads | Writes | Depends on |
 |---|---|---|---|
@@ -93,10 +92,9 @@ The workflow follows the reference documentation (`pivot_forecast.sh`, 3 phases)
 | `fetch_climate` | DHIS2 `analytics` | `input/climate_data.json` | import_gee, build_analytics |
 | `fetch_disease` | DHIS2 `analytics` (`DISEASE_CODE`) | `input/disease_data.json` | import_pivot_*, build_analytics |
 | `fetch_geojson` | DHIS2 `organisationUnits.geojson` | `input/orgUnit_poly.geojson` | — |
-| `validate_inputs` | `input/` + user-provided `config.json` | `input/{config,input,polygon}_valid.*` | the 3 `fetch_*` |
+| `validate_inputs` | `input/` + user-provided `config.json` (`forecast_start` written by the server) and `external_data.csv` | `input/{config,input,polygon}_valid.*` | the 3 `fetch_*` |
 | `forecast` | the 3 `*_valid` files | `output/` (`forecast_report.html`, `forecast.json`), `.output_sig`, `logs/{id}.json` | validate_inputs |
 | `post_forecast` | `output/forecast.json` | DHIS2 `dataValueSets` | forecast |
-| `calc_csb_alerts` | DHIS2 `analytics` | DHIS2 `dataValueSets` | post_forecast, build_analytics (dropped from the 2026-10-12 target) |
 | `calc_orgunit_alerts` | `ALERT_NAME` | alert thresholds | forecast (CSB runs; 501 today, target: `pridec etl calc_orgUnit_alerts`) |
 | `update_key` | — | DHIS2 datastore `pridec/pridec_update` | last |
 
