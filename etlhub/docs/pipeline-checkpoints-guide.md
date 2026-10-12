@@ -1,8 +1,11 @@
 # Suivi du pipeline : guide rapide
 
-Ce guide explique en bref comment etlhub suit et contrôle le pipeline mensuel.
-- La conception complète est dans [pipeline-checkpoints.md](pipeline-checkpoints.md).
+Ce guide explique en bref comment etlhub suit et contrôle le pipeline mensuel (conception cible, révisée le 2026-10-12).
+- Le workflow lui-même (3 phases, commandes `pridec`, ordre) suit la documentation de référence (`pivot_forecast.sh`), qui fait foi.
+- La conception complète, et ce qui est déjà implémenté, sont dans [pipeline-checkpoints.md](pipeline-checkpoints.md).
 - Les schémas sont dans [pipeline-checkpoints-diagrams.md](pipeline-checkpoints-diagrams.md).
+
+> Le code suit encore la version du 2026-10-09 : voir l'état et les écarts en tête de [pipeline-checkpoints.md](pipeline-checkpoints.md).
 
 ## En une phrase
 
@@ -12,22 +15,25 @@ n'exécute **qu'un seul job à la fois**, traite **un seul forecast (source × m
 
 ## Le cycle
 
-Un **cycle** est le run complet du pipeline, **une fois par mois**. Il est désigné par son `forecast_start` (`YYYYMM`).
-- Il s'ouvre au premier lancement, avec le mois en cours.
+Un **cycle** est le run complet du pipeline, **une fois par mois**. Il est désigné par le mois en cours (`YYYYMM`).
+- Il s'ouvre au premier lancement du mois.
 - Au **changement de mois**, un nouveau cycle commence automatiquement : l'ancien reste inachevé s'il n'était pas fini,
   et son run ouvert est abandonné.
 - Une fois les 3 étapes valides, il est **fermé** : le mois ne peut plus tourner une seconde fois.
 
 | # | Étape | Ce qu'il faut réussir | Ordre |
 |---|---|---|---|
-| ① | `data_import` | `import_gee`, `import_pivot_com`, `import_pivot_csb`, puis `build_analytics` | 3 imports libres, `build_analytics` après |
-| ② | `forecast` | **9 runs**, un par couple source × maladie (ADJ, COM, CSB × Malaria, Diarrhea, Respinf) | Runs libres entre eux, un seul ouvert à la fois |
-| ③ | `system_update` | `build_analytics` → `calc_csb_alerts` → `build_analytics` (après alertes) → `update_key` | Imposé |
+| ① | `data_import` (5 items) | `import_gee`, `import_pivot_com`, `import_pivot_csb`, la décision `approve_imports`, puis `build_analytics` | Imports libres ; `approve_imports` après les 2 imports pivot ; `build_analytics` en dernier |
+| ② | `forecast` (71 items) | **9 runs**, un par couple source × maladie (ADJ, COM, CSB × Malaria, Diarrhea, Respinf) | Runs libres entre eux, un seul ouvert à la fois |
+| ③ | `system_update` (2 items) | `build_analytics` → `update_key` | Imposé |
+
+- **`approve_imports`** est une décision humaine : vérifier que les cas COM sont < 100 et les cas CSB < une limite (encore à fixer).
+- **`build_analytics`** doit passer par l'API etlhub. Lancé depuis l'interface DHIS2, etlhub ne le voit pas et l'étape ① reste non valide.
 
 ### Un run de forecast
 
-On l'ouvre avec `POST /pipeline/runs` `{"source": "CSB", "disease": "Malaria"}`. L'ouverture **vide `input/` et `output/`**
-et fixe le contexte du run :
+On l'ouvre avec `POST /pipeline/runs` `{"source": "CSB", "disease": "Malaria"}`. L'ouverture **vide `input/` et `output/`**,
+remet les fichiers déjà téléversés et fixe le contexte du run :
 
 | Couple | `DISEASE_CODE` | `OU_LEVEL` | `ALERT_NAME` |
 |---|---|---|---|
@@ -40,18 +46,23 @@ Ce contexte est réécrit dans la config dynamique à chaque job du run : il n'y
 Items d'un run, avec leurs prérequis :
 
 ```
-config/<maladie> ┐  (upload, un par maladie)
-fetch_disease    ├─→ validate_inputs ─→ forecast ─→ [calc_orgunit_alerts, CSB seulement] ─→ approve ─→ post_forecast
-fetch_climate    │
-fetch_geojson    ┘
+config/<maladie>       ┐  (upload, un par maladie)
+external_data/<niveau> │  (upload, un par niveau)
+fetch_disease          ├─→ validate_inputs ─→ forecast ─→ [calc_orgunit_alerts, CSB seulement] ─→ approve ─→ post_forecast
+fetch_climate          │
+fetch_geojson          ┘
 ```
 
-- **`config.json` : un par maladie.** On le téléverse dans le premier run de la maladie ; il est remis automatiquement
-  dans `input/` pour ses 2 autres runs. Soit 3 uploads par cycle.
-- **`external_data.csv` : facultatif, un par niveau** (fokontany pour ADJ et COM, CSB pour CSB). Ce n'est pas un item ;
-  le run indique `external_data: uploaded | none`, et le fichier est remis dans `input/` pour les autres runs du même niveau.
+- **`config.json` : obligatoire, un par maladie.** On le téléverse depuis l'interface dans le premier run de la maladie ;
+  il est remis automatiquement dans `input/` pour ses 2 autres runs. Soit 3 uploads par cycle. Le serveur y écrit
+  `forecast_start`, comme `jq` dans `pivot_forecast.sh`. L'interface affiche le fichier attendu :
+  `config_malaria.json`, `config_diarrhea.json`, `config_respiratory.json` (pour `Respinf`).
+- **`external_data.csv` : obligatoire, un par niveau** (`external_data/fkt` pour ADJ et COM, `external_data/csb` pour CSB).
+  Même principe : 2 uploads par cycle. Un fichier qui ne correspond pas au niveau du run est refusé (422).
+- Les fichiers de `forecast_assets/` du dépôt servent de modèles.
 - Remplacer un fichier **déjà utilisé** demande `confirm=true` et ne remet à zéro **que le run ouvert** ; les runs déjà
   calculés avec l'ancien fichier gardent leur `success` et sont listés dans `impact.stale_runs`.
+- `calc_orgunit_alerts` (CSB) calcule les seuils d'alerte avec `ALERT_NAME` (commande `pridec etl calc_orgUnit_alerts`).
 - `approve` est une décision : `POST /pipeline/runs/current/approve` avec `{"decision": "approve"}`, ou `"reject"` pour
   refaire le forecast.
 - Le run se **ferme** quand `post_forecast` réussit. On peut aussi l'**abandonner** (`DELETE /pipeline/runs/current`) :
@@ -61,14 +72,14 @@ fetch_geojson    ┘
 
 | Règle | Contenu |
 |---|---|
-| R1 | Tout item est obligatoire (`external_data.csv` n'est pas un item ; `config.json` est un item par maladie). |
+| R1 | Tout item est obligatoire (`config.json` : un item par maladie ; `external_data.csv` : un item par niveau). |
 | R2 | Un item ne démarre que si ses prérequis sont en `success`. |
 | R3 | Un seul job à la fois. **Le verrou n'expire jamais.** |
 | R4 | Une étape ne vaut que si la précédente vaut. Sinon, les suivantes sont bloquées, mais leurs `success` sont conservés. |
 | R5 | Défaire ce qui était validé exige `confirm=true` : relancer un `success`, remplacer un fichier déjà utilisé, rouvrir un couple fermé. |
 | R6 | Un seul run de forecast ouvert à la fois. |
 
-Un refus répond **409** (422 pour un `config.json` dont le `forecast_start` n'est pas le cycle) et n'écrit rien.
+Un refus répond **409** (422 pour un `external_data.csv` qui ne correspond pas au niveau du run) et n'écrit rien.
 Tous les messages sont en anglais :
 
 ```json
@@ -113,11 +124,12 @@ Sans `confirm=true`, le serveur décrit l'impact au lieu d'agir :
 etlui affiche ce constat, demande l'approbation, puis renvoie la même requête avec `?confirm=true`.
 Le paramètre existe sur toutes les routes de lancement, sur `POST` et `DELETE /input/files/{name}` et sur `POST /pipeline/runs`.
 
-## Mode test (DRYRUN)
+## Mode test
 
-Le bouton **« Mode test » (test = OUI)** d'etlui correspond à **`DRYRUN=true`**.
-- On bascule avec `PUT /pipeline/mode` `{"dry_run": true | false}`. Le serveur écrit `DRYRUN` dans la config dynamique,
-  que les scripts ETL lisent : en test, ils n'écrivent rien dans DHIS2. Le `.env` ne donne que la valeur de départ.
+Le bouton **« Mode test » (test = OUI)** d'etlui bascule etlhub en mode test.
+- On bascule avec `PUT /pipeline/mode` `{"dry_run": true | false}`.
+- Ce mode passe `DRYRUN=True` à `import_gee` (import partiel rapide) et à `post_forecast` (aucune écriture dans PRIDE-C).
+  À ne pas confondre avec l'option `DRYRUN` de chaque commande `pridec`, dont l'effet varie d'une commande à l'autre.
 - En test, les checkpoints, runs et verrou sont gardés **dans Redis seulement**, jamais dans `logs/etlhub.db`.
   Les données de production ne sont ni visibles ni modifiées. Le cycle reste le mois réel ; les mêmes règles s'appliquent.
 - **Revenir en production** (`dry_run: false`) efface ce qui est dans Redis. S'il y a des données de test,
@@ -135,19 +147,19 @@ Le bouton **« Mode test » (test = OUI)** d'etlui correspond à **`DRYRUN=true`
 | POST | `/pipeline/runs/current/approve` | `{"decision": "approve" \| "reject"}` |
 | PUT | `/pipeline/mode` | `{"dry_run": true \| false}` : mode test ou production (`confirm=true` pour quitter le test avec des données) |
 | DELETE | `/pipeline/lock` | Libère le verrou d'un job dont le worker a été tué ; l'item `running` passe en `error` |
-| POST | `/calc_orgunit_alerts` | **501** : pas encore implémenté (voir les limites) |
+| POST | `/calc_orgunit_alerts` | Job des runs CSB, entre `forecast` et `approve` |
 
-Toutes ces routes exigent une session etlui.
+Toutes ces routes exigent une session etlui. La route de la décision `approve_imports` reste à définir.
 
 ## Limites connues
 
-- **`calc_orgunit_alerts` n'existe pas encore** (aucun script). Sa route répond 501 : **les runs CSB, et donc le cycle,
-  ne peuvent pas se terminer** tant qu'il n'est pas implémenté.
 - **Un worker tué bloque tout** jusqu'à `DELETE /pipeline/lock`.
 - **Un cycle non terminé à la fin du mois reste inachevé** : le mois suivant repart de zéro.
-- **Mode test** : `build_analytics` ignore `DRYRUN` et relance quand même l'analytics DHIS2.
+- **`build_analytics` lancé hors etlhub** (interface DHIS2) n'est pas vu : l'étape ① reste non valide.
 - `DELETE /output/reset` et les jobs lancés en ligne de commande (`./pridec`) échappent à ces contrôles.
-- **etlui** est branché (2026-10-09), mais n'a été vérifié qu'avec une API simulée. le tableau de bord d'etlui n'a plus de bouton « reset output » (`DELETE /output/reset` reste disponible dans l'API).
+- **etlui** est branché (2026-10-09), mais n'a été vérifié qu'avec une API simulée. Le tableau de bord d'etlui n'a plus de bouton « reset output » (`DELETE /output/reset` reste disponible dans l'API).
+- Points encore ouverts (valeur de `forecast_start`, limite CSB, `calc_orgunit_alerts` Celery ou synchrone, colonnes
+  qui distinguent fkt et csb, config de test) : voir la fin de [pipeline-checkpoints-diagrams.md](pipeline-checkpoints-diagrams.md).
 
 ## Où est le code
 

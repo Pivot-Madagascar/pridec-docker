@@ -34,11 +34,13 @@ Re-check against the code before relying on a line number or a default.
 | POST | `/pipeline/runs/current/approve` | `pipeline_router` | Body `{decision: approve\|reject}`. `{couple, decision}` | Session |
 | PUT | `/pipeline/mode` | `pipeline_router` | Body `{dry_run}`, `?confirm`. Writes `DRYRUN` to the dynamic config; test mode keeps checkpoints in Redis (`pipeline:dry_run:db`) only; leaving it discards them (needs confirm when there are any). 409 while a job runs | Session |
 | DELETE | `/pipeline/lock` | `pipeline_router` | Frees the job lock (killed worker; the lock never expires), its running checkpoint → `error`. `{released: job_id\|null}` | Session |
-| POST | `/calc_orgunit_alerts` | `analytics_router` | **501**: no script implements it yet (item of the CSB runs) | Session |
+| POST | `/calc_orgunit_alerts` | `analytics_router` | **501**: no script implements it yet (item of the CSB runs). Target (2026-10-12): runs `pridec etl calc_orgUnit_alerts` | Session |
 | DELETE | `/output/reset` | `forecast_report_router` | `rm -rf output/` | `.output_sig` exists (not real auth) |
 | GET | `/` | `main.py` | 307 redirect to `/docs` | — |
 
 Every launch (`/import_*`, `/fetch_*`, `/validate_inputs`, `/build_analytics`, `/calc_csb_alerts`, `/post_forecast`, `/update_key`, `/forecast/`) and `POST`/`DELETE /input/files/{name}` go through the pipeline gate (`etlhub/docs/pipeline-checkpoints.md`): **409** `{message}` while another job runs, when a prerequisite is not in `success`, or for a forecast-run job (`/fetch_*`, `/validate_inputs`, `/forecast/`, `/post_forecast`, input files) without an open run. Undoing a `success` needs `?confirm=true`, otherwise **409** `{code: "confirmation_required", message, impact{item, step, current_step, reset_items, blocked_steps, kept_items}}` and nothing is written. All messages are in English.
+
+The table above is the code today (2026-10-09 design). The pipeline design was revised on 2026-10-12 and is **not implemented yet** (`etlhub/docs/pipeline-checkpoints.md` §8, steps 15–21): `/calc_csb_alerts` leaves the pipeline (phase 3 = `build_analytics` → `update_key`); a decision item `approve_imports` gates `build_analytics` in phase 1 (route to define); `external_data/<fkt|csb>` becomes a mandatory item, and an upload whose level does not match the run gets 422; `config.json` uploads get `forecast_start` written by the server instead of the 422; test mode passes `DRYRUN=True` to `import_gee` and `post_forecast` only.
 
 Router prefixes (`main.py`): `ingest`, `analytics`, `validation`, `auth` have none; `forecast` `/forecast`; `tracking` `/api/tracking`; `forecast_report` `/output`; `input` `/input`; `config` `/api/config`. `auth_router` has no OpenAPI tag.
 
