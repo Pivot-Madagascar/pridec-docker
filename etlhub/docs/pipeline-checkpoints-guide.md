@@ -1,87 +1,87 @@
-# Suivi du pipeline : guide rapide
+# Pipeline tracking: quick guide
 
-Ce guide explique en bref comment etlhub suit et contrôle le pipeline mensuel (conception cible, révisée le 2026-10-12).
-- Le workflow lui-même (3 phases, commandes `pridec`, ordre) suit la documentation de référence (`pivot_forecast.sh`), qui fait foi.
-- La conception complète, et ce qui est déjà implémenté, sont dans [pipeline-checkpoints.md](pipeline-checkpoints.md).
-- Les schémas sont dans [pipeline-checkpoints-diagrams.md](pipeline-checkpoints-diagrams.md).
+This guide briefly explains how etlhub tracks and controls the monthly pipeline (target design, revised 2026-10-12).
+- The workflow itself (3 phases, `pridec` commands, order) follows the reference documentation (`pivot_forecast.sh`), which is authoritative.
+- The full design, and what is already implemented, are in [pipeline-checkpoints.md](pipeline-checkpoints.md).
+- The diagrams are in [pipeline-checkpoints-diagrams.md](pipeline-checkpoints-diagrams.md).
 
-> Le code applique cette révision, sauf `calc_orgunit_alerts` (toujours 501), le périmètre du mode test et le contrôle
-> de niveau de `external_data` : voir l'état en tête de [pipeline-checkpoints.md](pipeline-checkpoints.md).
+> The code applies this revision, except `calc_orgunit_alerts` (still 501), the test-mode scope and the level check
+> of `external_data`: see the status at the top of [pipeline-checkpoints.md](pipeline-checkpoints.md).
 
-## En une phrase
+## In one sentence
 
-etlhub enregistre, pour chaque mois, ce qui a **vraiment réussi**. Il **refuse** tout ce qui sort de l'ordre prévu,
-n'exécute **qu'un seul job à la fois**, traite **un seul forecast (source × maladie) à la fois**, et demande une
-**confirmation** avant de défaire ce qui était validé.
+etlhub records, for each month, what **really succeeded**. It **refuses** anything out of the planned order,
+runs **only one job at a time**, handles **only one forecast (source × disease) at a time**, and asks for a
+**confirmation** before undoing what was validated.
 
-## Le cycle
+## The cycle
 
-Un **cycle** est le run complet du pipeline, **une fois par mois**. Il est désigné par le mois en cours (`YYYYMM`).
-- Il s'ouvre au premier lancement du mois.
-- Au **changement de mois**, un nouveau cycle commence automatiquement : l'ancien reste inachevé s'il n'était pas fini,
-  et son run ouvert est abandonné.
-- Une fois les 3 étapes valides, il est **fermé** : le mois ne peut plus tourner une seconde fois.
+A **cycle** is the full run of the pipeline, **once a month**. It is named after the current month (`YYYYMM`).
+- It opens at the first launch of the month.
+- When the **month changes**, a new cycle starts automatically: the old one stays unfinished if it was not finished,
+  and its open run is abandoned.
+- Once the 3 steps are valid, it is **closed**: the month cannot run a second time.
 
-| # | Étape | Ce qu'il faut réussir | Ordre |
+| # | Step | What must succeed | Order |
 |---|---|---|---|
-| ① | `data_import` (5 items) | `import_gee`, `import_pivot_com`, `import_pivot_csb`, la décision `approve_imports`, puis `build_analytics` | Imports libres ; `approve_imports` après les 2 imports pivot ; `build_analytics` en dernier |
-| ② | `forecast` (71 items) | **9 runs**, un par couple source × maladie (ADJ, COM, CSB × Malaria, Diarrhea, Respinf) | Runs libres entre eux, un seul ouvert à la fois |
-| ③ | `system_update` (2 items) | `build_analytics` → `update_key` | Imposé |
+| ① | `data_import` (5 items) | `import_gee`, `import_pivot_com`, `import_pivot_csb`, the `approve_imports` decision, then `build_analytics` | Imports in any order; `approve_imports` after the 2 pivot imports; `build_analytics` last |
+| ② | `forecast` (71 items) | **9 runs**, one per source × disease pair (ADJ, COM, CSB × Malaria, Diarrhea, Respinf) | Runs in any order, only one open at a time |
+| ③ | `system_update` (2 items) | `build_analytics` → `update_key` | Fixed |
 
-- **`approve_imports`** est une décision humaine : vérifier que les cas COM sont < 100 et les cas CSB < une limite (encore à fixer).
-- **`build_analytics`** doit passer par l'API etlhub. Lancé depuis l'interface DHIS2, etlhub ne le voit pas et l'étape ① reste non valide.
+- **`approve_imports`** is a human decision: check that COM cases are < 100 and CSB cases < a limit (not set yet).
+- **`build_analytics`** must go through the etlhub API. Launched from the DHIS2 interface, etlhub does not see it and step ① stays invalid.
 
-### Un run de forecast
+### A forecast run
 
-On l'ouvre avec `POST /pipeline/runs` `{"source": "CSB", "disease": "Malaria"}`. L'ouverture **vide `input/` et `output/`**,
-remet les fichiers déjà téléversés et fixe le contexte du run :
+Open it with `POST /pipeline/runs` `{"source": "CSB", "disease": "Malaria"}`. Opening **empties `input/` and `output/`**,
+copies back the files already uploaded and sets the run context:
 
-| Couple | `DISEASE_CODE` | `OU_LEVEL` | `ALERT_NAME` |
+| Pair | `DISEASE_CODE` | `OU_LEVEL` | `ALERT_NAME` |
 |---|---|---|---|
 | ADJ/x | `pridec_historic_ADJ<x>` | 6 | — |
 | COM/x | `pridec_historic_COM<x>` | 6 | — |
 | CSB/x | `pridec_historic_CSB<x>` | 5 | `CSB<x>Vigilance` |
 
-Ce contexte est réécrit dans la config dynamique à chaque job du run : il n'y a rien à changer dans la page Admin.
+This context is rewritten into the dynamic config at each job of the run: there is nothing to change in the Admin page.
 
-Items d'un run, avec leurs prérequis :
+Items of a run, with their prerequisites:
 
 ```
-config/<maladie>       ┐  (upload, un par maladie)
-external_data/<niveau> │  (upload, un par niveau)
-fetch_disease          ├─→ validate_inputs ─→ forecast ─→ [calc_orgunit_alerts, CSB seulement] ─→ approve ─→ post_forecast
-fetch_climate          │
-fetch_geojson          ┘
+config/<disease>      ┐  (upload, one per disease)
+external_data/<level> │  (upload, one per level)
+fetch_disease         ├─→ validate_inputs ─→ forecast ─→ [calc_orgunit_alerts, CSB only] ─→ approve ─→ post_forecast
+fetch_climate         │
+fetch_geojson         ┘
 ```
 
-- **`config.json` : obligatoire, un par maladie.** On le téléverse depuis l'interface dans le premier run de la maladie ;
-  il est remis automatiquement dans `input/` pour ses 2 autres runs. Soit 3 uploads par cycle. Le serveur y écrit
-  `forecast_start`, comme `jq` dans `pivot_forecast.sh`. L'interface affiche le fichier attendu :
-  `config_malaria.json`, `config_diarrhea.json`, `config_respiratory.json` (pour `Respinf`).
-- **`external_data.csv` : obligatoire, un par niveau** (`external_data/fkt` pour ADJ et COM, `external_data/csb` pour CSB).
-  Même principe : 2 uploads par cycle. Un fichier qui ne correspond pas au niveau du run est refusé (422).
-- Les fichiers de `forecast_assets/` du dépôt servent de modèles.
-- Remplacer un fichier **déjà utilisé** demande `confirm=true` et ne remet à zéro **que le run ouvert** ; les runs déjà
-  calculés avec l'ancien fichier gardent leur `success` et sont listés dans `impact.stale_runs`.
-- `calc_orgunit_alerts` (CSB) calcule les seuils d'alerte avec `ALERT_NAME` (commande `pridec etl calc_orgUnit_alerts`).
-- `approve` est une décision : `POST /pipeline/runs/current/approve` avec `{"decision": "approve"}`, ou `"reject"` pour
-  refaire le forecast.
-- Le run se **ferme** quand `post_forecast` réussit. On peut aussi l'**abandonner** (`DELETE /pipeline/runs/current`) :
-  rien n'est publié, et ses items repassent en `pending`.
+- **`config.json`: mandatory, one per disease.** Upload it from the interface in the first run of the disease;
+  it is copied back into `input/` automatically for its 2 other runs. That makes 3 uploads per cycle. The server writes
+  `forecast_start` into it, as `jq` does in `pivot_forecast.sh`. The interface shows the expected file:
+  `config_malaria.json`, `config_diarrhea.json`, `config_respiratory.json` (for `Respinf`).
+- **`external_data.csv`: mandatory, one per level** (`external_data/fkt` for ADJ and COM, `external_data/csb` for CSB).
+  Same principle: 2 uploads per cycle. A file that does not match the run's level is refused (422).
+- The files in the repository's `forecast_assets/` serve as templates.
+- Replacing a file **already used** needs `confirm=true` and resets **only the open run**; the runs already
+  computed with the old file keep their `success` and are listed in `impact.stale_runs`.
+- `calc_orgunit_alerts` (CSB) computes the alert thresholds with `ALERT_NAME` (command `pridec etl calc_orgUnit_alerts`).
+- `approve` is a decision: `POST /pipeline/runs/current/approve` with `{"decision": "approve"}`, or `"reject"` to
+  redo the forecast.
+- The run **closes** when `post_forecast` succeeds. It can also be **abandoned** (`DELETE /pipeline/runs/current`):
+  nothing is published, and its items go back to `pending`.
 
-## Les règles
+## The rules
 
-| Règle | Contenu |
+| Rule | Content |
 |---|---|
-| R1 | Tout item est obligatoire (`config.json` : un item par maladie ; `external_data.csv` : un item par niveau). |
-| R2 | Un item ne démarre que si ses prérequis sont en `success`. |
-| R3 | Un seul job à la fois. **Le verrou n'expire jamais.** |
-| R4 | Une étape ne vaut que si la précédente vaut. Sinon, les suivantes sont bloquées, mais leurs `success` sont conservés. |
-| R5 | Défaire ce qui était validé exige `confirm=true` : relancer un `success`, remplacer un fichier déjà utilisé, rouvrir un couple fermé. |
-| R6 | Un seul run de forecast ouvert à la fois. |
+| R1 | Every item is mandatory (`config.json`: one item per disease; `external_data.csv`: one item per level). |
+| R2 | An item starts only if its prerequisites are in `success`. |
+| R3 | Only one job at a time. **The lock never expires.** |
+| R4 | A step only counts if the previous one counts. Otherwise the following ones are blocked, but their `success` statuses are kept. |
+| R5 | Undoing what was validated needs `confirm=true`: relaunching a `success`, replacing a file already used, reopening a closed pair. |
+| R6 | Only one forecast run open at a time. |
 
-Un refus répond **409** (422 pour un `external_data.csv` qui ne correspond pas au niveau du run) et n'écrit rien.
-Tous les messages sont en anglais :
+A refusal answers **409** (422 for an `external_data.csv` that does not match the run's level) and writes nothing.
+All messages are in English:
 
 ```json
 {"message": "build_analytics needs data_import/import_gee in success first"}
@@ -91,21 +91,21 @@ Tous les messages sont en anglais :
 {"message": "Cycle 202610 is complete: the next cycle starts next month"}
 ```
 
-## Statuts d'un item
+## Item statuses
 
-| Statut | Signification |
+| Status | Meaning |
 |---|---|
-| `pending` | jamais lancé, ou remis à zéro (pas de ligne en base) |
-| `running` | lancé, pas encore terminé |
-| `success` | réussi : compte pour valider l'étape |
-| `error` | échec : se relance sans confirmation |
+| `pending` | never launched, or reset (no row in the database) |
+| `running` | launched, not finished yet |
+| `success` | succeeded: counts to validate the step |
+| `error` | failed: relaunches without confirmation |
 
-**Dans un run**, relancer ou remplacer un item remet en `pending` **tout ce qui en dépend** dans le run.
-Par exemple, relancer `fetch_climate` remet `validate_inputs` et `forecast` en `pending`.
+**In a run**, relaunching or replacing an item resets **everything that depends on it** in the run to `pending`.
+For example, relaunching `fetch_climate` resets `validate_inputs` and `forecast` to `pending`.
 
 ## Confirmation (R5)
 
-Sans `confirm=true`, le serveur décrit l'impact au lieu d'agir :
+Without `confirm=true`, the server describes the impact instead of acting:
 
 ```json
 {
@@ -122,56 +122,56 @@ Sans `confirm=true`, le serveur décrit l'impact au lieu d'agir :
 }
 ```
 
-etlui affiche ce constat, demande l'approbation, puis renvoie la même requête avec `?confirm=true`.
-Le paramètre existe sur toutes les routes de lancement, sur `POST` et `DELETE /input/files/{name}` et sur `POST /pipeline/runs`.
+etlui shows this impact, asks for approval, then resends the same request with `?confirm=true`.
+The parameter exists on every launch route, on `POST` and `DELETE /input/files/{name}` and on `POST /pipeline/runs`.
 
-## Mode test
+## Test mode
 
-Le bouton **« Mode test » (test = OUI)** d'etlui bascule etlhub en mode test.
-- On bascule avec `PUT /pipeline/mode` `{"dry_run": true | false}`.
-- Ce mode passe `DRYRUN=True` à `import_gee` (import partiel rapide) et à `post_forecast` (aucune écriture dans PRIDE-C).
-  À ne pas confondre avec l'option `DRYRUN` de chaque commande `pridec`, dont l'effet varie d'une commande à l'autre.
-- En test, les checkpoints, runs et verrou sont gardés **dans Redis seulement**, jamais dans `logs/etlhub.db`.
-  Les données de production ne sont ni visibles ni modifiées. Le cycle reste le mois réel ; les mêmes règles s'appliquent.
-- **Revenir en production** (`dry_run: false`) efface ce qui est dans Redis. S'il y a des données de test,
-  il faut `confirm=true` (409 `confirmation_required` sinon, avec le run ouvert et les items réussis dans `impact`).
-- La bascule est refusée pendant qu'un job tourne.
-- `GET /pipeline/checkpoints` indique le mode (`dry_run`).
+The etlui **"Test mode" (test = YES)** button switches etlhub to test mode.
+- Switch with `PUT /pipeline/mode` `{"dry_run": true | false}`.
+- This mode passes `DRYRUN=True` to `import_gee` (quick partial import) and to `post_forecast` (no write to PRIDE-C).
+  Not to be confused with the `DRYRUN` option of each `pridec` command, whose effect varies from one command to another.
+- In test mode, checkpoints, runs and the lock are kept **in Redis only**, never in `logs/etlhub.db`.
+  Production data is neither visible nor changed. The cycle stays the real month; the same rules apply.
+- **Going back to production** (`dry_run: false`) erases what is in Redis. If there is test data,
+  `confirm=true` is needed (otherwise 409 `confirmation_required`, with the open run and the successful items in `impact`).
+- Switching is refused while a job runs.
+- `GET /pipeline/checkpoints` shows the mode (`dry_run`).
 
-## Les endpoints du suivi
+## Tracking endpoints
 
-| Méthode | Route | Rôle |
+| Method | Route | Role |
 |---|---|---|
-| GET | `/pipeline/checkpoints?cycle=YYYYMM` | État du cycle : `current_step`, `cycle_state`, `run`, `lock`, étapes (`done`, `accessible`) et items (`status`, `launchable`) |
-| POST | `/pipeline/runs` | Ouvre le run d'un couple |
-| DELETE | `/pipeline/runs/current` | Abandonne le run ouvert |
+| GET | `/pipeline/checkpoints?cycle=YYYYMM` | State of the cycle: `current_step`, `cycle_state`, `run`, `lock`, steps (`done`, `accessible`) and items (`status`, `launchable`) |
+| POST | `/pipeline/runs` | Opens the run of a pair |
+| DELETE | `/pipeline/runs/current` | Abandons the open run |
 | POST | `/pipeline/runs/current/approve` | `{"decision": "approve" \| "reject"}` |
-| POST | `/pipeline/imports/approve` | `{"decision": "approve" \| "reject"}` : décision `approve_imports` de l'étape ① |
-| PUT | `/pipeline/mode` | `{"dry_run": true \| false}` : mode test ou production (`confirm=true` pour quitter le test avec des données) |
-| DELETE | `/pipeline/lock` | Libère le verrou d'un job dont le worker a été tué ; l'item `running` passe en `error` |
-| POST | `/calc_orgunit_alerts` | Job des runs CSB, entre `forecast` et `approve` |
+| POST | `/pipeline/imports/approve` | `{"decision": "approve" \| "reject"}`: the `approve_imports` decision of step ① |
+| PUT | `/pipeline/mode` | `{"dry_run": true \| false}`: test or production mode (`confirm=true` to leave test mode with data) |
+| DELETE | `/pipeline/lock` | Frees the lock of a job whose worker was killed; the `running` item becomes `error` |
+| POST | `/calc_orgunit_alerts` | Job of the CSB runs, between `forecast` and `approve` (501 today: no script) |
 
-Toutes ces routes exigent une session etlui.
+All these routes require an etlui session.
 
-## Limites connues
+## Known limits
 
-- **Un worker tué bloque tout** jusqu'à `DELETE /pipeline/lock`.
-- **Un cycle non terminé à la fin du mois reste inachevé** : le mois suivant repart de zéro.
-- **`build_analytics` lancé hors etlhub** (interface DHIS2) n'est pas vu : l'étape ① reste non valide.
-- `DELETE /output/reset` et les jobs lancés en ligne de commande (`./pridec`) échappent à ces contrôles.
-- **etlui** est branché (2026-10-09), mais n'a été vérifié qu'avec une API simulée. Le tableau de bord d'etlui n'a plus de bouton « reset output » (`DELETE /output/reset` reste disponible dans l'API).
-- Points encore ouverts (valeur de `forecast_start`, limite CSB, `calc_orgunit_alerts` Celery ou synchrone, colonnes
-  qui distinguent fkt et csb, config de test) : voir la fin de [pipeline-checkpoints-diagrams.md](pipeline-checkpoints-diagrams.md).
+- **A killed worker blocks everything** until `DELETE /pipeline/lock`.
+- **A cycle not finished by the end of the month stays unfinished**: the next month starts from zero.
+- **`build_analytics` launched outside etlhub** (DHIS2 interface) is not seen: step ① stays invalid.
+- `DELETE /output/reset` and jobs launched from the command line (`./pridec`) bypass these controls.
+- **etlui** is connected (2026-10-09), but has only been checked with a mocked API. The etlui dashboard no longer has a "reset output" button (`DELETE /output/reset` is still available in the API).
+- Still open (value of `forecast_start`, CSB limit, `calc_orgunit_alerts` Celery or synchronous, columns
+  that distinguish fkt and csb, test config): see the end of [pipeline-checkpoints-diagrams.md](pipeline-checkpoints-diagrams.md).
 
-## Où est le code
+## Where the code is
 
-| Fichier | Contenu |
+| File | Content |
 |---|---|
-| `domain/pipeline.py` | Étapes, items, prérequis, règles (code pur, sans I/O) |
-| `infrastructure/checkpoint_store.py` | Tables `checkpoints`, `pipeline_lock`, `forecast_runs` (`logs/etlhub.db`), contexte du run, vidage de `input/` et `output/` |
-| `api/routers/pipeline_router.py` | Routes du suivi et des runs |
-| `infrastructure/tasks.py` | Prise du verrou au lancement, résultat en fin de job |
+| `domain/pipeline.py` | Steps, items, prerequisites, rules (pure code, no I/O) |
+| `infrastructure/checkpoint_store.py` | Tables `checkpoints`, `pipeline_lock`, `forecast_runs` (`logs/etlhub.db`), run context, emptying of `input/` and `output/` |
+| `api/routers/pipeline_router.py` | Tracking and run routes |
+| `infrastructure/tasks.py` | Lock taken at launch, result at the end of the job |
 | `tests/infrastructure/test_checkpoint_store.py`, `tests/api/test_pipeline_router.py` | Tests |
 
-**Ajouter un nouveau type de job ?** Ajoute-le dans `domain/pipeline.py` : dans `PIPELINE`, et dans `RUN_TASKS` s'il
-appartient à un run. Sinon, son lancement échoue.
+**Adding a new job type?** Add it in `domain/pipeline.py`: in `PIPELINE`, and in `RUN_TASKS` if it
+belongs to a run. Otherwise its launch fails.
