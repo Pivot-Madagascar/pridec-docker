@@ -1,92 +1,62 @@
 <template>
   <div class="space-y-0">
-    <!-- <HeroSection /> -->
-
     <section class="dashboard-section">
       <h2 class="section-header">ETL Pipeline</h2>
-      <p class="section-subtitle">Follow the workflow step by step</p>
+      <p class="section-subtitle">
+        <template v-if="state">
+          Cycle {{ state.cycle }} · {{ state.cycle_state === 'closed' ? 'complete' : `current step: ${state.current_step}` }}
+        </template>
+        <template v-else>Loading the pipeline state…</template>
+      </p>
 
-      <Accordion :items="accordionItems" :default-open="['dataImport', 'forecastCreation', 'systemUpdate']">
+      <!-- Before step 1: the mode applies to the whole cycle. -->
+      <ModeToggle :dry-run="state?.dry_run" :disabled="busy || state?.lock != null" @change="setMode" />
+
+      <div v-if="state?.lock" class="lock-banner" role="status">
+        <span>Running: <strong>{{ state.lock.task }}</strong> ({{ state.lock.job_id }}) since {{ state.lock.acquired_at }}. One job at a time.</span>
+        <button type="button" class="lock-release" :disabled="busy" @click="pendingRelease = true">Release lock</button>
+      </div>
+
+      <Accordion :items="accordionItems" :default-open="['dataImport', 'forecast', 'systemUpdate']">
         <template #content-dataImport>
-          <div class="data-import-section">
-            <div class="action-grid" :class="{ gapless: dataImportActions.length <= 2 }">
-              <ActionCard
-                v-for="action in dataImportActions"
-                :key="action.key"
-                :action="action"
-                @action-click="handleActionClick"
-              />
-            </div>
+          <div class="action-grid">
+            <ActionCard v-for="card in cards('data_import')" :key="card.key" :action="card" @action-click="launchItem" />
           </div>
         </template>
 
-        <template #content-externalData>
-          <div class="external-data-section">
-            <p class="upload-intro">Each file is uploaded on its own: drop or browse a file, preview it, then upload it.</p>
-            <div class="upload-grid">
-              <FileDropzone
-                v-for="field in uploadFields"
-                :key="field.key"
-                v-model="uploadFiles[field.key]"
-                :label="field.label"
-                :description="field.description"
-                :accept="field.accept"
-                :server-file="serverFiles[field.key]"
-                :deleting="deleting === field.key"
-                :uploading="uploading === field.key"
-                @upload="file => handleUpload(field.key, file)"
-                @delete="pendingDelete = field"
-                @preview-local="file => openPreview(field.key, file)"
-                @preview-server="openPreview(field.key, 'server')"
-              />
-            </div>
-          </div>
-        </template>
-
-        <template #content-forecastCreation>
-          <div class="forecast-creation-section">
-            <StepperCarousel :steps="pipelineSteps" :initial-step="0" @action-click="handleActionClick" @step-change="handleStepChange">
-              <template #step-1>
-                <ForecastConfigForm />
-              </template>
-            </StepperCarousel>
-          </div>
+        <template #content-forecast>
+          <ForecastRuns
+            :state="state"
+            :server-files="serverFiles"
+            :busy="busy"
+            :upload-file="upload"
+            @open="openRun"
+            @abandon="abandonRun"
+            @launch="launchItem"
+            @decide="decide"
+            @delete="name => (pendingDelete = name)"
+            @preview="openPreview"
+            @view-report="showReportModal = true"
+          />
         </template>
 
         <template #content-systemUpdate>
-          <div class="system-update-section">
-            <div class="action-grid" :class="{ gapless: systemUpdateActions.length <= 2 }">
-              <ActionCard
-                v-for="action in systemUpdateActions"
-                :key="action.key"
-                :action="action"
-                @action-click="handleActionClick"
-              />
-            </div>
+          <div class="action-grid action-grid-4">
+            <ActionCard v-for="card in cards('system_update')" :key="card.key" :action="card" @action-click="launchItem" />
           </div>
         </template>
       </Accordion>
     </section>
 
-    <Notifications 
-      :notification="notification"
-      :notificationType="notificationType"
-    />
-
     <RecentActivity :activityLog="activityLog" />
 
-    <ForecastModal 
-      v-model="showForecastModal"
-      @job-created="handleForecastJobCreated"
-    />
+    <ForecastReportModal v-model="showReportModal" />
 
-    <ForecastReportModal 
-      v-model="showReportModal"
-    />
+    <ImpactDialog :pending="pending" :busy="busy" @confirm="confirm" @cancel="cancel" />
 
     <PreviewDialog
       :open="previewCurrent !== null"
-      :title="previewCurrent ? fieldLabel(previewCurrent.name) : ''"
+      :title="previewCurrent ? FILE_LABELS[previewCurrent.name] : ''"
       :source="previewCurrent?.source ?? 'server'"
       :loading="previewLoading"
       :error="previewError"
@@ -98,125 +68,65 @@
 
     <ConfirmDialog
       :open="pendingDelete !== null"
-      :title="`Delete ${pendingDelete?.label ?? ''}?`"
+      :title="`Delete ${pendingDelete ? FILE_LABELS[pendingDelete] : ''}?`"
       confirm-label="Delete"
-      :busy="deleting !== null"
+      :busy="busy"
       @confirm="confirmDelete"
       @cancel="pendingDelete = null"
     >
-      The file <strong>input/{{ pendingDelete?.label }}</strong> will be removed from the server. This cannot be undone.
-      <template v-if="pendingDelete?.key === 'config'">
-        "Validate inputs" will fail until a new config.json is uploaded.
-      </template>
-      <template v-else>
-        Run "Validate inputs" again so the forecast stops using it.
-      </template>
+      The file <strong>input/{{ pendingDelete ? FILE_LABELS[pendingDelete] : '' }}</strong> of the open run will be removed.
+      Once it was used, the server asks for a confirmation and the run starts again from "Validate inputs".
+    </ConfirmDialog>
+
+    <ConfirmDialog
+      :open="pendingRelease"
+      title="Release the job lock?"
+      confirm-label="Release"
+      :busy="busy"
+      @confirm="confirmRelease"
+      @cancel="pendingRelease = false"
+    >
+      Only when the worker of <strong>{{ state?.lock?.task }}</strong> is dead: the lock never expires on its own.
+      The running item becomes "error" and can be relaunched.
     </ConfirmDialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, toRef, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 
 import Accordion from '@/views/LandingPage/components/Accordion.vue'
-import Notifications from '@/views/LandingPage/components/Notifications.vue'
-import RecentActivity from '@/views/LandingPage/components/RecentActivity.vue'
-import StepperCarousel from '@/views/LandingPage/components/StepperCarousel.vue'
-import ForecastModal from '@/views/LandingPage/components/ForecastModal.vue'
-import ForecastReportModal from '@/views/LandingPage/components/ForecastReportModal.vue'
-import ForecastConfigForm from '@/views/LandingPage/components/ForecastConfigForm.vue'
 import ActionCard from '@/views/LandingPage/components/ActionCard.vue'
-import FileDropzone from '@/views/LandingPage/components/FileDropzone.vue'
-import ConfirmDialog from '@/views/LandingPage/components/ConfirmDialog.vue'
-import PreviewDialog from '@/views/LandingPage/components/PreviewDialog.vue'
 import ConfigPreview from '@/views/LandingPage/components/ConfigPreview.vue'
+import ConfirmDialog from '@/views/LandingPage/components/ConfirmDialog.vue'
 import CsvPreview from '@/views/LandingPage/components/CsvPreview.vue'
+import ForecastReportModal from '@/views/LandingPage/components/ForecastReportModal.vue'
+import ForecastRuns from '@/views/LandingPage/components/ForecastRuns.vue'
+import ImpactDialog from '@/views/LandingPage/components/ImpactDialog.vue'
+import ModeToggle from '@/views/LandingPage/components/ModeToggle.vue'
+import PreviewDialog from '@/views/LandingPage/components/PreviewDialog.vue'
+import RecentActivity from '@/views/LandingPage/components/RecentActivity.vue'
 
-import { useNotification } from '@/composables/useNotification'
 import { useActivityLog } from '@/composables/useActivityLog'
-import { useEtlPipeline } from '@/composables/useEtlPipeline'
-import { useInputUpload } from '@/composables/useInputUpload'
 import { useInputPreview } from '@/composables/useInputPreview'
-import { useForecastConfigStore } from '@/stores/forecastConfig'
-import { buildDataImportActions, buildPipelineSteps, buildSystemUpdate } from '@/config/data'
+import { usePipeline } from '@/composables/usePipeline'
+import { jobOf, labelOf, step, toCard } from '@/config/pipeline'
+import type { InputName } from '@/types/inputs'
+import type { StepName } from '@/types/pipeline'
 
-// Composables
-const { notification, notificationType, showNotification } = useNotification()
-const { activityLog, addActivity } = useActivityLog()
-const { 
-  loading, 
-  results, 
-  loadingClimate, 
-  loadingDisease, 
-  loadingGeoJSON,
-  climateSuccess,
-  diseaseSuccess,
-  geojsonSuccess,
-  forecastReportExists,
-  lastJobId,
-  triggerETL, 
-  validateInputs, 
-  checkForecastReportExists, 
-  resetReports,
-  fetchClimate,
-  fetchDisease,
-  fetchGeoJSON
-} = useEtlPipeline()
-
-// Page states
-const showForecastModal = ref(false)
-const showReportModal = ref(false)
-
-// Config store
-const forecastConfig = useForecastConfigStore()
-const configIsValid = computed(() => forecastConfig.isValid)
-
-// Factory for data import actions
-const dataImportActions = buildDataImportActions({ loading, results })
-
-// Factory for system update actions
-const systemUpdateActions = buildSystemUpdate({ loading, results })
-
-// Factory for pipeline steps
-// reactive() unwraps the refs, so buildPipelineSteps sees live values, not a setup-time copy.
-const pipelineSteps = buildPipelineSteps(reactive({
-  configIsValid,
-  loadingClimate,
-  loadingDisease,
-  loadingGeoJSON,
-  loadingValidateInputs: toRef(loading, 'validate_inputs'),
-  climateSuccess,
-  diseaseSuccess,
-  geojsonSuccess,
-  validateInputsSuccess: toRef(results, 'validate_inputs'),
-  forecastReportExists,
-  checkForecastReportExists,
-  resetReports
-}))
+const FILE_LABELS: Record<InputName, string> = { config: 'config.json', external_data: 'external_data.csv' }
 
 const accordionItems = [
-  { id: 'dataImport', title: 'Data Import' },
-  { id: 'externalData', title: 'Upload External Data' },
-  { id: 'forecastCreation', title: 'Forecast Creation' },
-  { id: 'systemUpdate', title: 'System Update' }
+  { id: 'dataImport', title: '① Data Import' },
+  { id: 'forecast', title: '② Forecasts: 9 runs, one at a time' },
+  { id: 'systemUpdate', title: '③ System Update' }
 ]
 
-const uploadFields = [
-  { key: 'config', label: 'config.json', description: 'Forecast configuration (JSON)', accept: '.json,application/json' },
-  { key: 'external_data', label: 'external_data.csv', description: 'External covariates (CSV)', accept: '.csv,text/csv' }
-] as const
-
-type UploadField = (typeof uploadFields)[number]
-
-const uploadFiles = ref<Partial<Record<UploadField['key'], File>>>({})
-
-const { uploading, deleting, serverFiles, refresh, upload, remove } = useInputUpload(addActivity)
-
-const handleUpload = async (key: UploadField['key'], file: File) => {
-  if (await upload(key, file)) uploadFiles.value[key] = undefined
-}
-
-const pendingDelete = ref<UploadField | null>(null)
+const { activityLog, addActivity } = useActivityLog()
+const {
+  state, serverFiles, busy, pending, refresh, confirm, cancel,
+  launch, openRun, abandonRun, decide, setMode, releaseLock, upload, remove
+} = usePipeline(addActivity)
 
 const {
   current: previewCurrent,
@@ -228,72 +138,31 @@ const {
   close: closePreview
 } = useInputPreview()
 
-const fieldLabel = (key: UploadField['key']) => uploadFields.find(field => field.key === key)?.label ?? key
+const showReportModal = ref(false)
+const pendingDelete = ref<InputName | null>(null)
+const pendingRelease = ref(false)
+
+const cards = (name: StepName) => (step(state.value, name)?.items ?? []).map(i => toCard(i, state.value, busy.value))
+
+// A card's key is its checkpoint ('CSB/Malaria:forecast'); the server resolves which checkpoint a job counts for.
+const launchItem = (item: string) => launch(jobOf(item), labelOf(item))
 
 const confirmDelete = async () => {
-  if (!pendingDelete.value) return
-  await remove(pendingDelete.value.key)
+  const name = pendingDelete.value
   pendingDelete.value = null
+  if (name) await remove(name)
 }
 
-const handleActionClick = async (key: string) => {
-  if (key === 'navigate_to_forecast') {
-    showForecastModal.value = true
-    return
-  }
-
-  if (key === 'view_forecast_report') {
-    showReportModal.value = true
-    return
-  }
-
-  if (key.startsWith('fetch_')) {
-    switch (key) {
-      case 'fetch_climate':
-        await fetchClimate()
-        break
-      case 'fetch_disease':
-        await fetchDisease(forecastConfig)
-        break
-      case 'fetch_geojson':
-        await fetchGeoJSON()
-        break
-    }
-    return
-  }
-
-  if (key === 'validate_inputs') {
-    await validateInputs(forecastConfig)
-    return
-  }
-
-  await triggerETL(key)
+const confirmRelease = async () => {
+  pendingRelease.value = false
+  await releaseLock()
 }
 
-const handleForecastJobCreated = (jobId: string) => {
-  if (jobId) {
-    lastJobId.value = jobId
-    addActivity('Run Forecast', 'Forecast job started', true, jobId)
-  }
-}
-
-const handleStepChange = (_stepIndex: number) => {
-  // Step change tracking - can be extended for future needs
-}
-
-onMounted(() => {
-  checkForecastReportExists()
-  refresh()
-})
+onMounted(refresh)
 </script>
 
 <style scoped>
 @reference "tailwindcss";
-
-/* ===== Layout ===== */
-.space-y-8 > * + * {
-  margin-top: 2rem;
-}
 
 .dashboard-section {
   background: #0f172a;
@@ -308,82 +177,60 @@ onMounted(() => {
   font-weight: 700;
   color: #f1f5f9;
   margin-bottom: 0.25rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .section-subtitle {
   color: #94a3b8;
   font-size: 0.875rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
-/* ===== Section Styles ===== */
-.data-import-section,
-.external-data-section,
-.forecast-creation-section,
-.system-update-section {
-  margin-bottom: 2rem;
-}
-
-.data-import-title,
-.forecast-creation-title,
-.system-update-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #e2e8f0;
-  margin-bottom: 1rem;
+.lock-banner {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 0.5rem;
-}
-
-/* ===== External Data Upload ===== */
-.upload-intro {
-  color: #94a3b8;
-  font-size: 0.875rem;
-  margin-bottom: 1rem;
-}
-
-.upload-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  border-radius: 0.75rem;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #fde68a;
+  font-size: 0.875rem;
 }
 
-/* ===== Action Grid (shared with StepperCarousel) ===== */
+.lock-release {
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #fca5a5;
+  background: rgba(220, 38, 38, 0.2);
+  border: 1px solid rgba(220, 38, 38, 0.6);
+  cursor: pointer;
+}
+
+.lock-release:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .action-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
-}
-
-.action-grid.gapless {
   grid-template-columns: repeat(2, 1fr);
-  max-width: calc(66.666% + 1rem);
+  gap: 1rem;
+  margin-bottom: 2rem;
 }
 
-/* ===== Responsive ===== */
+.action-grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
 @media (max-width: 1024px) {
-  .upload-grid {
+  .action-grid,
+  .action-grid-4 {
     grid-template-columns: 1fr;
-  }
-  .action-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .action-grid.gapless {
-    max-width: 100%;
-  }
-}
-
-@media (max-width: 640px) {
-  .action-grid {
-    grid-template-columns: 1fr;
-  }
-  .action-grid.gapless {
-    max-width: 100%;
   }
 }
 </style>

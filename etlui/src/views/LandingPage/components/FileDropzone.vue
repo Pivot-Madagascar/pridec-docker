@@ -49,7 +49,7 @@
           :aria-label="`Upload ${label} to the server`"
           @click="emit('upload', modelValue)"
         >
-          <span v-if="uploading" class="btn-spinner" aria-hidden="true"></span>
+          <span v-if="uploading" class="btn-spinner animate-spin" aria-hidden="true"></span>
           <Icon v-else :path="ICONS.upload" class="btn-icon" />
           {{ uploading ? 'Uploading…' : 'Upload' }}
         </button>
@@ -358,13 +358,6 @@ const formatDate = (iso: string) =>
   border: 2px solid rgba(255, 255, 255, 0.4);
   border-top-color: #fff;
   border-radius: 50%;
-  animation: btn-spin 0.8s linear infinite;
-}
-
-@keyframes btn-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .btn-icon {

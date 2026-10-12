@@ -1,12 +1,5 @@
 <template>
-  <!-- Native <dialog>: showModal() gives the backdrop, focus trap and Escape for free. -->
-  <dialog
-    ref="dialog"
-    class="preview-dialog"
-    :aria-labelledby="titleId"
-    @cancel.prevent="emit('close')"
-    @click.self="emit('close')"
-  >
+  <BaseDialog :open="open" backdrop-close class="preview-dialog" :aria-labelledby="titleId" @dismiss="emit('close')">
     <header class="preview-header">
       <div class="preview-heading">
         <Icon :path="ICONS.eye" class="preview-heading-icon" />
@@ -22,20 +15,21 @@
 
     <div class="preview-body">
       <div v-if="loading" class="preview-state" role="status">
-        <span class="preview-spinner" aria-hidden="true"></span>
+        <span class="preview-spinner animate-spin" aria-hidden="true"></span>
         Loading preview…
       </div>
       <div v-else-if="error" class="preview-state is-error" role="alert">{{ error }}</div>
       <slot v-else />
     </div>
-  </dialog>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, useId } from 'vue'
+import { useId } from 'vue'
 import Icon, { ICONS } from '@/components/Icons'
+import BaseDialog from './BaseDialog.vue'
 
-const props = defineProps<{
+defineProps<{
   open: boolean
   title: string
   source: 'server' | 'local'
@@ -48,16 +42,6 @@ const emit = defineEmits<{
 }>()
 
 const titleId = useId()
-const dialog = ref<HTMLDialogElement>()
-
-watch(
-  () => props.open,
-  (open) => {
-    if (open && !dialog.value?.open) dialog.value?.showModal()
-    if (!open && dialog.value?.open) dialog.value.close()
-  },
-  { flush: 'post' }
-)
 </script>
 
 <style scoped>
@@ -69,29 +53,12 @@ watch(
   height: 90vh;
   padding: 0;
   background: #0f172a;
-  color: #e2e8f0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 1rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
   overflow: hidden;
 }
 
 .preview-dialog[open] {
   display: flex;
   flex-direction: column;
-  animation: preview-in 0.15s ease-out;
-}
-
-.preview-dialog::backdrop {
-  background: rgba(2, 6, 23, 0.75);
-  backdrop-filter: blur(2px);
-}
-
-@keyframes preview-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.5rem) scale(0.99);
-  }
 }
 
 .preview-header {
@@ -186,12 +153,5 @@ watch(
   border: 2px solid rgba(96, 165, 250, 0.3);
   border-top-color: #60a5fa;
   border-radius: 50%;
-  animation: preview-spin 0.8s linear infinite;
-}
-
-@keyframes preview-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

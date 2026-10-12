@@ -1,17 +1,12 @@
 import { ref } from 'vue'
 import { getConfigPreview, getExternalDataPreview } from '@/services/inputs'
+import { errorMessage } from '@/services/api'
 import { previewCsvStream } from '@/utils/preview'
 import type { ConfigData, CsvPreviewData, InputName } from '@/types/inputs'
 
 export const PREVIEW_ROWS = 100
 
 type Source = 'server' | 'local'
-
-function errorMessage(err: unknown): string {
-  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
-  if (typeof detail === 'string') return detail
-  return err instanceof Error ? err.message : 'Preview failed'
-}
 
 async function readLocalConfig(file: File): Promise<ConfigData> {
   const data: unknown = JSON.parse(await file.text())
@@ -53,7 +48,7 @@ export function useInputPreview() {
         if (id === request) csv.value = data
       }
     } catch (err) {
-      if (id === request) error.value = errorMessage(err)
+      if (id === request) error.value = errorMessage(err, err instanceof Error ? err.message : 'Preview failed')
     } finally {
       if (id === request) loading.value = false
     }

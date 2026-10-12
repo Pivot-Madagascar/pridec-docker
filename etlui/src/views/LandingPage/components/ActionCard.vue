@@ -13,7 +13,7 @@
       <span v-if="action.subtitle" class="card-subtitle">{{ action.subtitle }}</span>
       <span v-if="action.statusText" class="card-status" :class="action.statusClass">
         <span v-if="action.loading" class="status-running">
-          <span class="spinner"></span>
+          <span class="spinner animate-spin"></span>
           {{ action.loadingText }}
         </span>
         <span v-else-if="action.success" class="status-done">{{ action.successText }}</span>
@@ -119,6 +119,18 @@ const handleClick = () => {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
 }
 
+/* Icon colors, set per job in src/config/pipeline.ts */
+.icon-blue, .icon-indigo { background: #6366f1; }
+.icon-sky { background: #0ea5e9; }
+.icon-green { background: #16a34a; }
+.icon-teal { background: #0d9488; }
+.icon-purple { background: #8b5cf6; }
+.icon-orange { background: #ea580c; }
+.icon-amber { background: #d97706; }
+.icon-rose { background: #e11d48; }
+.icon-emerald { background: #059669; }
+.icon-slate { background: #64748b; }
+
 .icon-svg {
   width: 1.25rem;
   height: 1.25rem;
@@ -171,6 +183,10 @@ const handleClick = () => {
   color: #64748b;
 }
 
+.status-error .status-pending {
+  color: #f87171;
+}
+
 .status-inactive {
   color: #475569;
   opacity: 0.6;
@@ -182,10 +198,5 @@ const handleClick = () => {
   border: 2px solid #fbbf24;
   border-top-color: transparent;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
 }
 </style>
