@@ -81,7 +81,9 @@ Worth knowing:
 
 ## 7. Data pipeline
 
-Documented order (`README.md`): imports → `build_analytics` → `fetch_*` → `validate_inputs` → `forecast` → `post_forecast` → `build_analytics` → `calc_csb_alerts` → `update_key` → `build_analytics`. `etlui` does not automate it: one step per click. Nothing in the code enforces the order.
+The workflow follows the reference documentation (`pivot_forecast.sh`, 3 phases); `etlui` does not automate it: one step per click, and the pipeline gate enforces the order (see Concurrency below and `docs/pipeline-checkpoints.md`).
+- **Code today (2026-10-09 design):** ① imports → `build_analytics`; ② 9 runs (`fetch_*` → `validate_inputs` → `forecast` → `calc_orgunit_alerts` (CSB, 501) → `approve` → `post_forecast`); ③ `build_analytics` → `calc_csb_alerts` → `build_analytics` → `update_key`.
+- **Target (revised 2026-10-12, not implemented):** ① adds the `approve_imports` decision before `build_analytics`; ② makes `external_data/<level>` a mandatory item and runs `calc_orgunit_alerts` (`pridec etl calc_orgUnit_alerts`); ③ becomes `build_analytics` → `update_key` (no `calc_csb_alerts`).
 
 | Step | Reads | Writes | Depends on |
 |---|---|---|---|
@@ -94,7 +96,8 @@ Documented order (`README.md`): imports → `build_analytics` → `fetch_*` → 
 | `validate_inputs` | `input/` + user-provided `config.json` | `input/{config,input,polygon}_valid.*` | the 3 `fetch_*` |
 | `forecast` | the 3 `*_valid` files | `output/` (`forecast_report.html`, `forecast.json`), `.output_sig`, `logs/{id}.json` | validate_inputs |
 | `post_forecast` | `output/forecast.json` | DHIS2 `dataValueSets` | forecast |
-| `calc_csb_alerts` | DHIS2 `analytics` | DHIS2 `dataValueSets` | post_forecast, build_analytics |
+| `calc_csb_alerts` | DHIS2 `analytics` | DHIS2 `dataValueSets` | post_forecast, build_analytics (dropped from the 2026-10-12 target) |
+| `calc_orgunit_alerts` | `ALERT_NAME` | alert thresholds | forecast (CSB runs; 501 today, target: `pridec etl calc_orgUnit_alerts`) |
 | `update_key` | — | DHIS2 datastore `pridec/pridec_update` | last |
 
 Concurrency: **one job at a time**, in cycle order, **one forecast run (source × disease) at a time** (`domain/pipeline.py`, `infrastructure/checkpoint_store.py`, tables `checkpoints`, `pipeline_lock`, `forecast_runs` in `logs/etlhub.db`). A launch while a job runs, before its prerequisites are in `success`, or a run job without an open run, gets 409. The lock is taken at launch and freed by `_update_task_status` (success/error); it never expires: `DELETE /pipeline/lock` frees it. Opening a run empties `input/` and `output/`; each run job gets the run's `DISEASE_CODE` / `OU_LEVEL` written into the dynamic config before it starts. `DELETE /output/reset` does not take it. No deduplication: imports resend the same values on every run, so deduplication depends on DHIS2. See `docs/pipeline-checkpoints.md`.

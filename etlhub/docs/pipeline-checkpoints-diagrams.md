@@ -1,6 +1,8 @@
 # Contrôle des checkpoints : diagrammes
 
-Ce document rassemble en schémas tout ce qu'etlhub contrôle (conception cible, 2026-10-09).
+Ce document rassemble en schémas tout ce qu'etlhub contrôle (conception cible, révisée le 2026-10-12).
+Le workflow (3 phases, commandes `pridec`, ordre des étapes) suit la **documentation de référence** (`pivot_forecast.sh`), qui fait foi ;
+ce document n'ajoute que la couche de contrôle d'etlhub par-dessus (verrou, checkpoints, cycles, confirmations).
 Les règles sont résumées dans [pipeline-checkpoints-guide.md](pipeline-checkpoints-guide.md),
 et la conception complète est dans [pipeline-checkpoints.md](pipeline-checkpoints.md).
 
@@ -15,7 +17,7 @@ et la conception complète est dans [pipeline-checkpoints.md](pipeline-checkpoin
 
 | Règle | Contenu |
 |---|---|
-| R1 | Tout item est obligatoire ; `config.json` est un item par maladie ; `external_data.csv` est facultatif, ce n'est pas un item. |
+| R1 | Tout item est obligatoire ; `config.json` est un item par maladie ; `external_data.csv` est un item par niveau (fkt, csb). Les deux se téléversent depuis l'interface. |
 | R2 | Un item exige que ses prérequis soient en `success`. |
 | R3 | Un seul job à la fois. Le verrou n'expire jamais (`DELETE /pipeline/lock`). |
 | R4 | Une étape n'est valide que si tous ses items sont en `success` et que la précédente est valide. |
@@ -28,6 +30,7 @@ et la conception complète est dans [pipeline-checkpoints.md](pipeline-checkpoin
 
 Légende :
 - **Vert** : un item, avec un statut en base.
+- **Jaune** : une décision humaine (item).
 - **Violet** : un run de forecast, résumé ici ; son détail est dans le diagramme 2.
 - **Flèche pleine** : prérequis contrôlé par le serveur (R2).
 - **Flèche double** : passage d'une étape à la suivante (R4).
@@ -36,44 +39,45 @@ Chaque case de run indique les fichiers d'entrée qu'elle utilise ; les uploads 
 
 ```mermaid
 flowchart TB
-    START(["Premier lancement du mois<br/>ouvre le cycle = forecast_start (YYYYMM)"])
+    START(["Premier lancement du mois<br/>ouvre le cycle (YYYYMM)"])
 
-    subgraph S1["① data_import"]
+    subgraph S1["① data_import · 5 items"]
         direction LR
         gee["import_gee"] --> ba1["build_analytics"]
-        pcom["import_pivot_com"] --> ba1
-        pcsb["import_pivot_csb"] --> ba1
+        pcom["import_pivot_com"] --> chk
+        pcsb["import_pivot_csb"] --> chk
+        chk{"approve_imports<br/>(décision : cas COM &lt; 100,<br/>cas CSB &lt; limite)"} --> ba1
     end
 
-    subgraph S2["② forecast · 9 runs, un seul ouvert à la fois (R6)"]
+    subgraph S2["② forecast · 9 runs, un seul ouvert à la fois (R6) · 71 items"]
         direction TB
         subgraph SADJ["ADJ · OU_LEVEL 6"]
             direction LR
-            r1["run ADJ/Malaria<br/>pridec_historic_ADJMalaria<br/>config/Malaria · external_data fkt<br/>7 items"]
-            r2["run ADJ/Diarrhea<br/>pridec_historic_ADJDiarrhea<br/>config/Diarrhea · external_data fkt<br/>7 items"]
-            r3["run ADJ/Respinf<br/>pridec_historic_ADJRespinf<br/>config/Respinf · external_data fkt<br/>7 items"]
+            r1["run ADJ/Malaria<br/>pridec_historic_ADJMalaria<br/>config_malaria.json · external_data/fkt<br/>7 items"]
+            r2["run ADJ/Diarrhea<br/>pridec_historic_ADJDiarrhea<br/>config_diarrhea.json · external_data/fkt<br/>7 items"]
+            r3["run ADJ/Respinf<br/>pridec_historic_ADJRespinf<br/>config_respiratory.json · external_data/fkt<br/>7 items"]
         end
         subgraph SCOM["COM · OU_LEVEL 6"]
             direction LR
-            r4["run COM/Malaria<br/>pridec_historic_COMMalaria<br/>config/Malaria · external_data fkt<br/>7 items"]
-            r5["run COM/Diarrhea<br/>pridec_historic_COMDiarrhea<br/>config/Diarrhea · external_data fkt<br/>7 items"]
-            r6["run COM/Respinf<br/>pridec_historic_COMRespinf<br/>config/Respinf · external_data fkt<br/>7 items"]
+            r4["run COM/Malaria<br/>pridec_historic_COMMalaria<br/>config_malaria.json · external_data/fkt<br/>7 items"]
+            r5["run COM/Diarrhea<br/>pridec_historic_COMDiarrhea<br/>config_diarrhea.json · external_data/fkt<br/>7 items"]
+            r6["run COM/Respinf<br/>pridec_historic_COMRespinf<br/>config_respiratory.json · external_data/fkt<br/>7 items"]
         end
         subgraph SCSB["CSB · OU_LEVEL 5 · ALERT_NAME CSB&lt;maladie&gt;Vigilance"]
             direction LR
-            r7["run CSB/Malaria<br/>pridec_historic_CSBMalaria<br/>config/Malaria · external_data csb<br/>8 items"]
-            r8["run CSB/Diarrhea<br/>pridec_historic_CSBDiarrhea<br/>config/Diarrhea · external_data csb<br/>8 items"]
-            r9["run CSB/Respinf<br/>pridec_historic_CSBRespinf<br/>config/Respinf · external_data csb<br/>8 items"]
+            r7["run CSB/Malaria<br/>pridec_historic_CSBMalaria<br/>config_malaria.json · external_data/csb<br/>8 items"]
+            r8["run CSB/Diarrhea<br/>pridec_historic_CSBDiarrhea<br/>config_diarrhea.json · external_data/csb<br/>8 items"]
+            r9["run CSB/Respinf<br/>pridec_historic_CSBRespinf<br/>config_respiratory.json · external_data/csb<br/>8 items"]
         end
         SADJ ~~~ SCOM ~~~ SCSB
     end
 
-    subgraph S3["③ system_update · ordre imposé"]
+    subgraph S3["③ system_update · 2 items"]
         direction LR
-        ba2["build_analytics"] --> alerts["calc_csb_alerts"] --> ba3["build_analytics<br/>(after alerts)"] --> key["update_key"]
+        ba2["build_analytics"] --> key["update_key"]
     end
 
-    END(["3 étapes valides<br/>cycle fermé jusqu'au mois suivant"])
+    END(["3 étapes valides<br/>cycle fermé jusqu'au mois suivant<br/>application PRIDE-C à jour"])
 
     START --> S1
     S1 ==>|"étape ① valide (R4)"| S2
@@ -81,35 +85,41 @@ flowchart TB
     S3 ==> END
 
     classDef item fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+    classDef human fill:#fff8e1,stroke:#f9a825,color:#6d4c00
     classDef run fill:#ede7f6,stroke:#5e35b1,color:#311b92
     classDef edge fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
-    class gee,pcom,pcsb,ba1,ba2,alerts,ba3,key item
+    class gee,pcom,pcsb,ba1,ba2,key item
+    class chk human
     class r1,r2,r3,r4,r5,r6,r7,r8,r9 run
     class START,END edge
 ```
 
-> **Quand se font les uploads ?** Il n'y a pas d'étape d'upload : les fichiers se téléversent **pendant les runs**,
-> un par un. `config/<maladie>` est téléversé dans le **premier run ouvert de cette maladie** (ADJ, COM ou CSB, peu importe),
-> puis remis automatiquement dans `input/` pour ses 2 autres runs. Même principe pour `external_data.csv`, facultatif,
-> **par niveau** : téléversé dans le premier run du niveau (fokontany : ADJ ou COM ; CSB), puis remis aux autres runs de ce niveau.
-> Soit, sur un cycle, 3 uploads de `config.json` à 3 moments différents, et au plus 2 de `external_data.csv`.
+> **Quand se font les uploads ?** Il n'y a pas d'étape d'upload : les fichiers se téléversent depuis l'interface **pendant les runs**,
+> un par un, et ils sont **tous obligatoires**. `config.json` est téléversé dans le **premier run ouvert de la maladie** (ADJ, COM ou CSB, peu importe),
+> puis remis automatiquement dans `input/` pour ses 2 autres runs ; le serveur y écrit `forecast_start`, comme le fait `jq` dans `pivot_forecast.sh`.
+> Même principe pour `external_data.csv`, **par niveau** : téléversé dans le premier run du niveau (fokontany : ADJ ou COM ; CSB), puis remis aux autres runs de ce niveau.
+> Soit, sur un cycle, 3 uploads de `config.json` et 2 de `external_data.csv`. Les fichiers de `forecast_assets/` du dépôt servent de modèles.
+
+> **`build_analytics`** doit passer par l'API etlhub. Lancé à la main depuis l'interface DHIS2, etlhub ne le voit pas et l'étape ① reste non valide.
 
 ### Les 9 runs
 
-| # | Run | `DISEASE_CODE` | `OU_LEVEL` | `ALERT_NAME` | `config.json` | `external_data.csv` | Items du run |
+| # | Run | `DISEASE_CODE` | `OU_LEVEL` | `ALERT_NAME` | Item config (fichier attendu) | Item external_data | Items du run |
 |---|---|---|---|---|---|---|---|
-| 1 | `ADJ/Malaria` | `pridec_historic_ADJMalaria` | 6 (fokontany) | — | `config/Malaria` | fkt | 7 |
-| 2 | `ADJ/Diarrhea` | `pridec_historic_ADJDiarrhea` | 6 | — | `config/Diarrhea` | fkt | 7 |
-| 3 | `ADJ/Respinf` | `pridec_historic_ADJRespinf` | 6 | — | `config/Respinf` | fkt | 7 |
-| 4 | `COM/Malaria` | `pridec_historic_COMMalaria` | 6 | — | `config/Malaria` | fkt | 7 |
-| 5 | `COM/Diarrhea` | `pridec_historic_COMDiarrhea` | 6 | — | `config/Diarrhea` | fkt | 7 |
-| 6 | `COM/Respinf` | `pridec_historic_COMRespinf` | 6 | — | `config/Respinf` | fkt | 7 |
-| 7 | `CSB/Malaria` | `pridec_historic_CSBMalaria` | 5 (CSB) | `CSBMalariaVigilance` | `config/Malaria` | csb | 8 |
-| 8 | `CSB/Diarrhea` | `pridec_historic_CSBDiarrhea` | 5 | `CSBDiarrheaVigilance` | `config/Diarrhea` | csb | 8 |
-| 9 | `CSB/Respinf` | `pridec_historic_CSBRespinf` | 5 | `CSBRespinfVigilance` | `config/Respinf` | csb | 8 |
+| 1 | `ADJ/Malaria` | `pridec_historic_ADJMalaria` | 6 (fokontany) | — | `config/Malaria` (`config_malaria.json`) | `external_data/fkt` | 7 |
+| 2 | `ADJ/Diarrhea` | `pridec_historic_ADJDiarrhea` | 6 | — | `config/Diarrhea` (`config_diarrhea.json`) | `external_data/fkt` | 7 |
+| 3 | `ADJ/Respinf` | `pridec_historic_ADJRespinf` | 6 | — | `config/Respinf` (`config_respiratory.json`) | `external_data/fkt` | 7 |
+| 4 | `COM/Malaria` | `pridec_historic_COMMalaria` | 6 | — | `config/Malaria` (`config_malaria.json`) | `external_data/fkt` | 7 |
+| 5 | `COM/Diarrhea` | `pridec_historic_COMDiarrhea` | 6 | — | `config/Diarrhea` (`config_diarrhea.json`) | `external_data/fkt` | 7 |
+| 6 | `COM/Respinf` | `pridec_historic_COMRespinf` | 6 | — | `config/Respinf` (`config_respiratory.json`) | `external_data/fkt` | 7 |
+| 7 | `CSB/Malaria` | `pridec_historic_CSBMalaria` | 5 (CSB) | `CSBMalariaVigilance` | `config/Malaria` (`config_malaria.json`) | `external_data/csb` | 8 |
+| 8 | `CSB/Diarrhea` | `pridec_historic_CSBDiarrhea` | 5 | `CSBDiarrheaVigilance` | `config/Diarrhea` (`config_diarrhea.json`) | `external_data/csb` | 8 |
+| 9 | `CSB/Respinf` | `pridec_historic_CSBRespinf` | 5 | `CSBRespinfVigilance` | `config/Respinf` (`config_respiratory.json`) | `external_data/csb` | 8 |
 
-Au total, l'étape ② compte 69 items : 3 `config/<maladie>` + 6 × 7 + 3 × 8.
-Uploads par cycle : 3 `config.json` (obligatoires) et au plus 2 `external_data.csv` (facultatifs).
+L'interface d'upload affiche le fichier attendu pour chaque maladie (en particulier `config_respiratory.json` pour `Respinf`).
+
+Au total, l'étape ② compte 71 items : 3 `config/<maladie>` + 2 `external_data/<niveau>` + 6 × 7 + 3 × 8.
+Uploads par cycle : 3 `config.json` et 2 `external_data.csv`, tous obligatoires.
 
 ---
 
@@ -117,20 +127,19 @@ Uploads par cycle : 3 `config.json` (obligatoires) et au plus 2 `external_data.c
 
 Le même modèle pour les 9 couples. Les flèches sont des prérequis contrôlés (R2).
 
-Légende : **vert** = item ; **bleu** = upload (item) ; **gris pointillé** = upload facultatif ; **jaune** = décision humaine ;
-**rouge** = `calc_orgunit_alerts`, présent dans le parcours mais pas encore implémenté (501).
+Légende : **vert** = item ; **bleu** = upload (item) ; **jaune** = décision humaine.
 Ce que chaque job lit et écrit :
 
 | Item | Lit | Écrit |
 |---|---|---|
-| `config/<maladie>` (upload, une fois par maladie) | — | `input/config.json` (`forecast_start` = cycle, sinon 422), conservé et remis pour les autres runs de la maladie |
-| `external_data.csv` (upload facultatif, une fois par niveau) | — | `input/external_data.csv`, conservé et remis pour les autres runs du même niveau |
+| `config/<maladie>` (upload, une fois par maladie) | — | `input/config.json`, avec `forecast_start` écrit par le serveur ; conservé et remis pour les autres runs de la maladie |
+| `external_data/<niveau>` (upload, une fois par niveau) | — | `input/external_data.csv`, conservé et remis pour les autres runs du même niveau |
 | `fetch_disease` | `DISEASE_CODE`, `OU_LEVEL`, `PARENT_OU` | `input/disease_data.json` |
 | `fetch_climate` | `OU_LEVEL`, `PARENT_OU` | `input/climate_data.json` |
 | `fetch_geojson` | `OU_LEVEL`, `PARENT_OU` | `input/orgUnit_poly.geojson` |
 | `validate_inputs` | les fichiers ci-dessus | `input/config_valid.json`, `input_valid.json`, `polygon_valid.geojson` |
 | `forecast` | les 3 fichiers `*_valid` | `output/forecast.json`, `output/forecast_report.html` |
-| `calc_orgunit_alerts` (CSB) | `ALERT_NAME` | 501 : pas implémenté |
+| `calc_orgunit_alerts` (CSB) | `ALERT_NAME` | seuils d'alerte (commande CLI `pridec etl calc_orgUnit_alerts`) |
 | `approve` | `output/forecast_report.html` (lu par l'utilisateur) | décision |
 | `post_forecast` | `output/forecast.json` | DHIS2 (PRIDE-C) |
 
@@ -138,25 +147,24 @@ Ce que chaque job lit et écrit :
 flowchart LR
     OPEN(["POST /pipeline/runs<br/>source + disease<br/>vide input/ et output/, remet les fichiers déjà téléversés<br/>fixe DISEASE_CODE, OU_LEVEL, ALERT_NAME"])
 
-    cfg["config.json · config/maladie<br/>(upload si 1er run de la maladie,<br/>sinon déjà remis)"]
-    ext["external_data.csv<br/>(facultatif, un par niveau)"]
+    cfg["config.json · config/maladie<br/>(upload si 1er run de la maladie,<br/>sinon déjà remis)<br/>forecast_start écrit par le serveur"]
+    ext["external_data.csv · external_data/niveau<br/>(upload si 1er run du niveau,<br/>sinon déjà remis)"]
     fd["fetch_disease"]
     fc["fetch_climate"]
     fg["fetch_geojson"]
     val["validate_inputs"]
     fct["forecast"]
-    coa["calc_orgunit_alerts<br/>CSB seulement · 501"]
+    coa["calc_orgunit_alerts<br/>CSB seulement"]
     apr{"approve<br/>(décision)"}
     post["post_forecast"]
     CLOSE(["run fermé<br/>un autre couple peut s'ouvrir"])
 
-    OPEN --> cfg & fd & fc & fg
-    OPEN -.-> ext
+    OPEN --> cfg & ext & fd & fc & fg
     cfg --> val
+    ext --> val
     fd --> val
     fc --> val
     fg --> val
-    ext -.->|"lu s'il est présent"| val
     val --> fct
     fct -->|"ADJ, COM"| apr
     fct -->|"CSB"| coa --> apr
@@ -165,14 +173,10 @@ flowchart LR
 
     classDef item fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
     classDef upload fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
-    classDef optional fill:#f5f5f5,stroke:#9e9e9e,color:#424242,stroke-dasharray:4 3
     classDef human fill:#fff8e1,stroke:#f9a825,color:#6d4c00
-    classDef missing fill:#ffebee,stroke:#c62828,color:#b71c1c
-    class fd,fc,fg,val,fct,post item
-    class cfg upload
-    class ext optional
+    class fd,fc,fg,val,fct,coa,post item
+    class cfg,ext upload
     class apr human
-    class coa missing
 ```
 
 **Abandonner** (`DELETE /pipeline/runs/current`) : le run passe `abandoned`, ses items repassent en `pending`, rien n'est publié.
@@ -185,7 +189,7 @@ flowchart LR
 ## 3. Le contrôle d'un lancement
 
 Ce chemin s'applique à chaque lancement de job : Celery (`/import_*`, `/fetch_*`, `/validate_inputs`, `/build_analytics`,
-`/calc_csb_alerts`, `/forecast/`) ou synchrone (`/post_forecast`, `/update_key`). Tout se passe dans une seule transaction
+`/forecast/`), synchrone (`/post_forecast`, `/update_key`), et `/calc_orgunit_alerts`. Tout se passe dans une seule transaction
 SQLite (`BEGIN IMMEDIATE`) ; un refus n'écrit rien.
 
 ```mermaid
@@ -202,7 +206,7 @@ flowchart TD
     T -- oui --> R{"Run ouvert ? (R6)"}
     R -- non --> E3["409 · needs an open forecast run"]
     R -- oui --> RI["item = couple du run : job"]
-    T -- non --> SL["emplacement : le premier lançable pas en success,<br/>sinon le dernier lançable<br/>(build_analytics : 3 emplacements)"]
+    T -- non --> SL["emplacement : le premier lançable pas en success,<br/>sinon le dernier lançable<br/>(build_analytics : 2 emplacements)"]
     RI --> P
     SL --> P
     P{"Étape accessible (R4)<br/>et prérequis en success (R2) ?"}
@@ -231,25 +235,25 @@ flowchart TD
 
 ## 4. Les fichiers d'entrée
 
-`POST` et `DELETE /input/files/{config|external_data}`.
+`POST` et `DELETE /input/files/{config|external_data}`, depuis l'interface.
 
 ```mermaid
 flowchart TD
-    A(["Upload ou suppression<br/>config.json / external_data.csv"]) --> FS{"Upload de config.json :<br/>forecast_start = cycle ?"}
-    FS -- non --> E0["422 · forecast_start does not match the cycle"]
-    FS -- "oui, ou autre cas" --> L{"Verrou libre ?"}
+    A(["Upload ou suppression<br/>config.json / external_data.csv"]) --> L{"Verrou libre ?"}
     L -- non --> E1["409 · one job at a time"]
     L -- oui --> R{"Run ouvert ?"}
     R -- non --> E2["409 · needs an open forecast run"]
-    R -- oui --> V{"Fichier déjà utilisé ?<br/>validate_inputs du run en success,<br/>ou forecast réussi d'un run qui le partage"}
+    R -- oui --> LV{"Upload de external_data.csv :<br/>fichier conforme au niveau du run ?"}
+    LV -- non --> E0["422 · file does not match the run level"]
+    LV -- "oui, ou autre cas" --> V{"Fichier déjà utilisé ?<br/>validate_inputs du run en success,<br/>ou forecast réussi d'un run qui le partage"}
     V -- non --> OK
     V -- oui --> CF{"confirm=true ? (R5)"}
     CF -- non --> E3["409 · confirmation_required + impact"]
     CF -- oui --> OK
-    OK["Fichier écrit ou supprimé dans input/ et uploads/cycle/<br/>run ouvert seulement : validate_inputs et suite → pending<br/>(les autres runs gardent leur success)"]
+    OK["Upload de config.json : forecast_start écrit par le serveur<br/>Fichier écrit ou supprimé dans input/ et uploads/cycle/<br/>run ouvert seulement : validate_inputs et suite → pending<br/>(les autres runs gardent leur success)"]
     OK --> K{"Quel fichier ?"}
     K -- config.json --> K1["upload : config/maladie → success<br/>suppression : config/maladie → pending"]
-    K -- external_data.csv --> K2["run.external_data = uploaded / none<br/>(pas un item, un fichier par niveau)"]
+    K -- external_data.csv --> K2["upload : external_data/niveau → success<br/>suppression : external_data/niveau → pending"]
 
     classDef refuse fill:#ffebee,stroke:#c62828,color:#b71c1c
     class E0,E1,E2,E3 refuse
@@ -300,7 +304,7 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Ouvert : premier lancement du mois<br/>cycle = mois courant = forecast_start
+    [*] --> Ouvert : premier lancement du mois<br/>cycle = mois courant
     Ouvert --> Ouvert : lancements et runs du mois
     Ouvert --> Inacheve : changement de mois avant la fin<br/>(run ouvert abandonné)
     Inacheve --> [*] : reste dans l'historique ;<br/>le mois suivant a son propre cycle
@@ -310,8 +314,32 @@ stateDiagram-v2
 ```
 
 Limites :
-- `calc_orgunit_alerts` répond 501 : les runs CSB, et donc le cycle, ne peuvent pas se terminer tant qu'il n'est pas implémenté.
 - Un cycle non terminé à la fin du mois reste inachevé ; un worker tué bloque tout jusqu'à `DELETE /pipeline/lock`.
-- **Mode test** (`DRYRUN=true`, `PUT /pipeline/mode`) : mêmes règles et mêmes schémas, mais les checkpoints sont gardés
-  dans Redis seulement ; revenir en production les efface (avec `confirm=true` s'il y en a).
+- **Mode test** (`PUT /pipeline/mode`) : mêmes règles et mêmes schémas ; les checkpoints sont gardés dans Redis seulement,
+  et revenir en production les efface (avec `confirm=true` s'il y en a). Ce mode passe `DRYRUN=True` à `import_gee`
+  (import partiel rapide) et à `post_forecast` (aucune écriture dans PRIDE-C). À ne pas confondre avec l'option `DRYRUN`
+  de chaque commande `pridec`, dont l'effet varie d'une commande à l'autre.
 - `DELETE /output/reset` et les jobs lancés en ligne de commande échappent à ces contrôles.
+
+---
+
+## Points ouverts
+
+| Point | Question |
+|---|---|
+| `forecast_start` | Quelle valeur `jq` écrit-il dans `pivot_forecast.sh` (mois courant, mois suivant, dernier mois de données) ? Le serveur doit écrire la même. |
+| `approve_imports` | Quelle est la limite pour les cas CSB ? |
+| Mode test et `forecast` | Le mode test doit-il utiliser `forecast_assets/test_config.json` (Ranger + Naive) ? |
+| `calc_orgunit_alerts` | Job Celery ou synchrone ? Que publie-t-il exactement ? |
+| Contrôle de niveau de `external_data` | Quelles colonnes distinguent un fichier fkt d'un fichier csb ? |
+
+## Changements depuis la version du 2026-10-09
+
+- Phase 3 alignée sur la référence : `build_analytics` → `update_key` (`calc_csb_alerts` et le second `build_analytics` retirés).
+- `calc_orgunit_alerts` actif dans les runs CSB (plus de 501).
+- `external_data.csv` obligatoire, désormais un item par niveau ; l'étape ② passe à 71 items.
+- `forecast_start` écrit par le serveur à l'upload de `config.json`, au lieu d'un refus 422.
+- Contrôle de niveau à l'upload de `external_data.csv`.
+- Fichier de config attendu affiché par maladie (`config_respiratory.json` pour `Respinf`).
+- Décision `approve_imports` ajoutée en phase 1 ; `build_analytics` uniquement par l'API.
+- Mode test distingué de l'option `DRYRUN` des commandes.
