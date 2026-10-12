@@ -6,8 +6,8 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'Landing',
-      component: () => import('@/views/LandingPage/LandingPage.vue'),
+      name: 'Dashboard',
+      component: () => import('@/views/Dashboard/Dashboard.vue'),
       meta: { title: 'ETL UI - Dashboard' }
     },
     {
@@ -51,7 +51,7 @@ router.beforeEach((to, _from, next) => {
   const authenticated = authStore.isAuthenticated
 
   if (authenticated && to.name === 'Login') {
-    next({ name: 'Landing' })
+    next({ name: 'Dashboard' })
   } else if (!isPublic && !authenticated) {
     next({ name: 'Login' })
   } else {

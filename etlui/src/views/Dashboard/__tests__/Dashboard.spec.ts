@@ -26,7 +26,7 @@ vi.mock('@/services/inputs', () => ({
 vi.mock('@/services/api', () => ({ default: { get: vi.fn().mockResolvedValue({ data: '' }) } }))
 vi.mock('vue3-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn() } }))
 
-import LandingPage from '@/views/LandingPage/LandingPage.vue'
+import Dashboard from '@/views/Dashboard/Dashboard.vue'
 
 const item = (name: string, status = 'pending', launchable = false) => ({ item: name, status, job_id: null, updated_at: null, launchable })
 
@@ -58,12 +58,12 @@ const OPEN_RUN = {
 }
 
 async function mountPage() {
-  const wrapper = mount(LandingPage, { attachTo: document.body })
+  const wrapper = mount(Dashboard, { attachTo: document.body })
   await flushPromises()
   return wrapper
 }
 
-describe('LandingPage', () => {
+describe('Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getCheckpoints.mockResolvedValue(state())

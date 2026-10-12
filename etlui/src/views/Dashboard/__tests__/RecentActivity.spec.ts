@@ -7,7 +7,7 @@ vi.mock('@/services/api', () => ({
   trackingApi: { getJobLogs: (...args: unknown[]) => getJobLogs(...args) },
 }))
 
-import RecentActivity from '@/views/LandingPage/components/RecentActivity.vue'
+import RecentActivity from '@/views/Dashboard/components/RecentActivity.vue'
 
 const entry = (id: number, jobId?: string) => ({ id, action: 'Import GEE', message: 'started', time: '10:00', success: true, jobId })
 

@@ -17,9 +17,9 @@ describe('Router Guard', () => {
       routes: [
         {
           path: '/',
-          name: 'Landing',
-          component: () => ({ template: '<div>Landing</div>' }),
-          meta: { title: 'Landing' }
+          name: 'Dashboard',
+          component: () => ({ template: '<div>Dashboard</div>' }),
+          meta: { title: 'Dashboard' }
         },
         {
           path: '/tracking',
@@ -50,7 +50,7 @@ describe('Router Guard', () => {
       const authenticated = authStore.isAuthenticated
 
       if (authenticated && to.name === 'Login') {
-        next({ name: 'Landing' })
+        next({ name: 'Dashboard' })
       } else if (!isPublic && !authenticated) {
         next({ name: 'Login' })
       } else {
@@ -68,7 +68,7 @@ expect(router.currentRoute.value.name).toBe('Login')
     const router = createRouter({
       history: createWebHistory(),
       routes: [
-        { path: '/', name: 'Landing', component: () => ({ template: '<div>Landing</div>' }), meta: { title: 'Landing' } },
+        { path: '/', name: 'Dashboard', component: () => ({ template: '<div>Dashboard</div>' }), meta: { title: 'Dashboard' } },
         { path: '/login', name: 'Login', component: () => ({ template: '<div>Login</div>' }), meta: { public: true } },
       ]
     })
@@ -79,7 +79,7 @@ expect(router.currentRoute.value.name).toBe('Login')
       const authenticated = authStore.isAuthenticated
 
       if (authenticated && to.name === 'Login') {
-        next({ name: 'Landing' })
+        next({ name: 'Dashboard' })
       } else if (!isPublic && !authenticated) {
         next({ name: 'Login' })
       } else {
@@ -93,11 +93,11 @@ expect(router.currentRoute.value.name).toBe('Login')
     expect(router.currentRoute.value.name).toBe('Login')
   })
 
-   it('should redirect authenticated users to Landing when accessing Login', async () => {
+   it('should redirect authenticated users to Dashboard when accessing Login', async () => {
     const router = createRouter({
       history: createWebHistory(),
       routes: [
-        { path: '/', name: 'Landing', component: () => ({ template: '<div>Landing</div>' }), meta: { title: 'Landing' } },
+        { path: '/', name: 'Dashboard', component: () => ({ template: '<div>Dashboard</div>' }), meta: { title: 'Dashboard' } },
         { path: '/tracking', name: 'Tracking', component: () => ({ template: '<div>Tracking</div>' }) },
         { path: '/login', name: 'Login', component: () => ({ template: '<div>Login</div>' }), meta: { title: 'Login', public: true } },
       ]
@@ -112,7 +112,7 @@ expect(router.currentRoute.value.name).toBe('Login')
       const authenticated = authStore.isAuthenticated
 
       if (authenticated && to.name === 'Login') {
-        next({ name: 'Landing' })
+        next({ name: 'Dashboard' })
       } else if (!isPublic && !authenticated) {
         next({ name: 'Login' })
       } else {
@@ -123,14 +123,14 @@ expect(router.currentRoute.value.name).toBe('Login')
     await router.push('/login')
     await router.isReady()
 
-    expect(router.currentRoute.value.name).toBe('Landing')
+    expect(router.currentRoute.value.name).toBe('Dashboard')
   })
 
   it('should allow authenticated users to access protected routes', async () => {
     const router = createRouter({
       history: createWebHistory(),
       routes: [
-        { path: '/', name: 'Landing', component: () => ({ template: '<div>Landing</div>' }), meta: { title: 'Landing' } },
+        { path: '/', name: 'Dashboard', component: () => ({ template: '<div>Dashboard</div>' }), meta: { title: 'Dashboard' } },
         { path: '/tracking', name: 'Tracking', component: () => ({ template: '<div>Tracking</div>' }) },
         { path: '/login', name: 'Login', component: () => ({ template: '<div>Login</div>' }), meta: { public: true } },
       ]
@@ -145,7 +145,7 @@ expect(router.currentRoute.value.name).toBe('Login')
       const authenticated = authStore.isAuthenticated
 
       if (authenticated && to.name === 'Login') {
-        next({ name: 'Landing' })
+        next({ name: 'Dashboard' })
       } else if (!isPublic && !authenticated) {
         next({ name: 'Login' })
       } else {

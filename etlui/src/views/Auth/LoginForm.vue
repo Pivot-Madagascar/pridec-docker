@@ -16,7 +16,7 @@ watch(
   () => authStore.isAuthenticated,
   (authenticated) => {
     if (authenticated) {
-      router.replace({ name: 'Landing' })
+      router.replace({ name: 'Dashboard' })
     }
   },
   { immediate: true }
