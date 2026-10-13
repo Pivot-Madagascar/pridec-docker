@@ -226,6 +226,22 @@ class CheckpointStore:
         key = f"config_{disease_of(couple)}.json" if name == "config" else f"external_data_{level_of(couple)}.csv"
         return self._uploads_dir / cycle / key
 
+    def _report_path(self, cycle: str, couple: str) -> Path:
+        return self._uploads_dir / cycle / f"report_{couple.replace('/', '_')}.html"
+
+    def _archive_report(self, cycle: str, couple: str) -> None:
+        """Keeps the report of a closed run: the next run empties output/."""
+        report = self._output_dir / "forecast_report.html"
+        if report.is_file():
+            target = self._report_path(cycle, couple)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(report, target)
+
+    def report(self, cycle: str | None, couple: str) -> Path | None:
+        """The archived report of a closed run (current month by default), or None."""
+        path = self._report_path(cycle or pipeline.this_month(), couple)
+        return path if path.is_file() else None
+
     def _clear_workdirs(self) -> None:
         """Empties input/ and output/ so that a run never reads another couple's files."""
         for directory in (self._input_dir, self._output_dir):
@@ -263,12 +279,14 @@ class CheckpointStore:
     def finish(self, job_id: str, state: str) -> None:
         """Records the final status (success | error) and frees the lock. A post_forecast success closes the run."""
         with self._transaction() as conn:
-            row = conn.execute("SELECT step, item FROM checkpoints WHERE job_id = ?", (job_id,)).fetchone()
+            row = conn.execute("SELECT step, item, cycle FROM checkpoints WHERE job_id = ?", (job_id,)).fetchone()
             conn.execute("UPDATE checkpoints SET status = ?, updated_at = ? WHERE job_id = ?", (state, _now(), job_id))
             conn.execute("DELETE FROM pipeline_lock WHERE job_id = ?", (job_id,))
             if row and state == "success" and row[0] == "forecast" and row[1].endswith(":post_forecast"):
+                couple = row[1].split(":")[0]
                 conn.execute("UPDATE forecast_runs SET state = 'closed', closed_at = ? WHERE state = 'open' AND couple = ?",
-                             (_now(), row[1].split(":")[0]))
+                             (_now(), couple))
+                self._archive_report(row[2], couple)
 
     @contextmanager
     def run(self, task: str, job_id: str, confirm: bool = False) -> Iterator[None]:

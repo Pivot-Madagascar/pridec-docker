@@ -73,7 +73,8 @@ class FakeDHIS2:
         if request.url.path == "/api/me.json":
             if not authed:
                 return httpx.Response(401)
-            return httpx.Response(200, json={"id": "u1", "username": "admin", "email": None, "displayName": "Admin"})
+            return httpx.Response(200, json={"id": "u1", "username": "admin", "email": None, "displayName": "Admin",
+                                                    "authorities": ["ALL"]})
         if request.method == "POST" and request.url.path == "/api/apiToken":
             if not self._basic_ok(request):
                 return httpx.Response(401)
@@ -136,6 +137,7 @@ def test_login_sets_httponly_cookie_and_stores_the_token_server_side(https_clien
 
     assert response.status_code == 200
     assert response.json()["user"]["username"] == "admin"
+    assert response.json()["user"]["is_admin"] is True  # DHIS2 authority ALL (superuser)
     cookie = response.headers["set-cookie"]
     assert "etlhub_session=" in cookie
     assert "HttpOnly" in cookie and "Secure" in cookie and "SameSite=strict" in cookie

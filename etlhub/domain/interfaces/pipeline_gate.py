@@ -1,4 +1,5 @@
 from contextlib import AbstractContextManager
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 
@@ -29,3 +30,5 @@ class PipelineGate(Protocol):
     def release_lock(self) -> str | None: ...
 
     def set_mode(self, dry_run: bool, confirm: bool = False) -> dict: ...
+
+    def report(self, cycle: str | None, couple: str) -> Path | None: ...

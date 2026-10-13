@@ -8,7 +8,7 @@ import re
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import HTTPException, WebSocketException, status
+from fastapi import Depends, HTTPException, WebSocketException, status
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import HTTPConnection
 
@@ -76,7 +76,9 @@ def fetch_me(client: httpx.Client, url: str, *, auth: tuple | None = None, token
         data = response.json()
     except ValueError as e:
         raise DHIS2Error("GET /api/me returned invalid JSON") from e
-    return {k: data.get(k) for k in ("id", "email", "username", "displayName")}
+    user = {k: data.get(k) for k in ("id", "email", "username", "displayName")}
+    user["is_admin"] = "ALL" in (data.get("authorities") or [])  # DHIS2 superuser
+    return user
 
 
 def create_pat(client: httpx.Client, url: str, auth: tuple, expire_ms: int) -> tuple[str, str]:
@@ -141,3 +143,10 @@ async def get_current_user(connection: HTTPConnection) -> dict:
         await connection.accept()
         raise WebSocketException(code=WS_NOT_AUTHENTICATED, reason="Not authenticated")
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+
+async def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    """Admin-only routes: DHIS2 superusers (authority ALL). Sessions opened before this check count as non-admin."""
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrators only")
+    return user

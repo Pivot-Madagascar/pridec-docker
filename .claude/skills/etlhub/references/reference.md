@@ -21,7 +21,7 @@ Re-check against the code before relying on a line number or a default.
 | GET, PUT | `/api/config/`, PUT `/api/config/reload` | `config_router` | Redis. DHIS URL/token read-only (from the login) | **Session** |
 | POST | `/auth/login` | `auth_router` | Sync. Body `{dhis2_url, username, password}` → DHIS2 calls, Redis, `etlhub_session` cookie. 400 URL not allowed, 401, 429, 502 DHIS2, 503 Redis | — |
 | POST | `/auth/logout` | `auth_router` | Revokes the DHIS2 token, 204, clears the cookie | — |
-| GET | `/auth/me` | `auth_router` | Redis | **Session** |
+| GET | `/auth/me` | `auth_router` | Redis. The user carries `is_admin` (DHIS2 authority `ALL`, read at login) | **Session** |
 | GET | `/output/forecast_report.html[/exists]` | `forecast_report_router` | File | — |
 | POST | `/input/files/{config\|external_data}` | `input_router` | Sync, multipart field `file` (≤ 10 MB) → replaces `input/config.json` or `input/external_data.csv`. 413 too big, 422 invalid JSON object / CSV without `orgUnit`,`period` / other name. The server writes `forecast_start` = the cycle into `config.json` | — |
 | GET | `/input/files` | `input_router` | Sync. `{config, external_data}` → `{exists, size?, modified?}` | — |
@@ -30,11 +30,12 @@ Re-check against the code before relying on a line number or a default.
 | DELETE | `/input/files/{config\|external_data}` | `input_router` | Sync, deletes the file in `input/`. 404 absent, 422 other name | — |
 | GET | `/pipeline/checkpoints?cycle=YYYYMM` | `pipeline_router` | SQLite (Redis in test mode), default cycle = the current month. `{cycle, cycle_state, current_step, run, lock, dry_run, steps[{step, done, accessible, items[{item, status, job_id, updated_at, launchable}]}]}` | Session |
 | POST | `/pipeline/runs` | `pipeline_router` | Body `{source, disease}`, `?confirm`. Opens the forecast run of a couple (one at a time), empties `input/` and `output/`. 201 run, 409, 422 unknown couple | Session |
-| DELETE | `/pipeline/runs/current` | `pipeline_router` | Abandons the open run, its items → pending. `{abandoned: couple}` | Session |
+| DELETE | `/pipeline/runs/current` | `pipeline_router` | Abandons the open run, its items → pending. `{abandoned: couple}` | **Admin** (403 otherwise) |
+| GET | `/pipeline/runs/{source}/{disease}/report?cycle=YYYYMM` | `pipeline_router` | `forecast_report.html` archived when the run closed (`uploads/<cycle>/report_<source>_<disease>.html`). 404 if none | Session |
 | POST | `/pipeline/imports/approve` | `pipeline_router` | Body `{decision: approve\|reject}`. The `approve_imports` decision of step data_import, prerequisite of `build_analytics`. `{decision}` | Session |
 | POST | `/pipeline/runs/current/approve` | `pipeline_router` | Body `{decision: approve\|reject}`. `{couple, decision}` | Session |
 | PUT | `/pipeline/mode` | `pipeline_router` | Body `{dry_run}`, `?confirm`. Writes `DRYRUN` to the dynamic config; test mode keeps checkpoints in Redis (`pipeline:dry_run:db`) only; leaving it discards them (needs confirm when there are any). 409 while a job runs | Session |
-| DELETE | `/pipeline/lock` | `pipeline_router` | Frees the job lock (killed worker; the lock never expires), its running checkpoint → `error`. `{released: job_id\|null}` | Session |
+| DELETE | `/pipeline/lock` | `pipeline_router` | Frees the job lock (killed worker; the lock never expires), its running checkpoint → `error`. `{released: job_id\|null}` | **Admin** (403 otherwise) |
 | POST | `/calc_orgunit_alerts` | `analytics_router` | **501**: no script implements it yet (item of the CSB runs). Target (2026-10-12): runs `pridec etl calc_orgUnit_alerts` | Session |
 | DELETE | `/output/reset` | `forecast_report_router` | `rm -rf output/` | `.output_sig` exists (not real auth) |
 | GET | `/` | `main.py` | 307 redirect to `/docs` | — |

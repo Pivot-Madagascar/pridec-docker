@@ -3,13 +3,14 @@ import * as pipeline from '@/services/pipeline'
 import { deleteInputFile, getInputFiles, uploadInputFile } from '@/services/inputs'
 import { useNotification } from '@/composables/useNotification'
 import { errorMessage } from '@/services/api'
+import { plainError } from '@/config/pipeline'
 import type { Checkpoints, ConfirmationRequired, Disease, Source } from '@/types/pipeline'
 import type { InputName, ServerFile } from '@/types/inputs'
 
 // While a job holds the lock, the state is read again at this pace until the lock is free.
 export const POLL_MS = 3000
 
-type AddActivity = (action: string, message: string, success: boolean) => void
+type AddActivity = (action: string, message: string, success: boolean, job?: pipeline.LaunchedJob) => void
 type Call = (confirm: boolean) => Promise<unknown>
 
 export interface PendingConfirmation {
@@ -29,6 +30,8 @@ function confirmationRequired(err: unknown): ConfirmationRequired | null {
     ? (response.data as ConfirmationRequired)
     : null
 }
+
+const isLaunchedJob = (r: unknown): r is pipeline.LaunchedJob => typeof r === 'object' && r !== null && 'requestId' in r
 
 /** The pipeline state from etlhub, and every action on it. The server decides: nothing is computed here. */
 export function usePipeline(addActivity: AddActivity) {
@@ -60,9 +63,10 @@ export function usePipeline(addActivity: AddActivity) {
   const act = async (label: string, call: Call, confirm = false): Promise<boolean> => {
     busy.value = true
     try {
-      await call(confirm)
+      const result = await call(confirm)
       showNotification(`${label}: accepted`, 'success')
-      addActivity(label, 'Accepted', true)
+      // Only launch() returns a LaunchedJob: RecentActivity's Detail opens its request and logs
+      addActivity(label, 'Accepted', true, isLaunchedJob(result) ? result : undefined)
       return true
     } catch (err) {
       const confirmation = confirmationRequired(err)
@@ -70,7 +74,7 @@ export function usePipeline(addActivity: AddActivity) {
         pending.value = { label, message: confirmation.message, impact: confirmation.impact, retry: () => act(label, call, true) }
         return false
       }
-      const message = errorMessage(err, `${label} failed`)
+      const message = plainError(errorMessage(err, `${label} failed`))
       showNotification(message, 'error')
       addActivity(label, message, false)
       return false

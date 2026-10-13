@@ -82,7 +82,7 @@ class OpenGate:
         return this_month()
 
 
-TEST_USER = {"id": "u1", "email": None, "username": "tester", "displayName": "Tester"}
+TEST_USER = {"id": "u1", "email": None, "username": "tester", "displayName": "Tester", "is_admin": True}
 
 
 @pytest.fixture

@@ -8,12 +8,16 @@ export async function getCheckpoints(): Promise<Checkpoints> {
 }
 
 // POST /<task> (or /forecast/ with {}: etlhub's ForecastParams defaults are the files written by validate_inputs): 202 with a job_id for Celery jobs, 200 for post_forecast and update_key.
-export async function launchJob(task: string, confirm = false): Promise<string | null> {
+// The X-Request-ID (a UUID) becomes the request_id etlhub tracks: GET /api/tracking/requests/{requestId} finds this launch.
+export type LaunchedJob = { jobId: string | null; requestId: string }
+export async function launchJob(task: string, confirm = false): Promise<LaunchedJob> {
+  const requestId = crypto.randomUUID()
+  const config = { ...withConfirm(confirm), headers: { 'X-Request-ID': requestId } }
   const response =
     task === 'forecast'
-      ? await api.post('/forecast/', {}, withConfirm(confirm))
-      : await api.post(`/${task}`, undefined, withConfirm(confirm))
-  return response.data?.job_id ?? null
+      ? await api.post('/forecast/', {}, config)
+      : await api.post(`/${task}`, undefined, config)
+  return { jobId: response.data?.job_id ?? null, requestId }
 }
 
 // POST /pipeline/runs: opens the forecast run of a couple (one at a time); empties input/ and output/.

@@ -10,10 +10,10 @@
     </div>
     <div class="mode-buttons" role="group" aria-label="Test mode">
       <button type="button" :class="['mode-btn', { active: dryRun === false }]" :disabled="disabled || dryRun === false" @click="emit('change', false)">
-        NON
+        NO
       </button>
       <button type="button" :class="['mode-btn', { active: dryRun === true }]" :disabled="disabled || dryRun === true" @click="emit('change', true)">
-        OUI
+        YES
       </button>
     </div>
   </section>

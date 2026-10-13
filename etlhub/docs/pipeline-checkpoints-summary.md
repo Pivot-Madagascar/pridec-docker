@@ -36,9 +36,9 @@ More detail: [guide](pipeline-checkpoints-guide.md) · [diagrams](pipeline-check
 3. **Jobs**: `fetch_disease`, `fetch_climate`, `fetch_geojson` → `validate_inputs` → `forecast`
    → `calc_orgunit_alerts` (CSB only).
 4. **Decide**: read the report, then `approve` (or `reject` to redo the forecast).
-5. **Publish**: `post_forecast`. The run **closes** and another pair can be opened.
+5. **Publish**: `post_forecast`. The run **closes** (its report is kept: `GET /pipeline/runs/{source}/{disease}/report`) and another pair can be opened.
 
-A run can be **abandoned** at any time: nothing is published, and its steps start again from zero.
+A run can be **abandoned** at any time, by an administrator: nothing is published, and its steps start again from zero.
 
 ## The rules
 
@@ -46,7 +46,7 @@ A run can be **abandoned** at any time: nothing is published, and its steps star
 |---|---|---|
 | **R1** | Everything is mandatory, `external_data.csv` included. | The step is not validated. |
 | **R2** | An action waits for its prerequisites to succeed. | 409 refusal. |
-| **R3** | **Only one job at a time.** The lock **never expires**. | 409 refusal. Crashed worker: `DELETE /pipeline/lock`. |
+| **R3** | **Only one job at a time.** The lock **never expires**. | 409 refusal. Crashed worker: `DELETE /pipeline/lock` (administrators: DHIS2 authority `ALL`). |
 | **R4** | A step only counts if the previous one counts. | Following steps blocked; their successes are kept and count again later. |
 | **R5** | **Undoing a success needs a confirmation**: relaunching a successful action, replacing a file already used, reopening a finished run. | 409 `confirmation_required` refusal describing the impact; resend with `?confirm=true`. |
 | **R6** | **Only one forecast run open at a time.** | 409 refusal. |

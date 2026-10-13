@@ -66,7 +66,8 @@ fetch_geojson         ┘
 - `calc_orgunit_alerts` (CSB) computes the alert thresholds with `ALERT_NAME` (command `pridec etl calc_orgUnit_alerts`).
 - `approve` is a decision: `POST /pipeline/runs/current/approve` with `{"decision": "approve"}`, or `"reject"` to
   redo the forecast.
-- The run **closes** when `post_forecast` succeeds. It can also be **abandoned** (`DELETE /pipeline/runs/current`):
+- The run **closes** when `post_forecast` succeeds; its `forecast_report.html` is then kept
+  (`GET /pipeline/runs/{source}/{disease}/report`), since the next run empties `output/`. It can also be **abandoned** (`DELETE /pipeline/runs/current`, administrators only):
   nothing is published, and its items go back to `pending`.
 
 ## The rules
@@ -144,11 +145,12 @@ The etlui **"Test mode" (test = YES)** button switches etlhub to test mode.
 |---|---|---|
 | GET | `/pipeline/checkpoints?cycle=YYYYMM` | State of the cycle: `current_step`, `cycle_state`, `run`, `lock`, steps (`done`, `accessible`) and items (`status`, `launchable`) |
 | POST | `/pipeline/runs` | Opens the run of a pair |
-| DELETE | `/pipeline/runs/current` | Abandons the open run |
+| DELETE | `/pipeline/runs/current` | Abandons the open run (administrators only) |
+| GET | `/pipeline/runs/{source}/{disease}/report` | Report of a closed run, kept when it closed (404 if none) |
 | POST | `/pipeline/runs/current/approve` | `{"decision": "approve" \| "reject"}` |
 | POST | `/pipeline/imports/approve` | `{"decision": "approve" \| "reject"}`: the `approve_imports` decision of step ① |
 | PUT | `/pipeline/mode` | `{"dry_run": true \| false}`: test or production mode (`confirm=true` to leave test mode with data) |
-| DELETE | `/pipeline/lock` | Frees the lock of a job whose worker was killed; the `running` item becomes `error` |
+| DELETE | `/pipeline/lock` | Frees the lock of a job whose worker was killed; the `running` item becomes `error` (administrators only) |
 | POST | `/calc_orgunit_alerts` | Job of the CSB runs, between `forecast` and `approve` (501 today: no script) |
 
 All these routes require an etlui session.
