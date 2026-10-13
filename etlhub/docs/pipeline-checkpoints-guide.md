@@ -11,8 +11,16 @@ This guide briefly explains how etlhub tracks and controls the monthly pipeline 
 ## In one sentence
 
 etlhub records, for each month, what **really succeeded**. It **refuses** anything out of the planned order,
-runs **only one job at a time**, handles **only one forecast (source × disease) at a time**, and asks for a
+runs **only one job at a time**, handles **only one forecast (dataElement) at a time**, and asks for a
 **confirmation** before undoing what was validated.
+
+An etlhub can be paired with a specific DHIS2 instance, what we refer to as a system. Each system has its own specific configuration that includes defaults for:
+
+- which `data_import` steps are required by the system and should be made available to the user. Choses are those steps that begin with `import_`
+- the `dataElement` items that can be forecast from which the user can chose which to forecast
+- a `config.json` that corrresponds to each dataElement
+- a `external_data.csv` that corresponds to each dataElement
+- a list of the `dataElement` that must be forecast for the cycle to be successfully completed
 
 ## The cycle
 
@@ -20,50 +28,56 @@ A **cycle** is the full run of the pipeline, **once a month**. It is named after
 - It opens at the first launch of the month.
 - When the **month changes**, a new cycle starts automatically: the old one stays unfinished if it was not finished,
   and its open run is abandoned.
-- Once the 3 steps are valid, it is **closed**: the month cannot run a second time.
+- Once the 3 steps are valid, it is **closed**: the month cannot run a second time. An administrator should have the ability to re-open any of the steps as needed.
 
 | # | Step | What must succeed | Order |
 |---|---|---|---|
-| ① | `data_import` (5 items) | `import_gee`, `import_pivot_com`, `import_pivot_csb`, the `approve_imports` decision, then `build_analytics` | Imports in any order; `approve_imports` after the 2 pivot imports; `build_analytics` last |
-| ② | `forecast` (71 items) | **9 runs**, one per source × disease pair (ADJ, COM, CSB × Malaria, Diarrhea, Respinf) | Runs in any order, only one open at a time |
+| ① | `data_import` (5 items) | `import_gee`, `import_pivot_com`, `import_pivot_csb`, the `approve_imports` decision, then `build_analytics` | Imports in any order; `approve_imports` after the 2 pivot imports; `build_analytics` last. Steps beginning with `import_pivot` are optional and specific to Pivot systems. They should be made available and mandatory via a configuration from an admin. |
+| ② | `forecast` (# of items to be set by system configuration) | One run per dataElement to be forecasted by the user. For the Pivot system, this is **9 runs**, one per source × disease pair (ADJ, COM, CSB × Malaria, Diarrhea, Respinf). Which dataElements available for forecasting should be set via a configuration by a admin. | Runs in any order, only one open at a time |
 | ③ | `system_update` (2 items) | `build_analytics` → `update_key` | Fixed |
 
-- **`approve_imports`** is a human decision: check that COM cases are < 100 and CSB cases < a limit (not set yet).
+- **`approve_imports`** is a human decision: check that COM cases are < 100 and CSB cases < 1000. This can be overridden by the user by approving it.
 - **`build_analytics`** must go through the etlhub API. Launched from the DHIS2 interface, etlhub does not see it and step ① stays invalid.
 
 ### A forecast run
 
 Open it with `POST /pipeline/runs` `{"source": "CSB", "disease": "Malaria"}`. Opening **empties `input/` and `output/`**,
-copies back the files already uploaded and sets the run context:
+copies back the files already uploaded and sets the run context. The run contexts are system-dependent and should be set by the admin in a configuration file that links the available `dataElement` to forecast with each ones `config.json`, `OU_LEVEL`, and `ALERT_NAME`. Below is an example for the Pivot system:
 
-| Pair | `DISEASE_CODE` | `OU_LEVEL` | `ALERT_NAME` |
-|---|---|---|---|
-| ADJ/x | `pridec_historic_ADJ<x>` | 6 | — |
-| COM/x | `pridec_historic_COM<x>` | 6 | — |
-| CSB/x | `pridec_historic_CSB<x>` | 5 | `CSB<x>Vigilance` |
+| dataElement                 | config_file      | external_data         | OU_LEVEL | ALERT_NAME           |
+|-----------------------------|------------------|-----------------------|----------|----------------------|
+| pridec_historic_ADJMalaria  | ADJmalaria.json  | external_data_fkt.csv | 6        | -                    |
+| pridec_historic_ADJDiarrhea | ADJdiarrhea.json | external_data_fkt.csv | 6        | -                    |
+| pridec_historic_ADJRespinf  | ADJrespinf.json  | external_data_fkt.csv | 6        | -                    |
+| pridec_historic_CSBMalaria  | CSBmalaria.json  | external_data_csb.csv | 5        | CSBMalariaVigilance  |
+| pridec_historic_CSBDiarrhea | CSBdiarrhea.json | external_data_csb.csv | 5        | CSBDiarrheaVigilance |
+| pridec_historic_CSBRespinf  | CSBrespinf.json  | external_data_csb.csv | 5        | CSBRespinfVigilance  |
+| pridec_historic_COMMalaria  | COMmalaria.json  | external_data_fkt.csv | 6        | -                    |
+| pridec_historic_COMDiarrhea | COMdiarrhea.json | external_data_fkt.csv | 6        | -                    |
+| pridec_historic_COMRespinf  | COMrespinf.json  | external_data_fkt.csv | 6        | -                    |
+
+The associated default config and external_data files should be stored in the `forecast_assets` folder.
 
 This context is rewritten into the dynamic config at each job of the run: there is nothing to change in the Admin page.
 
 Items of a run, with their prerequisites:
 
 ```
-config/<disease>      ┐  (upload, one per disease)
-external_data/<level> │  (upload, one per level)
+dataElement name      ┐   (mandatory, chosen from list of available defaults provided by system admin)
+config/<disease>      |  (upload, mandatory. dataElement-specific default can be provided by the system admin)
+external_data/<level> │  (upload, optional. dataElement-specific default can be provided by the system admin)
 fetch_disease         ├─→ validate_inputs ─→ forecast ─→ [calc_orgunit_alerts, CSB only] ─→ approve ─→ post_forecast
 fetch_climate         │
 fetch_geojson         ┘
 ```
 
-- **`config.json`: mandatory, one per disease.** Upload it from the interface in the first run of the disease;
-  it is copied back into `input/` automatically for its 2 other runs. That makes 3 uploads per cycle. The server writes
-  `forecast_start` into it, as `jq` does in `pivot_forecast.sh`. The interface shows the expected file:
-  `config_malaria.json`, `config_diarrhea.json`, `config_respiratory.json` (for `Respinf`).
-- **`external_data.csv`: mandatory, one per level** (`external_data/fkt` for ADJ and COM, `external_data/csb` for CSB).
-  Same principle: 2 uploads per cycle. A file that does not match the run's level is refused (422).
-- The files in the repository's `forecast_assets/` serve as templates.
+- **`config.json`: mandatory, one per run.** Use default per dataElement or upload it from the interface. A system admin can set default files for each dataElement (forecast run) that can then be edited by the user. The server writes `forecast_start` into it, as `jq` does in `pivot_forecast.sh`, by default, however this can be edited by the user.
+- **`external_data.csv`: optional, one per run** 
+  Same principle: A system admin can set default files for each dataElement (forecast run). These can be shared between dataElements if they use the same `external_data.csv` file
+- The files in the repository's `forecast_assets/` serve as defaults for each dataElement. [Note: would a better structure for the defaults be to have a sub-directory for each dataElement and then have the files follow the same format within this?]
 - Replacing a file **already used** needs `confirm=true` and resets **only the open run**; the runs already
   computed with the old file keep their `success` and are listed in `impact.stale_runs`.
-- `calc_orgunit_alerts` (CSB) computes the alert thresholds with `ALERT_NAME` (command `pridec etl calc_orgUnit_alerts`).
+- `calc_orgunit_alerts` (CSB) computes the alert thresholds with `ALERT_NAME` (command `pridec etl calc_orgUnit_alerts`). This is an optional step that can be added to each run by the admin by setting an `ALERT_NAME`.
 - `approve` is a decision: `POST /pipeline/runs/current/approve` with `{"decision": "approve"}`, or `"reject"` to
   redo the forecast.
 - The run **closes** when `post_forecast` succeeds; its `forecast_report.html` is then kept
@@ -74,7 +88,7 @@ fetch_geojson         ┘
 
 | Rule | Content |
 |---|---|
-| R1 | Every item is mandatory (`config.json`: one item per disease; `external_data.csv`: one item per level). |
+| R1 | Every run requires a `config.json`. |
 | R2 | An item starts only if its prerequisites are in `success`. |
 | R3 | Only one job at a time. **The lock never expires.** |
 | R4 | A step only counts if the previous one counts. Otherwise the following ones are blocked, but their `success` statuses are kept. |
