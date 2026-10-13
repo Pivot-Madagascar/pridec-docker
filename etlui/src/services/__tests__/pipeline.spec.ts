@@ -32,11 +32,13 @@ describe('pipeline service', () => {
   it('launches a job on its own route, with confirm only when asked', async () => {
     post.mockResolvedValue({ data: { job_id: 'import_gee_1' } })
 
-    expect(await pipeline.launchJob('import_gee')).toBe('import_gee_1')
+    const { jobId, requestId } = await pipeline.launchJob('import_gee')
     await pipeline.launchJob('import_gee', true)
 
-    expect(post).toHaveBeenNthCalledWith(1, '/import_gee', undefined, undefined)
-    expect(post).toHaveBeenNthCalledWith(2, '/import_gee', undefined, CONFIRM)
+    expect(jobId).toBe('import_gee_1')
+    // etlhub tracks the request under this X-Request-ID: RecentActivity finds it back with it
+    expect(post).toHaveBeenNthCalledWith(1, '/import_gee', undefined, { headers: { 'X-Request-ID': requestId } })
+    expect(post).toHaveBeenNthCalledWith(2, '/import_gee', undefined, { ...CONFIRM, headers: { 'X-Request-ID': expect.any(String) } })
   })
 
   it('launches the forecast on /forecast/ with the etlhub default paths', async () => {
@@ -44,13 +46,13 @@ describe('pipeline service', () => {
 
     await pipeline.launchJob('forecast')
 
-    expect(post).toHaveBeenCalledWith('/forecast/', {}, undefined)
+    expect(post).toHaveBeenCalledWith('/forecast/', {}, { headers: { 'X-Request-ID': expect.any(String) } })
   })
 
   it('returns null for a synchronous job without job_id', async () => {
     post.mockResolvedValue({ data: { status: 'success' } })
 
-    expect(await pipeline.launchJob('update_key')).toBeNull()
+    expect((await pipeline.launchJob('update_key')).jobId).toBeNull()
   })
 
   it('opens, decides and abandons the forecast run', async () => {

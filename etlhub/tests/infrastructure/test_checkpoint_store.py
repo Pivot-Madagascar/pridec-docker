@@ -223,6 +223,21 @@ def test_post_forecast_closes_the_run_and_a_closed_couple_reopens_only_with_conf
     assert _status(checkpoint_store.progress(), "forecast", "COM/Malaria:post_forecast") == "pending"
 
 
+def test_closing_a_run_archives_its_report(checkpoint_store, tmp_path):
+    _import(checkpoint_store)
+    _prepare(checkpoint_store, "COM/Malaria")
+    (tmp_path / "output").mkdir(exist_ok=True)
+    (tmp_path / "output" / "forecast_report.html").write_text("<p>COM Malaria</p>")
+    checkpoint_store.decide("approve")
+    _pass(checkpoint_store, "post_forecast")
+
+    checkpoint_store.open_run("ADJ/Malaria")  # empties output/
+
+    cycle = checkpoint_store.progress()["cycle"]
+    assert checkpoint_store.report(cycle, "COM/Malaria").read_text() == "<p>COM Malaria</p>"
+    assert checkpoint_store.report(cycle, "ADJ/Malaria") is None
+
+
 def test_abandoning_a_run_resets_its_items(checkpoint_store):
     _import(checkpoint_store)
     _prepare(checkpoint_store, "ADJ/Malaria")

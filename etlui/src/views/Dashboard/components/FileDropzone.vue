@@ -2,10 +2,11 @@
   <div class="dropzone-card">
     <div
       class="dropzone"
-      :class="{ 'is-dragging': dragging, 'has-file': modelValue, 'has-error': error }"
-      @dragover.prevent="dragging = true"
+      :class="{ 'is-dragging': dragging, 'has-file': modelValue, 'has-error': error, 'is-disabled': disabled }"
+      :aria-disabled="disabled"
+      @dragover.prevent="dragging = !disabled"
       @dragleave.prevent="dragging = false"
-      @drop.prevent="onDrop"
+      @drop.prevent="!disabled && onDrop($event)"
     >
       <div class="dropzone-icon">
         <Icon :path="modelValue ? ICONS.checkCircle : ICONS.upload" class="icon-svg" />
@@ -44,7 +45,7 @@
         <button
           type="button"
           class="dropzone-btn dropzone-btn-upload"
-          :disabled="uploading"
+          :disabled="uploading || disabled"
           :aria-busy="uploading"
           :aria-label="`Upload ${label} to the server`"
           @click="emit('upload', modelValue)"
@@ -61,6 +62,7 @@
         type="file"
         :accept="accept"
         class="sr-only"
+        :disabled="disabled"
         @change="onChange"
       />
     </div>
@@ -109,6 +111,8 @@ const props = defineProps<{
   serverFile?: ServerFile
   deleting?: boolean
   uploading?: boolean
+  // Nothing can be selected, dropped or uploaded (the server would refuse it now).
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -161,6 +165,11 @@ const formatDate = (iso: string) =>
 
 <style scoped>
 @reference "tailwindcss";
+
+.dropzone.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 .dropzone {
   display: flex;

@@ -199,3 +199,29 @@ def test_mode_switch_through_the_api(client, checkpoint_store):
     assert refused.status_code == 409 and refused.json()["code"] == "confirmation_required"
     assert accepted.json() == {"dry_run": False}
     assert client.get("/pipeline/checkpoints").json()["dry_run"] is False
+
+
+def test_unlocking_and_abandoning_need_an_admin(app, client):
+    from etlhub.api.auth import get_current_user
+    from tests.conftest import TEST_USER
+    app.dependency_overrides[get_current_user] = lambda: {**TEST_USER, "is_admin": False}
+
+    assert client.delete("/pipeline/lock").status_code == 403
+    assert client.delete("/pipeline/runs/current").status_code == 403
+
+
+def test_the_report_of_a_closed_run(client, checkpoint_store, tmp_path):
+    _import(checkpoint_store)
+    _prepare(checkpoint_store, "COM/Malaria")
+    (tmp_path / "output").mkdir(exist_ok=True)
+    (tmp_path / "output" / "forecast_report.html").write_text("<p>COM Malaria</p>")
+    checkpoint_store.decide("approve")
+    checkpoint_store.start("post_forecast", "p")
+    checkpoint_store.finish("p", "success")
+
+    report = client.get("/pipeline/runs/COM/Malaria/report")
+
+    assert (report.status_code, report.text) == (200, "<p>COM Malaria</p>")
+    assert report.headers["content-type"].startswith("text/html")
+    assert client.get("/pipeline/runs/ADJ/Malaria/report").status_code == 404
+    assert client.get("/pipeline/runs/XYZ/Malaria/report").status_code == 422

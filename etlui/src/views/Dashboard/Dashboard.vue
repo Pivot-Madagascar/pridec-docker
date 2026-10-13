@@ -14,7 +14,6 @@
 
       <div v-if="state?.lock" class="lock-banner" role="status">
         <span>Running: <strong>{{ state.lock.task }}</strong> ({{ state.lock.job_id }}) since {{ state.lock.acquired_at }}. One job at a time.</span>
-        <button type="button" class="lock-release" :disabled="busy" @click="pendingRelease = true">Release lock</button>
       </div>
 
       <Accordion :items="accordionItems" :default-open="['dataImport', 'forecast', 'systemUpdate']">
@@ -35,16 +34,18 @@
         <template #content-forecast>
           <ForecastRuns
             :state="state"
-            :server-files="serverFiles"
             :busy="busy"
+            :is-admin="!!auth.user?.is_admin"
+            :server-files="serverFiles"
             :upload-file="upload"
             @open="openRun"
-            @abandon="abandonRun"
             @launch="launchItem"
-            @decide="decide"
+            @validate="openReport(null, true)"
+            @report="(source, disease) => openReport({ source, disease }, false)"
             @delete="name => (pendingDelete = name)"
             @preview="openPreview"
-            @view-report="showReportModal = true"
+            @abandon="abandonRun"
+            @release="pendingRelease = true"
           />
         </template>
 
@@ -58,7 +59,12 @@
 
     <RecentActivity :activityLog="activityLog" />
 
-    <ForecastReportModal v-model="showReportModal" />
+    <ForecastReportModal v-model="showReportModal" :run="reportRun">
+      <template v-if="validating" #footer>
+        <button type="button" class="approval-btn" :disabled="busy" @click="decideFromReport('reject')">Reject</button>
+        <button type="button" class="approval-btn approval-btn-primary" :disabled="busy" @click="decideFromReport('approve')">Approve</button>
+      </template>
+    </ForecastReportModal>
 
     <ImpactDialog :pending="pending" :busy="busy" @confirm="confirm" @cancel="cancel" />
 
@@ -119,15 +125,16 @@ import { useActivityLog } from '@/composables/useActivityLog'
 import { useInputPreview } from '@/composables/useInputPreview'
 import { usePipeline } from '@/composables/usePipeline'
 import { jobOf, labelOf, step, toCard } from '@/config/pipeline'
+import { useAuthStore } from '@/stores/auth'
 import type { InputName } from '@/types/inputs'
 import type { StepName } from '@/types/pipeline'
 
 const FILE_LABELS: Record<InputName, string> = { config: 'config.json', external_data: 'external_data.csv' }
 
 const accordionItems = [
-  { id: 'dataImport', title: '① Data Import' },
-  { id: 'forecast', title: '② Forecasts: 9 runs, one at a time' },
-  { id: 'systemUpdate', title: '③ System Update' }
+  { id: 'dataImport', title: 'Data Import' },
+  { id: 'forecast', title: 'Forecasts' },
+  { id: 'systemUpdate', title: 'System Update' }
 ]
 
 const { activityLog, addActivity } = useActivityLog()
@@ -145,8 +152,11 @@ const {
   open: openPreview,
   close: closePreview
 } = useInputPreview()
+const auth = useAuthStore()
 
 const showReportModal = ref(false)
+const reportRun = ref<{ source: string; disease: string } | null>(null)
+const validating = ref(false) // opened by "Read and approve": Approve / Reject under the report
 const pendingDelete = ref<InputName | null>(null)
 const pendingRelease = ref(false)
 
@@ -157,6 +167,18 @@ const approveImports = computed(() => step(state.value, 'data_import')?.items.fi
 
 // A card's key is its checkpoint ('CSB/Malaria:forecast'); the server resolves which checkpoint a job counts for.
 const launchItem = (item: string) => launch(jobOf(item), labelOf(item))
+
+// run = null: the open run's report (output/); otherwise the report archived when that run closed.
+const openReport = (run: { source: string; disease: string } | null, decide: boolean) => {
+  reportRun.value = run
+  validating.value = decide
+  showReportModal.value = true
+}
+
+const decideFromReport = async (decision: 'approve' | 'reject') => {
+  showReportModal.value = false
+  await decide(decision)
+}
 
 const confirmDelete = async () => {
   const name = pendingDelete.value
@@ -252,22 +274,6 @@ onMounted(refresh)
   border: 1px solid rgba(251, 191, 36, 0.4);
   color: #fde68a;
   font-size: 0.875rem;
-}
-
-.lock-release {
-  padding: 0.375rem 0.75rem;
-  border-radius: 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #fca5a5;
-  background: rgba(220, 38, 38, 0.2);
-  border: 1px solid rgba(220, 38, 38, 0.6);
-  cursor: pointer;
-}
-
-.lock-release:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .action-grid {

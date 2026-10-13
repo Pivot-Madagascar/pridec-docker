@@ -37,25 +37,30 @@ describe('usePipeline', () => {
   afterEach(() => vi.useRealTimers())
 
   it('launches, notifies and reads the state again from the server', async () => {
-    launchJob.mockResolvedValue('import_gee_1')
+    launchJob.mockResolvedValue({ jobId: 'import_gee_1', requestId: 'req-1' })
     const { launch, state } = usePipeline(addActivity)
 
     expect(await launch('import_gee', 'Import GEE')).toBe(true)
 
     expect(launchJob).toHaveBeenCalledWith('import_gee', false)
     expect(showNotification).toHaveBeenCalledWith('Import GEE: accepted', 'success')
+    expect(addActivity).toHaveBeenCalledWith('Import GEE', 'Accepted', true, { jobId: 'import_gee_1', requestId: 'req-1' })
     expect(state.value).toEqual(STATE)
   })
 
-  it('shows the message of a 409 and does not retry', async () => {
+  it('shows a 409 in plain words and does not retry', async () => {
     launchJob.mockRejectedValue(conflict({ message: 'build_analytics needs data_import/import_gee in success first' }))
     const { launch, pending } = usePipeline(addActivity)
 
     expect(await launch('build_analytics', 'Build Analytics')).toBe(false)
 
-    expect(showNotification).toHaveBeenCalledWith('build_analytics needs data_import/import_gee in success first', 'error')
+    expect(showNotification).toHaveBeenCalledWith('A previous step must be completed first.', 'error')
     expect(pending.value).toBeNull()
     expect(launchJob).toHaveBeenCalledTimes(1)
+
+    launchJob.mockRejectedValue(conflict({ message: 'forecast (forecast_1) is running since t: one job at a time' }))
+    await launch('forecast', 'Run Forecast')
+    expect(showNotification).toHaveBeenLastCalledWith('A job is already running.', 'error')
   })
 
   it('keeps a confirmation_required until the user confirms, then resends with confirm=true', async () => {

@@ -37,17 +37,21 @@
             <p>{{ errorMessage }}</p>
           </div>
         </div>
+        <!-- Approve / Reject when the report is opened to decide on it -->
+        <div v-if="$slots.footer" class="modal-footer"><slot name="footer" /></div>
       </div>
     </div>
   </transition>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import api from '@/services/api'
 
 const props = defineProps<{
   modelValue: boolean
+  // A closed run: its archived report. Otherwise the report of the open run, in output/.
+  run?: { source: string; disease: string } | null
 }>()
 
 const emit = defineEmits<{
@@ -68,7 +72,8 @@ const fetchReport = async () => {
   errorMessage.value = ''
   
   try {
-    const response = await api.get('/output/forecast_report.html')
+    const url = props.run ? `/pipeline/runs/${props.run.source}/${props.run.disease}/report` : '/output/forecast_report.html'
+    const response = await api.get(url, { responseType: 'text' })
     reportContent.value = response.data
   } catch (err: any) {
     if (err.response?.status === 404) {
@@ -81,9 +86,8 @@ const fetchReport = async () => {
   }
 }
 
-onMounted(() => {
-  fetchReport()
-})
+// Read again at each opening: the report changes with the run.
+watch(() => props.modelValue, open => open && fetchReport(), { immediate: true })
 </script>
 
 <style scoped>
@@ -94,7 +98,7 @@ onMounted(() => {
 }
 
 .modal-container {
-  @apply fixed inset-0 w-screen h-screen;
+  @apply fixed inset-0 w-screen h-screen flex flex-col;
 }
 
 .modal-header {
@@ -114,8 +118,11 @@ onMounted(() => {
 }
 
 .modal-body {
-  @apply flex-1 overflow-hidden;
-  height: stretch;
+  @apply flex-1 overflow-hidden min-h-0;
+}
+
+.modal-footer {
+  @apply flex justify-end gap-3 p-4 border-t border-white/10 bg-[#1e293b];
 }
 
 .report-iframe {

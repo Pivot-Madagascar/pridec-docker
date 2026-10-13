@@ -1,19 +1,24 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from etlhub.api.auth import require_admin
 from etlhub.core.dependencies import get_pipeline_gate
 from etlhub.domain.interfaces.pipeline_gate import PipelineGate
 
 router = APIRouter(prefix="/pipeline", tags=["Pipeline"])
 
+Source = Literal["ADJ", "COM", "CSB"]
+Disease = Literal["Malaria", "Diarrhea", "Respinf"]
+CYCLE = Query(None, pattern=r"^\d{6}$", description="YYYYMM; the current month by default")
 CONFIRM = Query(False, description="Required to undo something already in success (409 confirmation_required otherwise)")
 
 
 class RunRequest(BaseModel):
-    source: Literal["ADJ", "COM", "CSB"]
-    disease: Literal["Malaria", "Diarrhea", "Respinf"]
+    source: Source
+    disease: Disease
 
 
 class Decision(BaseModel):
@@ -34,7 +39,7 @@ class Mode(BaseModel):
     ),
 )
 def get_checkpoints(
-    cycle: str | None = Query(None, pattern=r"^\d{6}$", description="YYYYMM; the current month by default"),
+    cycle: str | None = CYCLE,
     gate: PipelineGate = Depends(get_pipeline_gate),
 ) -> dict:
     return gate.progress(cycle)
@@ -57,10 +62,25 @@ def open_run(body: RunRequest, confirm: bool = CONFIRM, gate: PipelineGate = Dep
 @router.delete(
     "/runs/current",
     summary="Abandon the open forecast run",
-    description="Nothing is published; the run's items go back to pending.",
+    description="Nothing is published; the run's items go back to pending. Administrators only (DHIS2 authority ALL).",
+    dependencies=[Depends(require_admin)],
 )
 def abandon_run(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str]:
     return {"abandoned": gate.abandon_run()}
+
+
+@router.get(
+    "/runs/{source}/{disease}/report",
+    response_class=FileResponse,
+    summary="Report of a closed forecast run",
+    description="forecast_report.html as it was when the run closed (post_forecast success). 404 if none was kept.",
+)
+def run_report(source: Source, disease: Disease, cycle: str | None = CYCLE,
+               gate: PipelineGate = Depends(get_pipeline_gate)) -> FileResponse:
+    path = gate.report(cycle, f"{source}/{disease}")
+    if path is None:
+        raise HTTPException(status_code=404, detail=f"No report kept for run {source}/{disease}")
+    return FileResponse(path, media_type="text/html")
 
 
 @router.post(
@@ -106,8 +126,9 @@ def set_mode(body: Mode, confirm: bool = CONFIRM, gate: PipelineGate = Depends(g
     summary="Free the pipeline lock",
     description=(
         "For a job whose worker was killed: frees the lock and marks its running checkpoint as error. "
-        "The lock never expires on its own. Returns the freed job_id, or null."
+        "The lock never expires on its own. Returns the freed job_id, or null. Administrators only (DHIS2 authority ALL)."
     ),
+    dependencies=[Depends(require_admin)],
 )
 def release_lock(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str | None]:
     return {"released": gate.release_lock()}

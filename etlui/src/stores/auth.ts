@@ -6,6 +6,7 @@ export interface Dhis2User {
     email: string | null
     username: string | null
     displayName: string | null
+    is_admin?: boolean // DHIS2 authority ALL; missing in sessions stored before 2026-10-13
 }
 
 // The session itself is an HttpOnly cookie set by etlhub: JavaScript never sees it.
