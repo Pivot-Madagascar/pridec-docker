@@ -327,13 +327,19 @@ Limits:
 
 ## Open points
 
-| Point | Question |
-|---|---|
-| `forecast_start` | Which value does `jq` write in `pivot_forecast.sh` (current month, next month, last month of data)? The server must write the same one. |
-| `approve_imports` | What is the limit for CSB cases? |
-| Test mode and `forecast` | Should test mode use `forecast_assets/test_config.json` (Ranger + Naive)? |
-| `calc_orgunit_alerts` | Celery or synchronous job? What exactly does it publish? |
-| Level check for `external_data` | Which columns distinguish an fkt file from a csb file? |
+| Point | Question | Answer |
+|---|---|---|
+| `forecast_start` | Which value does `jq` write in `pivot_forecast.sh` (current month, next month, last month of data)? The server must write the same one. | The default is the current month in YYYYMM, but this can be edited by the user. |
+| `approve_imports` | What is the limit for CSB cases? | 1000 cases |
+| Test mode and `forecast` | Should test mode use `forecast_assets/test_config.json` (Ranger + Naive)? | Yes |
+| `calc_orgunit_alerts` | Celery or synchronous job? What exactly does it publish? | This is a syncronous job and relies on files in the `outputs` directory. It publishes a dataElement to the PRIDE-C instance corresponding to an alert |
+| Level check for `external_data` | Which columns distinguish an fkt file from a csb file? | A validation check is done during the `validate_inputs` step, which ensures that the items in the `orgUnit` column matches the `orgUnit` in the `disease_data.json`. Do not check the level for this. |
+
+## Requested changes for new version:
+
+- `external_data.csv` is not mandatory. A default for each `dataElement` to be forecast can be provided by the admin.
+- `forecast_start` can be written in default by the server but should be editable by the user
+- the smallest unit of forecast should be the `dataElement` to predict, which has a name starting with `pridec_historic_<x>`. A configuration should be provided by that links each <x> to a default config.json file specific to that system that can be overwritten by uploading a new one. 
 
 ## Changes since the 2026-10-09 version
 
