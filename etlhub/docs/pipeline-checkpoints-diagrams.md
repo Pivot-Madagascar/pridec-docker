@@ -317,6 +317,7 @@ stateDiagram-v2
 
 Limits:
 - A cycle not finished by the end of the month stays unfinished; a killed worker blocks everything until `DELETE /pipeline/lock`.
+- A cycle other than the current month can be chosen with `PUT /pipeline/cycle`: the diagram then applies to that cycle; it does not follow the calendar until set back to the current month.
 - **Test mode** (`PUT /pipeline/mode`): same rules and same diagrams; checkpoints are kept in Redis only,
   and switching back to production erases them (with `confirm=true` if there are any). This mode passes `DRYRUN=True` to `import_gee`
   (quick partial import) and to `post_forecast` (no write to PRIDE-C). Not to be confused with the `DRYRUN` option

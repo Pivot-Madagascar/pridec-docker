@@ -283,6 +283,17 @@ def test_a_csb_run_needs_calc_orgunit_alerts_before_approval(checkpoint_store):
     with pytest.raises(PipelineBlockedError, match="CSB/Malaria:calc_orgunit_alerts"):
         checkpoint_store.decide("approve")
 
+    assert checkpoint_store.skip_alerts() == "CSB/Malaria"  # temporary, until the script exists
+    checkpoint_store.decide("approve")
+    assert _status(checkpoint_store.progress(), "forecast", "CSB/Malaria:approve") == "success"
+
+
+def test_skip_alerts_is_refused_outside_a_csb_run(checkpoint_store):
+    _import(checkpoint_store)
+    checkpoint_store.open_run("COM/Malaria")
+    with pytest.raises(PipelineBlockedError, match="CSB runs only"):
+        checkpoint_store.skip_alerts()
+
 
 # --- input files ------------------------------------------------------------------------
 
@@ -451,6 +462,40 @@ def test_a_new_month_starts_a_new_cycle_and_abandons_the_open_run(checkpoint_sto
     assert old["cycle_state"] == "open"  # unfinished, kept as history
     assert old["run"] is None  # COM/Malaria was abandoned, not left open
     assert _step(old, "data_import")["done"] is True
+
+
+def test_a_chosen_cycle_takes_the_launches_until_set_back_to_the_calendar_month(checkpoint_store, month):
+    with pytest.raises(PipelineBlockedError, match="future"):
+        checkpoint_store.set_cycle("202611")
+
+    assert checkpoint_store.set_cycle("202609") == {"cycle": "202609"}
+    _import(checkpoint_store)
+    checkpoint_store.open_run("COM/Malaria")
+    assert checkpoint_store.progress()["cycle"] == "202609"
+    assert _step(checkpoint_store.progress("202610"), "data_import")["done"] is False
+    with pytest.raises(PipelineBlockedError, match="COM/Malaria is open"):
+        checkpoint_store.set_cycle(None)
+
+    month("202611")  # a chosen cycle does not follow the calendar: its run stays open
+    assert checkpoint_store.progress()["run"]["couple"] == "COM/Malaria"
+
+    checkpoint_store.abandon_run()
+    assert checkpoint_store.set_cycle("202611") == {"cycle": "202611"}  # the calendar month: follow it again
+    month("202612")
+    assert checkpoint_store.progress()["cycle"] == "202612"
+
+
+def test_a_complete_cycle_can_be_chosen_but_takes_no_launch(checkpoint_store, month):
+    _all_runs(checkpoint_store)
+    for task in ("build_analytics", "update_key"):
+        _pass(checkpoint_store, task)
+    month("202611")
+
+    checkpoint_store.set_cycle("202610")
+
+    assert checkpoint_store.progress()["cycle_state"] == "closed"
+    with pytest.raises(PipelineBlockedError, match="202610 is complete"):
+        checkpoint_store.start("import_gee", "again")
 
 
 # --- files shared between runs ----------------------------------------------------------

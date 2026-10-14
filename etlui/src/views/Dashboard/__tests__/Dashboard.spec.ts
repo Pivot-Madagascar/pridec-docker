@@ -4,6 +4,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 const getCheckpoints = vi.fn()
 const launchJob = vi.fn()
 const setMode = vi.fn()
+const setCycle = vi.fn()
 const decideRun = vi.fn()
 const decideImports = vi.fn()
 const openRun = vi.fn()
@@ -13,6 +14,7 @@ vi.mock('@/services/pipeline', () => ({
   getCheckpoints: (...args: unknown[]) => getCheckpoints(...args),
   launchJob: (...args: unknown[]) => launchJob(...args),
   setMode: (...args: unknown[]) => setMode(...args),
+  setCycle: (...args: unknown[]) => setCycle(...args),
   decideRun: (...args: unknown[]) => decideRun(...args),
   decideImports: (...args: unknown[]) => decideImports(...args),
   openRun: (...args: unknown[]) => openRun(...args),
@@ -91,6 +93,30 @@ describe('Dashboard', () => {
     await wrapper.findAll('.mode-btn').find(b => b.text() === 'YES')!.trigger('click')
     await flushPromises()
     expect(setMode).toHaveBeenCalledWith(true, false)
+    wrapper.unmount()
+  })
+
+  it('shows the cycle in a month input and sends the chosen one to the server', async () => {
+    setCycle.mockResolvedValue(undefined)
+    const wrapper = await mountPage()
+
+    const input = wrapper.find<HTMLInputElement>('input[type="month"]')
+    expect(input.element.value).toBe('2026-10')
+    await input.setValue('2026-09')
+    await flushPromises()
+    await input.setValue('')
+    await flushPromises()
+
+    expect(setCycle).toHaveBeenNthCalledWith(1, '202609')
+    expect(setCycle).toHaveBeenNthCalledWith(2, null)
+    wrapper.unmount()
+  })
+
+  it('locks the cycle while a run is open', async () => {
+    getCheckpoints.mockResolvedValue(forecastState('COM/Malaria'))
+    const wrapper = await mountPage()
+
+    expect(wrapper.find('input[type="month"]').attributes('disabled')).toBeDefined()
     wrapper.unmount()
   })
 
@@ -181,6 +207,8 @@ describe('Dashboard', () => {
     expect(external[1].find('.dropzone').classes()).toContain('is-disabled')
     expect(external[1].text()).toContain('can be changed while a CSB run is open')
     const [adj, com, csb] = malaria.findAll('.level-column')
+    // The items live in each run's "Steps" drawer, rendered only once opened.
+    for (const level of [adj, com, csb]) await level.findAll('button').find(b => b.text() === 'Steps')!.trigger('click')
     expect(adj.text()).toContain('Published')
     expect(adj.findAll('.item')).toHaveLength(7)
     expect(csb.findAll('.item')).toHaveLength(8) // calc_orgunit_alerts
@@ -190,8 +218,7 @@ describe('Dashboard', () => {
     expect(csb.text()).toContain('Available once the open run is done')
 
     expect(adj.find('progress').attributes()).toMatchObject({ value: '1', max: '7' })
-    await com.findAll('button').find(b => b.text() === 'Steps')!.trigger('click')
-    expect(com.find('dialog').text()).toContain('Disease data')
+    expect(com.find('[role="dialog"]').text()).toContain('Disease data')
     const launchButtons = com.findAll('button').filter(b => b.text() === 'Launch')
     expect(launchButtons).toHaveLength(1) // only what etlhub marks launchable
     await launchButtons[0].trigger('click')
@@ -208,6 +235,7 @@ describe('Dashboard', () => {
     expect(wrapper.find('.todo').text()).toContain('approve Malaria · Community sites (COM).')
     const com = wrapper.find('#forecast-Malaria').findAll('.level-column')[1]
     expect(com.text()).toContain('To approve')
+    await com.findAll('button').find(b => b.text() === 'Steps')!.trigger('click')
     expect(com.text()).toContain('Waiting for your decision')
     await com.findAll('button').find(b => b.text() === 'Read and approve')!.trigger('click')
     await flushPromises()
@@ -221,10 +249,14 @@ describe('Dashboard', () => {
 
   it('opens a run when none is open, and shows the report kept for a published run', async () => {
     openRun.mockResolvedValue({})
-    getCheckpoints.mockResolvedValue(forecastState(null, { 'ADJ/Malaria:post_forecast': ['success'] }))
+    const published = forecastState(null, { 'ADJ/Malaria:post_forecast': ['success'] })
+    published.steps[1].items.find(i => i.item === 'ADJ/Malaria:post_forecast')!.updated_at = '2026-10-13T14:02:11'
+    getCheckpoints.mockResolvedValue(published)
     const wrapper = await mountPage()
 
     const [adj, com] = wrapper.find('#forecast-Malaria').findAll('.level-column')
+    await adj.findAll('button').find(b => b.text() === 'Steps')!.trigger('click')
+    expect(adj.findAll('.item-time').map(t => t.text())).toEqual(['Last update: 2026-10-13 14:02']) // a success only
     await com.findAll('button').find(b => b.text() === 'Open')!.trigger('click')
     await flushPromises()
     expect(openRun).toHaveBeenCalledWith('COM', 'Malaria', false)

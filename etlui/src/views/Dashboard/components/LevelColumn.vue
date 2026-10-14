@@ -1,5 +1,5 @@
 <template>
-  <!-- One run (level x disease): its status and a progress bar; every item and its launch button are in the "Steps" dialog. -->
+  <!-- One run (level x disease): its status and a progress bar; every item and its launch button are in the "Steps" drawer. -->
   <section class="level-column" :class="{ 'is-open': isOpen }" :aria-labelledby="titleId">
     <h5 :id="titleId" class="level-title">{{ LEVEL_NAMES[source] }} <span class="level-code">{{ source }}</span></h5>
     <p class="level-status" :class="`status-${status.key}`">{{ status.text }}</p>
@@ -9,7 +9,7 @@
       <button type="button" class="btn btn-small" @click="showSteps = true">Steps</button>
     </p>
 
-    <BaseDialog :open="showSteps" backdrop-close class="steps-dialog" :aria-label="`${LEVEL_NAMES[source]} · ${disease}`" @dismiss="showSteps = false">
+    <Drawer v-model="showSteps" class="steps-drawer" :label="`${LEVEL_NAMES[source]} · ${disease}`">
       <h5 class="level-title">{{ LEVEL_NAMES[source] }} <span class="level-code">{{ source }}</span> · {{ disease }}</h5>
       <ol class="item-list">
         <li v-for="row in rows" :key="row.item" class="item" :class="`item-${row.look}`">
@@ -18,6 +18,7 @@
             <span class="item-label">{{ row.label }}</span>
             <code class="item-tech">{{ row.job }}</code>
             <span class="item-state">{{ LOOK_TEXT[row.look] }}</span>
+            <span v-if="row.updated" class="item-state item-time">{{ row.updated }}</span>
           </span>
           <button
             v-if="row.launch"
@@ -31,8 +32,7 @@
           </button>
         </li>
       </ol>
-      <button type="button" class="btn" @click="showSteps = false">Close</button>
-    </BaseDialog>
+    </Drawer>
 
     <div class="level-action">
       <button v-if="status.key === 'published'" type="button" class="btn" @click="emit('report')">View report</button>
@@ -49,8 +49,8 @@
 
 <script setup lang="ts">
 import { computed, ref, useId } from 'vue'
-import BaseDialog from './BaseDialog.vue'
-import { ITEM_NAMES, LEVEL_NAMES, jobOf, step } from '@/config/pipeline'
+import Drawer from '@/components/Drawer.vue'
+import { ITEM_NAMES, LEVEL_NAMES, jobOf, lastUpdate, step } from '@/config/pipeline'
 import type { Checkpoints, Disease, PipelineItem, Source } from '@/types/pipeline'
 
 const props = defineProps<{
@@ -107,7 +107,9 @@ const rows = computed(() =>
     return {
       item: i.item, job, look,
       label: ITEM_NAMES[job] ?? job,
-      launch: launchable ? (i.status === 'pending' ? 'Launch' : 'Relaunch') : null
+      updated: lastUpdate(i),
+      // ponytail: calc_orgunit_alerts has no script yet (501), so its button skips it; back to Launch once it exists.
+      launch: !launchable ? null : job === 'calc_orgunit_alerts' ? 'Skip' : i.status === 'pending' ? 'Launch' : 'Relaunch'
     }
   })
 )

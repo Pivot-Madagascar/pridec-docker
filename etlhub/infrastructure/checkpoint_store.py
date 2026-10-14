@@ -13,8 +13,9 @@ from etlhub.core.config import get_settings
 from etlhub.domain import pipeline
 from etlhub.domain.exceptions import ConfirmationRequiredError, ETLException, PipelineBlockedError
 from etlhub.domain.pipeline import (
-    accessible_steps, blocking_reason, config_item, cycle_for_launch, dependents, disease_of, external_data_item,
-    impact, level_of, progress, require_confirmation, require_input_confirmation, resolve_slot, run_context, run_items, status,
+    accessible_steps, blocking_reason, config_item, dependents, disease_of, external_data_item,
+    impact, level_of, progress, require_confirmation, require_input_confirmation, require_open_cycle, resolve_slot, run_context,
+    run_items, status,
 )
 from etlhub.infrastructure.config_store import ConfigStore
 from etlhub.infrastructure.redis_client import get_redis
@@ -54,6 +55,10 @@ CREATE TABLE IF NOT EXISTS forecast_runs (
     PRIMARY KEY (cycle, couple, opened_at)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS one_open_run ON forecast_runs(state) WHERE state = 'open';
+CREATE TABLE IF NOT EXISTS pipeline_cycle (  -- the cycle chosen for launches; no row = the calendar month
+    id    INTEGER PRIMARY KEY CHECK (id = 1),
+    cycle TEXT NOT NULL
+);
 """
 # Databases created before 2026-10-12 also have an external_data column (DEFAULT 'none'): unused, inserts skip it.
 _RUN_COLUMNS = ("cycle", "couple", "state", "disease_code", "ou_level", "alert_name", "opened_at")
@@ -174,19 +179,22 @@ class CheckpointStore:
         ).fetchall()
         return {(s, i): {"status": st, "job_id": j, "updated_at": u} for s, i, st, j, u in rows}
 
-    def _active(self, conn: sqlite3.Connection) -> tuple[str | None, bool]:
-        """The latest cycle (YYYYMM sorts chronologically) and whether it is complete."""
-        active = conn.execute(
-            "SELECT max(cycle) FROM (SELECT cycle FROM checkpoints UNION SELECT cycle FROM forecast_runs)"
-        ).fetchone()[0]
-        complete = active is not None and progress(self._rows(conn, active))["current_step"] is None
-        return active, complete
+    @staticmethod
+    def _target(conn: sqlite3.Connection) -> str:
+        """The cycle launches go to: the one chosen with set_cycle, else the calendar month."""
+        row = conn.execute("SELECT cycle FROM pipeline_cycle").fetchone()
+        return row[0] if row else pipeline.this_month()
 
-    def _launch_cycle(self, conn: sqlite3.Connection) -> str:
-        """The calendar month. A run still open from a previous month is abandoned (automatic switch)."""
-        cycle = cycle_for_launch(*self._active(conn), pipeline.this_month())
+    @staticmethod
+    def _abandon_other_cycles(conn: sqlite3.Connection, cycle: str) -> None:
         conn.execute("UPDATE forecast_runs SET state = 'abandoned', closed_at = ? WHERE state = 'open' AND cycle != ?",
                      (_now(), cycle))
+
+    def _launch_cycle(self, conn: sqlite3.Connection) -> str:
+        """The target cycle, refused once complete. A run still open in another cycle is abandoned (automatic switch)."""
+        cycle = self._target(conn)
+        require_open_cycle(cycle, self._rows(conn, cycle))
+        self._abandon_other_cycles(conn, cycle)
         return cycle
 
     @staticmethod
@@ -238,8 +246,11 @@ class CheckpointStore:
             shutil.copyfile(report, target)
 
     def report(self, cycle: str | None, couple: str) -> Path | None:
-        """The archived report of a closed run (current month by default), or None."""
-        path = self._report_path(cycle or pipeline.this_month(), couple)
+        """The archived report of a closed run (target cycle by default), or None."""
+        if cycle is None:
+            with self._transaction() as conn:
+                cycle = self._target(conn)
+        path = self._report_path(cycle, couple)
         return path if path.is_file() else None
 
     def _clear_workdirs(self) -> None:
@@ -365,6 +376,26 @@ class CheckpointStore:
         with self._transaction() as conn:
             return self._launch_cycle(conn)
 
+    def set_cycle(self, cycle: str | None) -> dict:
+        """Chooses the cycle (YYYYMM) launches go to; None or the calendar month = follow the calendar month.
+
+        Refused while a job runs, while a run is open in the current target, and for a future month.
+        """
+        with self._transaction() as conn:
+            self._check_lock_free(conn)
+            month, current = pipeline.this_month(), self._target(conn)
+            cycle = cycle or month
+            if cycle > month:
+                raise PipelineBlockedError(f"Cycle {cycle} is in the future: the latest is {month}")
+            self._abandon_other_cycles(conn, current)  # settles the automatic switch before checking for a run
+            run = self._open_run(conn)
+            if run and cycle != current:
+                raise PipelineBlockedError(f"Run {run['couple']} is open: finish or abandon it first")
+            conn.execute("DELETE FROM pipeline_cycle")
+            if cycle != month:
+                conn.execute("INSERT INTO pipeline_cycle (id, cycle) VALUES (1, ?)", (cycle,))
+        return {"cycle": cycle}
+
     # --- forecast runs (R6) ---------------------------------------------------------------
 
     def open_run(self, couple: str, confirm: bool = False) -> dict:
@@ -440,6 +471,27 @@ class CheckpointStore:
                 self._reset(conn, cycle, [forecast, *dependents(forecast)])
         return couple
 
+    def skip_alerts(self) -> str:
+        """Marks the open CSB run's calc_orgunit_alerts as success without running anything.
+
+        ponytail: stopgap while no script implements calc_orgunit_alerts (501); CSB alerts are then not computed.
+        Remove this, the route and the etlui Skip button once the script exists (etlhub/docs/test-incident-log.md).
+        """
+        with self._transaction() as conn:
+            self._check_lock_free(conn)
+            cycle = self._launch_cycle(conn)
+            run = self._open_run(conn)
+            if run is None:
+                raise PipelineBlockedError("No forecast run is open")
+            couple, item = run["couple"], f"{run['couple']}:calc_orgunit_alerts"
+            if item not in run_items(couple):
+                raise PipelineBlockedError(f"{couple} has no calc_orgunit_alerts (CSB runs only)")
+            reason = blocking_reason(self._rows(conn, cycle), "forecast", item, couple)
+            if reason:
+                raise PipelineBlockedError(reason)
+            self._upsert(conn, cycle, "forecast", item, None, "success")
+        return couple
+
     def decide_imports(self, decision: str) -> None:
         """approve_imports (step data_import): approve unlocks build_analytics, reject sends it back to pending.
 
@@ -461,9 +513,9 @@ class CheckpointStore:
     # --- reading and unlocking ------------------------------------------------------------
 
     def progress(self, cycle: str | None = None) -> dict:
-        """State of a cycle, the current month by default, in the current mode (test or production)."""
+        """State of a cycle, the target cycle by default, in the current mode (test or production)."""
         with self._transaction() as conn:
-            cycle = cycle or pipeline.this_month()
+            cycle = cycle or self._target(conn)
             rows = self._rows(conn, cycle)
             run = self._open_run(conn)
             run = run if run and run["cycle"] == cycle else None

@@ -97,15 +97,10 @@ def status(rows: Rows, step: str, item: str) -> str:
     return rows.get((step, item), {}).get("status", "pending")
 
 
-def cycle_for_launch(active: str | None, active_complete: bool, month: str) -> str:
-    """The cycle (YYYYMM) a launch belongs to: always the calendar month.
-
-    A new month starts a new cycle automatically; an unfinished previous cycle stays unfinished.
-    A complete cycle is closed for the rest of its month: a month runs only once.
-    """
-    if active == month and active_complete:
-        raise PipelineBlockedError(f"Cycle {active} is complete: the next cycle starts next month")
-    return month
+def require_open_cycle(cycle: str, rows: Rows) -> None:
+    """A complete cycle takes no more launches: a month runs only once."""
+    if progress(rows)["current_step"] is None:
+        raise PipelineBlockedError(f"Cycle {cycle} is complete: choose another cycle or wait for the next month")
 
 
 def accessible_steps(rows: Rows) -> set[str]:

@@ -99,8 +99,10 @@ export function usePipeline(addActivity: AddActivity) {
     openRun: (source: Source, disease: Disease) => act(`Open run ${source}/${disease}`, c => pipeline.openRun(source, disease, c)),
     abandonRun: () => act('Abandon run', () => pipeline.abandonRun()),
     decide: (decision: 'approve' | 'reject') => act(decision === 'approve' ? 'Approve forecast' : 'Reject forecast', () => pipeline.decideRun(decision)),
+    skipAlerts: () => act('Skip alert thresholds', () => pipeline.skipAlerts()),
     decideImports: (decision: 'approve' | 'reject') => act(decision === 'approve' ? 'Approve imports' : 'Reject imports', () => pipeline.decideImports(decision)),
     setMode: (dryRun: boolean) => act(dryRun ? 'Switch to test mode' : 'Switch to production', c => pipeline.setMode(dryRun, c)),
+    setCycle: (cycle: string | null) => act(`Cycle ${cycle ?? 'of the current month'}`, () => pipeline.setCycle(cycle)),
     releaseLock: () => act('Release lock', () => pipeline.releaseLock()),
     upload: (name: InputName, file: File) => act(`Upload ${name}`, c => uploadInputFile(name, file, c)),
     remove: (name: InputName) => act(`Delete ${name}`, c => deleteInputFile(name, c))

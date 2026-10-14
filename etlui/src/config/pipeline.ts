@@ -42,14 +42,17 @@ export function labelOf(item: string): string {
   return CARDS[name]?.label ?? name
 }
 
+// Server local time, shown as is ('2026-10-13T14:02:11' -> '2026-10-13 14:02'); only for a success.
+export const lastUpdate = (item: PipelineItem) =>
+  item.status === 'success' && item.updated_at ? `Last update: ${item.updated_at.slice(0, 16).replace('T', ' ')}` : undefined
+
 /** ActionCard props for one checkpoint. Disabled when etlhub says it cannot start, or while any job runs. */
 export function toCard(item: PipelineItem, state: Checkpoints | null, busy: boolean) {
   const card = CARDS[nameOf(item.item)] ?? { label: labelOf(item.item), icon: ICONS.lightning, iconClass: 'icon-slate' }
   return {
     key: item.item,
     ...card,
-    // Server local time, shown as is ('2026-10-13T14:02:11' -> '2026-10-13 14:02'); only for a success.
-    subtitle: item.status === 'success' && item.updated_at ? `Last update: ${item.updated_at.slice(0, 16).replace('T', ' ')}` : undefined,
+    subtitle: lastUpdate(item),
     loading: item.status === 'running',
     success: item.status === 'success',
     inactive: busy || !item.launchable || (state?.lock != null && item.status !== 'running'),
@@ -89,7 +92,7 @@ const PLAIN_ERRORS: [RegExp, string][] = [
   [/one job at a time/i, 'A job is already running.'],
   [/needs (an open forecast run|its forecast run open)|no forecast run is open/i, 'Open a forecast run first.'],
   [/is open: finish or abandon it first/i, 'A forecast run is already open: finish or abandon it first.'],
-  [/is complete/i, "This month's cycle is complete."],
+  [/is complete/i, 'This cycle is complete: choose another month.'],
   [/does not match the run level/i, 'This file does not match the level of this forecast run.'],
   [/administrators only/i, 'Administrators only.'],
   [/needs .* first/i, 'A previous step must be completed first.']

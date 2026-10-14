@@ -61,9 +61,11 @@ describe('pipeline service', () => {
 
     await pipeline.openRun('CSB', 'Malaria', true)
     await pipeline.decideRun('reject')
+    await pipeline.skipAlerts()
 
     expect(post).toHaveBeenNthCalledWith(1, '/pipeline/runs', { source: 'CSB', disease: 'Malaria' }, CONFIRM)
     expect(post).toHaveBeenNthCalledWith(2, '/pipeline/runs/current/approve', { decision: 'reject' })
+    expect(post).toHaveBeenNthCalledWith(3, '/pipeline/runs/current/skip_alerts')
     expect(await pipeline.abandonRun()).toBe('CSB/Malaria')
     expect(del).toHaveBeenCalledWith('/pipeline/runs/current')
   })
@@ -73,6 +75,15 @@ describe('pipeline service', () => {
 
     expect(await pipeline.setMode(false, true)).toBe(false)
     expect(put).toHaveBeenCalledWith('/pipeline/mode', { dry_run: false }, CONFIRM)
+  })
+
+  it('chooses the cycle with PUT /pipeline/cycle, null for the current month', async () => {
+    put.mockResolvedValue({})
+
+    await pipeline.setCycle('202609')
+    await pipeline.setCycle(null)
+    expect(put).toHaveBeenNthCalledWith(1, '/pipeline/cycle', { cycle: '202609' })
+    expect(put).toHaveBeenNthCalledWith(2, '/pipeline/cycle', { cycle: null })
   })
 
   it('releases the lock with DELETE /pipeline/lock', async () => {

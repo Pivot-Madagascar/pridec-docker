@@ -21,6 +21,7 @@ The smallest unit of forecast is the **`dataElement`** (named `pridec_historic_<
 - It **opens** at the first launch of the month.
 - When the **month changes**, a new cycle starts on its own. The old one, if not finished, stays unfinished
   (it is kept in the history) and its open run is abandoned.
+- Another month can be chosen from etlui (month input next to "Cycle", `PUT /pipeline/cycle`): launches then go to it until it is set back to the current month. Not while a job runs or a run is open; never a future month.
 - It **closes** when the 3 steps are valid: the PRIDE-C application is up to date. An admin can reopen any step as needed.
 
 ## The 3 steps

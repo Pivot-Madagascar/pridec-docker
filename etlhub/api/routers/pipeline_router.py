@@ -2,7 +2,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from etlhub.api.auth import require_admin
 from etlhub.core.dependencies import get_pipeline_gate
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/pipeline", tags=["Pipeline"])
 
 Source = Literal["ADJ", "COM", "CSB"]
 Disease = Literal["Malaria", "Diarrhea", "Respinf"]
-CYCLE = Query(None, pattern=r"^\d{6}$", description="YYYYMM; the current month by default")
+CYCLE = Query(None, pattern=r"^\d{6}$", description="YYYYMM; the target cycle (PUT /pipeline/cycle) by default")
 CONFIRM = Query(False, description="Required to undo something already in success (409 confirmation_required otherwise)")
 
 
@@ -27,6 +27,10 @@ class Decision(BaseModel):
 
 class Mode(BaseModel):
     dry_run: bool
+
+
+class Cycle(BaseModel):
+    cycle: str | None = Field(None, pattern=r"^\d{4}(0[1-9]|1[0-2])$")
 
 
 @router.get(
@@ -96,6 +100,18 @@ def decide(body: Decision, gate: PipelineGate = Depends(get_pipeline_gate)) -> d
 
 
 @router.post(
+    "/runs/current/skip_alerts",
+    summary="Skip calc_orgunit_alerts of the open CSB run (temporary)",
+    description=(
+        "{couple}:calc_orgunit_alerts becomes success without running anything, which unlocks approve. "
+        "Temporary: no script implements calc_orgunit_alerts yet (POST /calc_orgunit_alerts answers 501)."
+    ),
+)
+def skip_alerts(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str]:
+    return {"skipped": f"{gate.skip_alerts()}:calc_orgunit_alerts"}
+
+
+@router.post(
     "/imports/approve",
     summary="Approve or reject the imports (step data_import)",
     description=(
@@ -119,6 +135,20 @@ def decide_imports(body: Decision, gate: PipelineGate = Depends(get_pipeline_gat
 )
 def set_mode(body: Mode, confirm: bool = CONFIRM, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
     return gate.set_mode(body.dry_run, confirm)
+
+
+@router.put(
+    "/cycle",
+    summary="Choose the cycle launches go to",
+    description=(
+        "cycle=YYYYMM: every launch, run, upload and approval counts for that cycle until changed. "
+        "null or the current month: follow the calendar month (the default). A future month, a running job or a run "
+        "open in the current cycle gets 409. A complete cycle can be chosen but takes no launch. "
+        "Kept per mode: leaving test mode forgets the test choice."
+    ),
+)
+def set_cycle(body: Cycle, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
+    return gate.set_cycle(body.cycle)
 
 
 @router.delete(

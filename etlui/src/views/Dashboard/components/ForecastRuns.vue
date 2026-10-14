@@ -371,8 +371,8 @@ const todo = computed(() => {
   accent-color: #10b981;
 }
 
-.forecast-runs .steps-dialog {
-  width: min(32rem, calc(100vw - 2rem));
+.forecast-runs .steps-drawer .drawer {
+  width: min(32rem, 100vw);
 }
 
 .forecast-runs .item-list {
