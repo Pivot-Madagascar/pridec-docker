@@ -13,6 +13,8 @@
         v-if="modelValue"
         class="drawer"
         :data-side="side"
+        role="dialog"
+        :aria-label="label"
       >
         <div class="drawer-header">
           <button
@@ -22,7 +24,7 @@
             <Icon :path="ICONS.close" class="h-5 w-5" />
           </button>
         </div>
-        <nav class="drawer-nav">
+        <nav v-if="items.length || apiBaseUrl" class="drawer-nav">
           <router-link
             v-for="item in items"
             :key="item.to"
@@ -42,12 +44,14 @@
             API Docs
           </a>
         </nav>
+        <div class="drawer-body"><slot /></div>
       </aside>
     </transition>
   </div>
 </template>
 
 <script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
 import Icon, { ICONS } from '@/components/Icons'
 
 interface NavItem {
@@ -60,13 +64,14 @@ interface Props {
   side?: 'left' | 'right'
   items?: NavItem[]
   apiBaseUrl?: string
+  label?: string
 }
 
 interface Emits {
   (e: 'update:modelValue', value: boolean): void
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   side: 'right',
   items: () => []
 })
@@ -76,6 +81,11 @@ const emit = defineEmits<Emits>()
 function close() {
   emit('update:modelValue', false)
 }
+
+// ponytail: Escape only, no focus trap (BaseDialog's showModal had one); add it if keyboard users get lost behind the overlay.
+const onKey = (e: KeyboardEvent) => props.modelValue && e.key === 'Escape' && close()
+onMounted(() => window.addEventListener('keydown', onKey))
+onUnmounted(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <style scoped>
@@ -113,6 +123,10 @@ function close() {
 
 .drawer-nav {
   @apply flex flex-col px-4 py-2 space-y-1;
+}
+
+.drawer-body {
+  @apply flex-1 overflow-y-auto px-6 pb-6;
 }
 
 .drawer-link {

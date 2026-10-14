@@ -121,9 +121,9 @@ def test_upload_without_a_run_is_refused_and_writes_nothing(upload_app, tmp_path
     assert not (tmp_path / "input" / "config.json").exists()
 
 
-def test_the_server_writes_forecast_start_into_config(upload_app, tmp_path, checkpoint_store):
+def test_the_server_writes_the_chosen_cycle_as_forecast_start_into_config(upload_app, tmp_path, checkpoint_store):
     import json
-    from etlhub.domain import pipeline
+    checkpoint_store.set_cycle("202001")
     _import(checkpoint_store)
     checkpoint_store.open_run("COM/Malaria")
 
@@ -132,7 +132,7 @@ def test_the_server_writes_forecast_start_into_config(upload_app, tmp_path, chec
 
     assert response.status_code == 200
     written = json.loads((tmp_path / "input" / "config.json").read_text())
-    assert written == {"forecast_start": pipeline.this_month(), "month_lag": 3}
+    assert written == {"forecast_start": "202001", "month_lag": 3}
 
 
 def test_calc_orgunit_alerts_is_not_implemented(client):
@@ -199,6 +199,17 @@ def test_mode_switch_through_the_api(client, checkpoint_store):
     assert refused.status_code == 409 and refused.json()["code"] == "confirmation_required"
     assert accepted.json() == {"dry_run": False}
     assert client.get("/pipeline/checkpoints").json()["dry_run"] is False
+
+
+def test_cycle_choice_through_the_api(client):
+    assert client.put("/pipeline/cycle", json={"cycle": "2026-09"}).status_code == 422
+    assert client.put("/pipeline/cycle", json={"cycle": "202613"}).status_code == 422
+    assert client.put("/pipeline/cycle", json={"cycle": "299901"}).status_code == 409
+
+    assert client.put("/pipeline/cycle", json={"cycle": "202001"}).json() == {"cycle": "202001"}
+    assert client.get("/pipeline/checkpoints").json()["cycle"] == "202001"
+    client.put("/pipeline/cycle", json={"cycle": None})
+    assert client.get("/pipeline/checkpoints").json()["cycle"] != "202001"
 
 
 def test_unlocking_and_abandoning_need_an_admin(app, client):

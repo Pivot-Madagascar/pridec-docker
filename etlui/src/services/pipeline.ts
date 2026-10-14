@@ -37,6 +37,11 @@ export async function decideRun(decision: 'approve' | 'reject'): Promise<void> {
   await api.post('/pipeline/runs/current/approve', { decision })
 }
 
+// POST /pipeline/runs/current/skip_alerts: temporary, calc_orgunit_alerts has no script yet (501); unlocks approve.
+export async function skipAlerts(): Promise<void> {
+  await api.post('/pipeline/runs/current/skip_alerts')
+}
+
 // POST /pipeline/imports/approve: approve unlocks build_analytics (step 1), reject sends the approval back to pending.
 export async function decideImports(decision: 'approve' | 'reject'): Promise<void> {
   await api.post('/pipeline/imports/approve', { decision })
@@ -46,6 +51,11 @@ export async function decideImports(decision: 'approve' | 'reject'): Promise<voi
 export async function setMode(dryRun: boolean, confirm = false): Promise<boolean> {
   const response = await api.put<{ dry_run: boolean }>('/pipeline/mode', { dry_run: dryRun }, withConfirm(confirm))
   return response.data.dry_run
+}
+
+// PUT /pipeline/cycle: the cycle (YYYYMM) launches go to; null = follow the calendar month.
+export async function setCycle(cycle: string | null): Promise<void> {
+  await api.put('/pipeline/cycle', { cycle })
 }
 
 // DELETE /pipeline/lock: frees the lock of a job whose worker died (the lock never expires).

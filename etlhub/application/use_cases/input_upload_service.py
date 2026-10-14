@@ -39,7 +39,8 @@ def _check_external_data(content: bytes) -> None:
 def with_forecast_start(content: bytes, cycle: str) -> bytes:
     """config.json with forecast_start set to the cycle (YYYYMM), the default validate_inputs uses when absent.
 
-    ponytail: the cycle is the current month; switch to pivot_forecast.sh's value once confirmed (open point).
+    The cycle is the target one (PUT /pipeline/cycle, else the calendar month).
+    ponytail: forecast_start = the cycle; switch to pivot_forecast.sh's value once confirmed (open point).
     """
     data = json.loads(content)
     data["forecast_start"] = cycle

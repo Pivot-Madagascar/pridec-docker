@@ -4,7 +4,19 @@
       <h2 class="section-header">ETL Pipeline</h2>
       <p class="section-subtitle">
         <template v-if="state">
-          Cycle {{ state.cycle }} · {{ state.cycle_state === 'closed' ? 'complete' : `current step: ${state.current_step}` }}
+          <label>
+            Cycle
+            <!-- The server keeps the choice; picking the current month follows the calendar again. -->
+            <input
+              type="month"
+              class="cycle-input"
+              :value="`${state.cycle.slice(0, 4)}-${state.cycle.slice(4)}`"
+              :disabled="busy || state.lock != null || state.run != null"
+              :title="state.run ? 'Finish or abandon the open run first' : 'Cycle the launches go to'"
+              @change="changeCycle"
+            />
+          </label>
+          · {{ state.cycle_state === 'closed' ? 'complete' : `current step: ${state.current_step}` }}
         </template>
         <template v-else>Loading the pipeline state…</template>
       </p>
@@ -140,8 +152,11 @@ const accordionItems = [
 const { activityLog, addActivity } = useActivityLog()
 const {
   state, serverFiles, busy, pending, refresh, confirm, cancel,
-  launch, openRun, abandonRun, decide, decideImports, setMode, releaseLock, upload, remove
+  launch, openRun, abandonRun, decide, decideImports, skipAlerts, setMode, setCycle, releaseLock, upload, remove
 } = usePipeline(addActivity)
+
+// <input type="month"> gives 'YYYY-MM' ('' when cleared = back to the current month).
+const changeCycle = (event: Event) => setCycle((event.target as HTMLInputElement).value.replace('-', '') || null)
 
 const {
   current: previewCurrent,
@@ -166,7 +181,8 @@ const cards = (name: StepName) =>
 const approveImports = computed(() => step(state.value, 'data_import')?.items.find(i => i.item === 'approve_imports'))
 
 // A card's key is its checkpoint ('CSB/Malaria:forecast'); the server resolves which checkpoint a job counts for.
-const launchItem = (item: string) => launch(jobOf(item), labelOf(item))
+// ponytail: calc_orgunit_alerts has no script yet (501): its button skips it (LevelColumn 'Skip').
+const launchItem = (item: string) => (jobOf(item) === 'calc_orgunit_alerts' ? skipAlerts() : launch(jobOf(item), labelOf(item)))
 
 // run = null: the open run's report (output/); otherwise the report archived when that run closed.
 const openReport = (run: { source: string; disease: string } | null, decide: boolean) => {
@@ -217,6 +233,20 @@ onMounted(refresh)
   color: #94a3b8;
   font-size: 0.875rem;
   margin-bottom: 1.5rem;
+}
+
+.cycle-input {
+  margin-left: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.375rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  color-scheme: dark;
+}
+
+.cycle-input:disabled {
+  opacity: 0.5;
 }
 
 .imports-approval {
