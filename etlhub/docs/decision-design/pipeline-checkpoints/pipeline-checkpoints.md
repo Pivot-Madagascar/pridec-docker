@@ -237,8 +237,8 @@ and finished in November stays in the October cycle).
 
 ### 4.6 The input files (uploaded from the user interface)
 
-The user picks their own files on their computer. The files in the repository's `forecast_assets/` serve as templates;
-the server never copies anything from it.
+The user picks their own files on their computer, or uses the **default file** of the item (files of `assets/`,
+copied into `input/` only when the user clicks "Use default"): see [../default-input-files/default-input-files.md](../default-input-files/default-input-files.md).
 
 | File | Item | Rules |
 |---|---|---|
@@ -348,8 +348,8 @@ The etlui "Test mode" button (`test = YES`) switches etlhub to test mode.
 - **Switch**: `PUT /pipeline/mode` `{"dry_run": true | false}`, with `?confirm`. Refused (409) while a job runs.
 - **Effect on the jobs** (target, step 20 not done: today `DRYRUN` applies to every script): the mode passes `DRYRUN=True`
   to `import_gee` (quick partial import) and to `post_forecast` (no write to PRIDE-C). Not to be confused with the `DRYRUN`
-  option of each `pridec` command, whose effect varies from one command to another. Should `forecast_assets/test_config.json`
-  (Ranger + Naive) also be used for `forecast`? Open point (§6).
+  option of each `pridec` command, whose effect varies from one command to another. Test mode offers `assets/test/inputs/config.json`
+  as the default `config.json` ([../default-input-files/default-input-files.md](../default-input-files/default-input-files.md)).
 - **Storage in test mode**: the same SQL logic runs on an **in-memory** SQLite database, serialized into the Redis key
   `pipeline:dry_run:db` (under the Redis lock `pipeline:dry_run:lock`). Nothing is written to `logs/etlhub.db`, and
   production is neither visible nor changed. Files uploaded in test mode go to `uploads/dry_run/`.
@@ -390,7 +390,7 @@ Open points:
 |---|---|
 | `forecast_start` | Which value does `jq` write in `pivot_forecast.sh` (current month, next month, last month of data)? The server must write the same one. |
 | `approve_imports` | What is the limit for CSB cases? |
-| Test mode and `forecast` | Should test mode use `forecast_assets/test_config.json` (Ranger + Naive)? |
+| Test mode and `forecast` | Decided 2026-10-15: test mode offers `assets/test/inputs/config.json` as default ([../default-input-files/default-input-files.md](../default-input-files/default-input-files.md)). |
 | `calc_orgunit_alerts` | Celery or synchronous job? What exactly does it publish? |
 | Level check for `external_data` | Which columns distinguish an fkt file from a csb file? |
 
@@ -414,7 +414,7 @@ Limits:
 - No path definition in the database: it is versioned code.
 - No progress state in Pinia or localStorage.
 - No `stale` or `invalidated` status: `done`, `accessible` and `launchable` are computed.
-- No automatic copy from `forecast_assets`: those are templates for the user.
+- No automatic copy from `assets/`: its files are offered as defaults, used only on "Use default".
 - No lock expiry.
 
 ---

@@ -38,7 +38,7 @@ Deployment outside a development machine is **not documented**: no etlhub Docker
 | `core/` | `config.py`, `dependencies.py` (composition root), `celery_app.py` |
 | `domain/` | exceptions, `Protocol` ports, Pydantic DTOs |
 | `application/use_cases/` | services (generate the `job_id`), `ETL_JOBS` table, stdout capture, webhook |
-| `infrastructure/` | `tasks.py`, `job_store.py`, `request_tracker.py`, `config_store.py`, `forecast_runner.py` |
+| `infrastructure/` | `tasks.py`, `job_store.py`, `request_tracker.py`, `config_store.py`, `forecast_runner.py`, `checkpoint_store.py`, `default_files.py` |
 | `api/` | routers, WebSocket, DHIS2 auth, middleware, `etl_events.py` |
 
 Intended direction: `api` → `application`, `core` · `application` → `domain` · `infrastructure` → `domain`, `application` · `domain` → nothing. Adapters are singletons (`@lru_cache`); services are built per request (`Depends`).
@@ -69,6 +69,7 @@ Worth knowing:
 | HTTP requests | SQLite `logs/etlhub.db`, table `request_log` | 30 days, purged on each insert. Unhandled errors recorded as 500 with `error`; `/api/tracking` never recorded |
 | Dynamic config | Redis, hash `app:config:dynamic` | no TTL |
 | ETL data | `input/`, `output/` | never purged |
+| Default input files | SQLite `logs/etlhub.db`, table `default_files` (both modes); content in `assets/`, which etlhub must reach in production too (`docs/decision-design/default-input-files/default-input-files.md`) | kept; seeded once per process |
 
 `list_recent` reads the files in `logs/requests/` (sorted by modification time), not Redis. Scripts write under `os.getcwd()/input|output`: the repository root on the API side, and an unverified directory on the worker side. Redis has four roles: Celery broker and backend, job state, pub/sub, and dynamic configuration. The dynamic config (`DHIS_URL`, `DHIS_TOKEN`, `PARENT_OU`, `OU_LEVEL`, `DISEASE_CODE`) is read by the forecast container **and** by the ETL scripts (which also read `DRYRUN` and `LOG_LEVEL`).
 
@@ -81,7 +82,7 @@ Worth knowing:
 
 ## 7. Data pipeline
 
-The workflow follows the reference documentation (`pivot_forecast.sh`, 3 phases); `etlui` does not automate it: one step per click, and the pipeline gate enforces the order (see Concurrency below and `docs/pipeline-checkpoints.md`).
+The workflow follows the reference documentation (`pivot_forecast.sh`, 3 phases); `etlui` does not automate it: one step per click, and the pipeline gate enforces the order (see Concurrency below and `docs/decision-design/pipeline-checkpoints/pipeline-checkpoints.md`).
 ① imports → `approve_imports` (decision, `POST /pipeline/imports/approve`) → `build_analytics`; ② 9 runs (`config/<disease>` + `external_data/<level>` uploads, `fetch_*` → `validate_inputs` → `forecast` → `calc_orgunit_alerts` (CSB, still 501: no script) → `approve` → `post_forecast`); ③ `build_analytics` → `update_key`. `calc_csb_alerts` is no longer exposed (its script stays in `etl/scripts/`).
 
 | Step | Reads | Writes | Depends on |
@@ -98,7 +99,7 @@ The workflow follows the reference documentation (`pivot_forecast.sh`, 3 phases)
 | `calc_orgunit_alerts` | `ALERT_NAME` | alert thresholds | forecast (CSB runs; 501 today, target: `pridec etl calc_orgUnit_alerts`) |
 | `update_key` | — | DHIS2 datastore `pridec/pridec_update` | last |
 
-Concurrency: **one job at a time**, in cycle order, **one forecast run (source × disease) at a time** (`domain/pipeline.py`, `infrastructure/checkpoint_store.py`, tables `checkpoints`, `pipeline_lock`, `forecast_runs` in `logs/etlhub.db`). A launch while a job runs, before its prerequisites are in `success`, or a run job without an open run, gets 409. The lock is taken at launch and freed by `_update_task_status` (success/error); it never expires: `DELETE /pipeline/lock` frees it. Opening a run empties `input/` and `output/`; each run job gets the run's `DISEASE_CODE` / `OU_LEVEL` written into the dynamic config before it starts. `DELETE /output/reset` does not take it. No deduplication: imports resend the same values on every run, so deduplication depends on DHIS2. See `docs/pipeline-checkpoints.md`.
+Concurrency: **one job at a time**, in cycle order, **one forecast run (source × disease) at a time** (`domain/pipeline.py`, `infrastructure/checkpoint_store.py`, tables `checkpoints`, `pipeline_lock`, `forecast_runs` in `logs/etlhub.db`). A launch while a job runs, before its prerequisites are in `success`, or a run job without an open run, gets 409. The lock is taken at launch and freed by `_update_task_status` (success/error); it never expires: `DELETE /pipeline/lock` frees it. Opening a run empties `input/` and `output/`; each run job gets the run's `DISEASE_CODE` / `OU_LEVEL` written into the dynamic config before it starts. `DELETE /output/reset` does not take it. No deduplication: imports resend the same values on every run, so deduplication depends on DHIS2. See `docs/decision-design/pipeline-checkpoints/pipeline-checkpoints.md`.
 
 ## 8. Security (summary)
 

@@ -28,6 +28,9 @@ Re-check against the code before relying on a line number or a default.
 | GET | `/input/files/config/preview` | `input_router` | Sync, content of `input/config.json`. 404 absent, 422 not a JSON object | — |
 | GET | `/input/files/external_data/preview?limit=100` | `input_router` | Sync, `{columns, rows, total_rows, period_range, org_units}`: first `limit` (1–500) rows, summary over the whole file read line by line. 404 absent | — |
 | DELETE | `/input/files/{config\|external_data}` | `input_router` | Sync, deletes the file in `input/`. 404 absent, 422 other name | — |
+| GET | `/input/defaults` | `input_router` | Sync. Default files of the current mode: `{item: {filename, size}}` (`etlhub/docs/decision-design/default-input-files/default-input-files.md`) | — |
+| GET | `/input/defaults/{config\|external_data}/{key}/preview?limit=100` | `input_router` | Sync, same answer as `/input/files/*/preview` for the default of that item. 404 no default | — |
+| POST | `/input/files/{config\|external_data}/from-default` | `input_router` | Sync, same as the upload with the default of the open run's item. 409 no open run, 404 no default | — |
 | GET | `/pipeline/checkpoints?cycle=YYYYMM` | `pipeline_router` | SQLite (Redis in test mode), default cycle = the current month. `{cycle, cycle_state, current_step, run, lock, dry_run, steps[{step, done, accessible, items[{item, status, job_id, updated_at, launchable}]}]}` | Session |
 | POST | `/pipeline/runs` | `pipeline_router` | Body `{source, disease}`, `?confirm`. Opens the forecast run of a couple (one at a time), empties `input/` and `output/`. 201 run, 409, 422 unknown couple | Session |
 | DELETE | `/pipeline/runs/current` | `pipeline_router` | Abandons the open run, its items → pending. `{abandoned: couple}` | **Admin** (403 otherwise) |
@@ -42,9 +45,9 @@ Re-check against the code before relying on a line number or a default.
 | DELETE | `/output/reset` | `forecast_report_router` | `rm -rf output/` | `.output_sig` exists (not real auth) |
 | GET | `/` | `main.py` | 307 redirect to `/docs` | — |
 
-Every launch (`/import_*`, `/fetch_*`, `/validate_inputs`, `/build_analytics`, `/post_forecast`, `/update_key`, `/forecast/`) and `POST`/`DELETE /input/files/{name}` go through the pipeline gate (`etlhub/docs/pipeline-checkpoints.md`): **409** `{message}` while another job runs, when a prerequisite is not in `success`, or for a forecast-run job (`/fetch_*`, `/validate_inputs`, `/forecast/`, `/post_forecast`, input files) without an open run. Undoing a `success` needs `?confirm=true`, otherwise **409** `{code: "confirmation_required", message, impact{item, step, current_step, reset_items, blocked_steps, kept_items}}` and nothing is written. All messages are in English.
+Every launch (`/import_*`, `/fetch_*`, `/validate_inputs`, `/build_analytics`, `/post_forecast`, `/update_key`, `/forecast/`) and `POST`/`DELETE /input/files/{name}` (and `/from-default`) go through the pipeline gate (`etlhub/docs/decision-design/pipeline-checkpoints/pipeline-checkpoints.md`): **409** `{message}` while another job runs, when a prerequisite is not in `success`, or for a forecast-run job (`/fetch_*`, `/validate_inputs`, `/forecast/`, `/post_forecast`, input files) without an open run. Undoing a `success` needs `?confirm=true`, otherwise **409** `{code: "confirmation_required", message, impact{item, step, current_step, reset_items, blocked_steps, kept_items}}` and nothing is written. All messages are in English.
 
-Pipeline revision of 2026-10-12 (`etlhub/docs/pipeline-checkpoints.md` §8): applied, except `/calc_orgunit_alerts` (still 501), the test-mode scope (`DRYRUN` stays global; target: `import_gee` and `post_forecast` only) and the level check of `external_data` uploads (target: 422 on a mismatch).
+Pipeline revision of 2026-10-12 (`etlhub/docs/decision-design/pipeline-checkpoints/pipeline-checkpoints.md` §8): applied, except `/calc_orgunit_alerts` (still 501), the test-mode scope (`DRYRUN` stays global; target: `import_gee` and `post_forecast` only) and the level check of `external_data` uploads (target: 422 on a mismatch).
 
 Router prefixes (`main.py`): `ingest`, `analytics`, `validation`, `auth` have none; `forecast` `/forecast`; `tracking` `/api/tracking`; `forecast_report` `/output`; `input` `/input`; `config` `/api/config`. `auth_router` has no OpenAPI tag.
 
