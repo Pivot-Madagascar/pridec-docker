@@ -100,7 +100,7 @@ flowchart TB
 > one at a time, and they are **all mandatory**. `config.json` is uploaded in the **first open run of the disease** (ADJ, COM or CSB, whichever comes first),
 > then automatically copied back into `input/` for its 2 other runs; the server writes `forecast_start` into it, as `jq` does in `pivot_forecast.sh`.
 > Same principle for `external_data.csv`, **per level**: uploaded in the first run of the level (fokontany: ADJ or COM; CSB), then copied back to the other runs of that level.
-> Over one cycle, that makes 3 uploads of `config.json` and 2 of `external_data.csv`. The files in the repository's `forecast_assets/` serve as templates.
+> Over one cycle, that makes 3 uploads of `config.json` and 2 of `external_data.csv`. The files in the repository's `assets/` are offered as defaults ([../default-input-files/default-input-files.md](../default-input-files/default-input-files.md)).
 
 > **`build_analytics`** must go through the etlhub API. If launched manually from the DHIS2 interface, etlhub does not see it and step ① stays invalid.
 
@@ -332,7 +332,7 @@ Limits:
 |---|---|---|
 | `forecast_start` | Which value does `jq` write in `pivot_forecast.sh` (current month, next month, last month of data)? The server must write the same one. | The default is the current month in YYYYMM, but this can be edited by the user. |
 | `approve_imports` | What is the limit for CSB cases? | 1000 cases |
-| Test mode and `forecast` | Should test mode use `forecast_assets/test_config.json` (Ranger + Naive)? | Yes |
+| Test mode and `forecast` | Should test mode use `forecast_assets/test_config.json` (Ranger + Naive)? | Yes. Replaced on 2026-10-15: that file never existed; test mode offers `assets/test/inputs/config.json` ([../default-input-files/default-input-files.md](../default-input-files/default-input-files.md)) |
 | `calc_orgunit_alerts` | Celery or synchronous job? What exactly does it publish? | This is a syncronous job and relies on files in the `outputs` directory. It publishes a dataElement to the PRIDE-C instance corresponding to an alert |
 | Level check for `external_data` | Which columns distinguish an fkt file from a csb file? | A validation check is done during the `validate_inputs` step, which ensures that the items in the `orgUnit` column matches the `orgUnit` in the `disease_data.json`. Do not check the level for this. |
 

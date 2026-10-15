@@ -81,5 +81,7 @@ Python 3.12 (use `test-venv`; the system `python3` is 3.11). Run from the repo r
 - `etlhub/docs/ARCHITECTURE.md` — compact architecture: runtime topology, state, data pipeline order, decisions
 - `etlhub/docs/DEVELOPMENT.md` — measured test, architecture and clean-code state; proposed rules for new code
 - `etlhub/docs/known-issues.md` — security findings, layering violations, dead code, doc errors
+- `etlhub/docs/testing-QA/` — manual test logs: incidents (cause, fix) and testers' notes
+- `etlhub/docs/decision-design/<feature>/` — design and decision docs per feature, implemented or under discussion (`pipeline-checkpoints/`, `pipeline-config/`, `default-input-files/`)
 - `.claude/skills/etlhub/SKILL.md` — how etlhub is built: architecture, job lifecycle, endpoint and config tables, forecast pipeline
 - `.claude/skills/etlhub-practices/SKILL.md` — how to change it well: templates, missing best practices as small migrations, checklists

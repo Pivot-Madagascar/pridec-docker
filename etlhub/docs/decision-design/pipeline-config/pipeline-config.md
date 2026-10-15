@@ -9,7 +9,7 @@ Changing an item, a disease or a level means changing code on both sides.
 
 This proposal makes the pipeline **configurable by an admin from an etlui page**, stored in **etlhub's database**,
 with **etlhub as the single source of truth** and etlui rendering only what etlhub returns.
-It implements the "system" configuration already requested in [pipeline-checkpoints-summary.md](pipeline-checkpoints-summary.md#the-system).
+It implements the "system" configuration already requested in [../pipeline-checkpoints/pipeline-checkpoints-summary.md](../pipeline-checkpoints/pipeline-checkpoints-summary.md#the-system).
 
 | § | Content |
 |---|---|
@@ -359,7 +359,7 @@ flowchart LR
 ```
 
 1. **Tables and seed.** Create `pipeline_config`, `cycle_config`, `config_files`; insert version 1 built from today's
-   `PIPELINE`, `OU_LEVEL`, `run_context` and the files in `forecast_assets/`. Check: `build_pipeline(version 1) == PIPELINE` (today's).
+   `PIPELINE`, `OU_LEVEL`, `run_context` and the files in `assets/forecast_configs/` (already recorded in `default_files`, see [../default-input-files/default-input-files.md](../default-input-files/default-input-files.md)). Check: `build_pipeline(version 1) == PIPELINE` (today's).
 2. **Pure domain on a config.** Every function of `pipeline.py` takes the cycle's built pipeline instead of module constants.
    The existing tests must pass unchanged.
 3. **Rename items to `dataElement` keys** (contract change, etlhub and etlui in the same change):

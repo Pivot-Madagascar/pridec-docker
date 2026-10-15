@@ -44,7 +44,7 @@ The smallest unit of forecast is the **`dataElement`** (named `pridec_historic_<
      The server writes `forecast_start` into it: by default the current month (`YYYYMM`), **editable by the user**.
    - `external_data.csv`: **optional, 1 per run**. An admin can set a default per `dataElement`; `dataElement`s can share the same file.
      `validate_inputs` checks that its `orgUnit` values match those of `disease_data.json` (no level check).
-   - The files in `forecast_assets/` serve as the defaults.
+   - The files in `assets/` serve as the defaults ([../default-input-files/default-input-files.md](../default-input-files/default-input-files.md)).
 3. **Jobs**: `fetch_disease`, `fetch_climate`, `fetch_geojson` → `validate_inputs` → `forecast`
    → `calc_orgunit_alerts` (optional, only if the admin sets an `ALERT_NAME`; synchronous, reads `output/`, publishes an alert `dataElement` to PRIDE-C).
 4. **Decide**: read the report, then `approve` (or `reject` to redo the forecast).
@@ -95,7 +95,7 @@ The etlui **"Test mode" (test = YES)** button switches etlhub to test mode (`PUT
 ## Current limits
 
 - **`calc_orgunit_alerts` still answers 501** (no script): CSB runs, and so the cycle, cannot complete.
-- Test mode still acts on every script (global `DRYRUN`); decided: it should use `forecast_assets/test_config.json` (Ranger + Naive) for `forecast`. The `external_data.csv` check (`orgUnit` match in `validate_inputs`) is not implemented yet.
+- Test mode still acts on every script (global `DRYRUN`); test mode offers `assets/test/inputs/config.json` as the default `config.json` (decided 2026-10-15, replaces `forecast_assets/test_config.json`, which never existed). The `external_data.csv` check (`orgUnit` match in `validate_inputs`) is not implemented yet.
 - **Interface** (etlui): connected since 2026-10-09; it has not been tested against a real etlhub, only with a mocked API. The etlui dashboard no longer has a "reset output" button (`DELETE /output/reset` is still available in the API).
 - A cycle not finished by the end of the month stays unfinished: nothing finishes it for you.
 - `DELETE /output/reset` and the command line (`./pridec`) bypass these controls.
@@ -107,4 +107,4 @@ The etlui **"Test mode" (test = YES)** button switches etlhub to test mode (`PUT
 - `external_data.csv` becomes optional; an admin can give a default per `dataElement`.
 - `forecast_start` is written by the server by default but editable by the user.
 - The forecast unit becomes the `dataElement` (`pridec_historic_<x>`), each linked by an admin configuration to a default `config.json` that an upload can overwrite.
-- Admin-configurable pipeline (steps, `dataElement`s, defaults), versioned in the database: proposal in [pipeline-config.md](pipeline-config.md).
+- Admin-configurable pipeline (steps, `dataElement`s, defaults), versioned in the database: proposal in [../pipeline-config/pipeline-config.md](../pipeline-config/pipeline-config.md).
