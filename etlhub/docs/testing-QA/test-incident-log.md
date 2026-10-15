@@ -1,6 +1,6 @@
 # etlhub — Test incident log
 
-Incidents met while testing the pipeline by hand. One entry per incident, newest first: what was seen, what the state was, the cause, the fix. Bugs that stay open go to `known-issues.md`.
+Incidents met while testing the pipeline by hand. One entry per incident, newest first: what was seen, what the state was, the cause, the fix. Bugs that stay open go to [`known-issues.md`](../known-issues.md).
 
 ## 2026-10-14 — "Alert thresholds (CSB only)" cannot run: CSB runs blocked before approval
 
