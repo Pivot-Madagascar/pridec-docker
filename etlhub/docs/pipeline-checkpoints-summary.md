@@ -107,3 +107,4 @@ The etlui **"Test mode" (test = YES)** button switches etlhub to test mode (`PUT
 - `external_data.csv` becomes optional; an admin can give a default per `dataElement`.
 - `forecast_start` is written by the server by default but editable by the user.
 - The forecast unit becomes the `dataElement` (`pridec_historic_<x>`), each linked by an admin configuration to a default `config.json` that an upload can overwrite.
+- Admin-configurable pipeline (steps, `dataElement`s, defaults), versioned in the database: proposal in [pipeline-config.md](pipeline-config.md).
