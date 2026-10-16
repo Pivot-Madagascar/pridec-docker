@@ -58,10 +58,11 @@ a `forecast_assets/test_config.json` (Ranger + Naive) in test mode: that file ne
 
 ## Interface (etlui)
 
-Under each `FileDropzone` of a `DiseaseCard` (its `config.json` and the 2 shared `external_data.csv`):
+Under each `FileDropzone` of a run's "Steps" dialog (`LevelColumn`: the run's `config.json` and `external_data.csv`, since 2026-10-16):
 "Default · *filename* · *size*", with **Preview** (always available) and **Use default** (enabled only when the
 upload is, i.e. a run of that disease or level is open). The server file shown after "Use default" is the same as
-after an upload: nothing says it came from the default.
+after an upload: nothing says it came from the default. The server file (**Preview**, **Delete**) is shown above the
+dropzone, and the default is hidden while a server file exists: delete it to be offered the default again.
 
 ## Deployment
 

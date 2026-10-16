@@ -185,10 +185,12 @@ describe('Dashboard', () => {
 
   it('shows one card per disease with every item of its 3 runs and launches what etlhub allows', async () => {
     launchJob.mockResolvedValue({ jobId: 'fetch_disease_1', requestId: 'r' })
-    getCheckpoints.mockResolvedValue(forecastState('COM/Malaria', {
+    const forecast = forecastState('COM/Malaria', {
       'config/Malaria': ['success', true], 'external_data/fkt': ['success', true], 'COM/Malaria:fetch_disease': ['pending', true],
-      'ADJ/Malaria:post_forecast': ['success']
-    }))
+      'COM/Malaria:fetch_geojson': ['success'], 'ADJ/Malaria:post_forecast': ['success']
+    })
+    forecast.steps[1].items.find(i => i.item === 'COM/Malaria:fetch_geojson')!.updated_at = '2026-10-13T14:02:11'
+    getCheckpoints.mockResolvedValue(forecast)
     const wrapper = await mountPage()
 
     const runs = wrapper.find('.forecast-runs')
@@ -203,39 +205,48 @@ describe('Dashboard', () => {
     expect(nav()).toEqual([false, false, true])
     const malaria = runs.find('#forecast-Malaria')
     expect(malaria.text()).toContain('1 of 3 levels published')
-    // One config.json input per disease; only the open run's disease can change it.
-    expect(malaria.find('.input-file').text()).toContain('config_malaria.json')
-    expect(malaria.find('.dropzone').classes()).not.toContain('is-disabled')
-    expect(runs.find('#forecast-Diarrhea .dropzone').classes()).toContain('is-disabled')
-    // Two shared external_data.csv inputs in each card; only the open run's level (fkt for COM) is active.
-    expect(runs.findAll('.external-data')).toHaveLength(3)
-    const external = malaria.findAll('.external-data .input-file')
-    expect(external.map(e => e.text().split(':')[0])).toEqual(['Fokontany', 'Health centres'])
-    expect(external[0].find('.dropzone').classes()).not.toContain('is-disabled')
-    expect(external[1].find('.dropzone').classes()).toContain('is-disabled')
-    expect(external[1].text()).toContain('can be changed while a CSB run is open')
-    // The repo's defaults: offered under each input, usable only where an upload is.
-    const useDefault = (input: typeof external[0]) => input.findAll('.default-status button').find(b => b.text() === 'Use default')
-    expect(malaria.find('.input-file .default-status').text()).toContain('config_malaria.json')
-    expect(external[0].find('.default-status').exists()).toBe(false) // no default for fkt in this mock
-    expect(useDefault(external[1])!.attributes('disabled')).toBeDefined()
+    // Only the open run has steps to show: its whole card opens them, highlighted.
+    expect(malaria.findAll('.dropzone').every(d => d.element.closest('dialog.steps-dialog'))).toBe(true)
+    const [adj, com, csb] = malaria.findAll('.level-column')
+    expect(malaria.findAll('button').some(b => b.text() === 'Steps')).toBe(false)
+    expect([adj, com, csb].map(l => l.classes().includes('is-open'))).toEqual([false, true, false])
+    expect([adj, com, csb].map(l => l.find('.card-steps').exists())).toEqual([false, true, false])
+    expect([adj, csb].map(l => l.find('dialog').exists())).toEqual([false, false])
+    await com.find('.card-steps').trigger('click')
+    expect(com.find('dialog .steps-close').attributes('aria-label')).toBe('Close the steps')
+    expect(com.find('dialog').findAll('button').some(b => b.text() === 'Close')).toBe(false)
+    // The run's input files first, then its jobs.
+    const inputs = com.findAll('.item').filter(i => i.find('.dropzone').exists())
+    expect(inputs.map(i => i.find('.item-tech').text())).toEqual(['config/Malaria', 'external_data/fkt'])
+    expect(inputs[0].text()).toContain('config_malaria.json')
+    expect(inputs[0].text()).toContain('✓ provided · same file for the 3 Malaria runs')
+    expect(inputs.map(i => i.find('.dropzone').classes().includes('is-disabled'))).toEqual([false, false])
+    // The repo's defaults: offered under each input.
+    const useDefault = (input: typeof inputs[0]) => input.findAll('.default-status button').find(b => b.text() === 'Use default')
+    expect(inputs[0].find('.default-status').text()).toContain('config_malaria.json')
+    expect(inputs[1].find('.default-status').exists()).toBe(false) // no default for fkt in this mock
     applyDefaultFile.mockResolvedValue('input/config.json')
-    await useDefault(malaria.find('.input-file'))!.trigger('click')
+    await useDefault(inputs[0])!.trigger('click')
     await flushPromises()
     expect(applyDefaultFile).toHaveBeenCalledWith('config', false)
-    const [adj, com, csb] = malaria.findAll('.level-column')
-    // The items live in each run's "Steps" drawer, rendered only once opened.
-    for (const level of [adj, com, csb]) await level.findAll('button').find(b => b.text() === 'Steps')!.trigger('click')
     expect(adj.text()).toContain('Published')
-    expect(adj.findAll('.item')).toHaveLength(7)
-    expect(csb.findAll('.item')).toHaveLength(8) // calc_orgunit_alerts
-    expect(csb.text()).toContain('Alert thresholds (CSB only)')
+    expect(com.findAll('.item')).toHaveLength(8) // 2 input files + 6 jobs: the data check is a button
+    // Stage 1 until the data check succeeds: its button waits for the 5 items, stage 2 is locked.
+    const tiles = com.findAll('.steps-tile')
+    expect(tiles.map(t => t.isVisible())).toEqual([true, false])
+    expect(tiles[0].findAll('.item-tech').map(t => t.text())).toEqual(
+      ['config/Malaria', 'external_data/fkt', 'fetch_disease', 'fetch_climate', 'fetch_geojson'])
+    expect(tiles[1].findAll('.item-tech').map(t => t.text())).toEqual(['forecast', 'approve', 'post_forecast'])
+    expect(tiles[0].find('.data-check').text()).toContain('Available once the 5 items above are done')
+    expect(tiles[0].findAll('.data-check button').map(b => [b.text(), b.attributes('disabled') !== undefined]))
+      .toEqual([['Run the data check', true], ['Next →', true]])
     expect(com.text()).toContain('Disease data')
     expect(com.text()).toContain('fetch_disease')
+    expect(com.findAll('.item-time').map(t => t.text())).toEqual(['Last update: 2026-10-13 14:02']) // a success only
     expect(csb.text()).toContain('Available once the open run is done')
 
-    expect(adj.find('progress').attributes()).toMatchObject({ value: '1', max: '7' })
-    expect(com.find('[role="dialog"]').text()).toContain('Disease data')
+    expect(adj.find('progress').attributes()).toMatchObject({ value: '3', max: '9' }) // both shared files are provided
+    expect(com.find('dialog').text()).toContain('Disease data')
     const launchButtons = com.findAll('button').filter(b => b.text() === 'Launch')
     expect(launchButtons).toHaveLength(1) // only what etlhub marks launchable
     await launchButtons[0].trigger('click')
@@ -246,15 +257,30 @@ describe('Dashboard', () => {
 
   it('reads the report of the run awaiting approval, then approves it', async () => {
     decideRun.mockResolvedValue(undefined)
-    getCheckpoints.mockResolvedValue(forecastState('COM/Malaria', { 'COM/Malaria:approve': ['pending', true] }))
+    getCheckpoints.mockResolvedValue(forecastState('COM/Malaria', {
+      'COM/Malaria:validate_inputs': ['success', true], 'COM/Malaria:approve': ['pending', true]
+    }))
     const wrapper = await mountPage()
 
     expect(wrapper.find('.todo').text()).toContain('approve Malaria · Community sites (COM).')
     const com = wrapper.find('#forecast-Malaria').findAll('.level-column')[1]
     expect(com.text()).toContain('To approve')
-    await com.findAll('button').find(b => b.text() === 'Steps')!.trigger('click')
+    await com.find('.card-steps').trigger('click')
+    // The data check succeeded: the dialog shows stage 2, and stage 1 stays reachable to relaunch it.
+    expect(com.findAll('.steps-tile').map(t => t.isVisible())).toEqual([false, true])
+    expect(com.find('.data-check button').text()).toBe('Relaunch the data check')
     expect(com.text()).toContain('Waiting for your decision')
-    await com.findAll('button').find(b => b.text() === 'Read and approve')!.trigger('click')
+    await com.find('.tile-nav button').trigger('click') // ← Previous
+    expect(com.findAll('.steps-tile').map(t => t.isVisible())).toEqual([true, false])
+    // Next: active once the data check succeeded, back to stage 2.
+    const next = com.findAll('.data-check button').find(b => b.text() === 'Next →')!
+    expect(next.attributes('disabled')).toBeUndefined()
+    await next.trigger('click')
+    expect(com.findAll('.steps-tile').map(t => t.isVisible())).toEqual([false, true])
+    // Read and approve: on the card, and on the approval item of the dialog.
+    const approveItem = com.find('dialog .job-approve')
+    expect(approveItem.find('button').text()).toBe('Read and approve')
+    await approveItem.find('button').trigger('click')
     await flushPromises()
     expect(apiGet).toHaveBeenLastCalledWith('/output/forecast_report.html', { responseType: 'text' })
 
@@ -266,14 +292,11 @@ describe('Dashboard', () => {
 
   it('opens a run when none is open, and shows the report kept for a published run', async () => {
     openRun.mockResolvedValue({})
-    const published = forecastState(null, { 'ADJ/Malaria:post_forecast': ['success'] })
-    published.steps[1].items.find(i => i.item === 'ADJ/Malaria:post_forecast')!.updated_at = '2026-10-13T14:02:11'
-    getCheckpoints.mockResolvedValue(published)
+    getCheckpoints.mockResolvedValue(forecastState(null, { 'ADJ/Malaria:post_forecast': ['success'] }))
     const wrapper = await mountPage()
 
     const [adj, com] = wrapper.find('#forecast-Malaria').findAll('.level-column')
-    await adj.findAll('button').find(b => b.text() === 'Steps')!.trigger('click')
-    expect(adj.findAll('.item-time').map(t => t.text())).toEqual(['Last update: 2026-10-13 14:02']) // a success only
+    expect(adj.find('.card-steps').exists()).toBe(false) // no open run: no steps to show
     await com.findAll('button').find(b => b.text() === 'Open')!.trigger('click')
     await flushPromises()
     expect(openRun).toHaveBeenCalledWith('COM', 'Malaria', false)

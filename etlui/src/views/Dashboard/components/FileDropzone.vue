@@ -1,5 +1,24 @@
 <template>
-  <div>
+  <div class="file-input">
+    <!-- File already in input/ on the server. -->
+    <div v-if="serverFile" class="status-row" :class="{ 'is-present': serverFile.exists }">
+      <template v-if="serverFile.exists">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span class="status-text">
+          On server · {{ formatSize(serverFile.size ?? 0) }}<template v-if="serverFile.modified"> · {{ formatDate(serverFile.modified) }}</template>
+        </span>
+        <button type="button" class="btn btn-sm btn-preview" :aria-label="`Preview ${label} on the server`" @click="emit('preview-server')">
+          <Icon :path="ICONS.eye" class="btn-icon" />
+          Preview
+        </button>
+        <button type="button" class="btn btn-sm btn-danger" :disabled="deleting" :aria-label="`Delete ${label} from the server`" @click="emit('delete')">
+          <Icon :path="ICONS.reset" class="btn-icon" />
+          {{ deleting ? 'Deleting…' : 'Delete' }}
+        </button>
+      </template>
+      <span v-else class="status-text">Not on server</span>
+    </div>
+
     <!-- Local file: drop or browse, then preview / replace / remove / upload. -->
     <div
       class="dropzone"
@@ -53,27 +72,8 @@
       <input :id="inputId" ref="input" type="file" :accept="accept" class="sr-only" :disabled="disabled" @change="onChange" />
     </div>
 
-    <!-- File already in input/ on the server. -->
-    <div v-if="serverFile" class="status-row" :class="{ 'is-present': serverFile.exists }">
-      <template v-if="serverFile.exists">
-        <span class="status-dot" aria-hidden="true"></span>
-        <span class="status-text">
-          On server · {{ formatSize(serverFile.size ?? 0) }}<template v-if="serverFile.modified"> · {{ formatDate(serverFile.modified) }}</template>
-        </span>
-        <button type="button" class="btn btn-sm btn-preview" :aria-label="`Preview ${label} on the server`" @click="emit('preview-server')">
-          <Icon :path="ICONS.eye" class="btn-icon" />
-          Preview
-        </button>
-        <button type="button" class="btn btn-sm btn-danger" :disabled="deleting" :aria-label="`Delete ${label} from the server`" @click="emit('delete')">
-          <Icon :path="ICONS.reset" class="btn-icon" />
-          {{ deleting ? 'Deleting…' : 'Delete' }}
-        </button>
-      </template>
-      <span v-else class="status-text">Not on server</span>
-    </div>
-
-    <!-- The file of the repo (assets/) offered for this item: previewable anytime, usable when an upload is. -->
-    <div v-if="defaultFile" class="status-row is-present default-status">
+    <!-- The file of the repo (assets/) offered for this item, until a file is on the server: delete that one to get it back. -->
+    <div v-if="defaultFile && !serverFile?.exists" class="status-row is-present default-status">
       <span class="status-text">Default · {{ defaultFile.filename }} · {{ formatSize(defaultFile.size) }}</span>
       <button type="button" class="btn btn-sm btn-preview" :aria-label="`Preview the default ${label}`" @click="emit('preview-default')">
         <Icon :path="ICONS.eye" class="btn-icon" />
@@ -270,12 +270,17 @@ const formatDate = (iso: string) =>
 
 /* --- Status rows (server file, default file) ----------------------------- */
 
+.file-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .status-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   min-height: 2rem;
-  margin-top: 0.5rem;
   padding: 0 0.25rem;
   color: #64748b;
   font-size: 0.8125rem;
