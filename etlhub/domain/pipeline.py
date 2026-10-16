@@ -1,6 +1,6 @@
 """The pipeline cycle: steps, items with their prerequisites, forecast runs. Pure, no I/O.
 
-Rules (etlhub/docs/pipeline-checkpoints.md):
+Rules (etlhub/docs/decision-design/pipeline-checkpoints/pipeline-checkpoints.md):
 - R1 every item is mandatory; config.json is one item per disease (config/<disease>), shared by the
   disease's 3 runs; external_data.csv is one item per org unit level (external_data/<fkt|csb>);
 - R2 an item starts only when its prerequisites (inside its step) are in success;

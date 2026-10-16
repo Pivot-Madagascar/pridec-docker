@@ -10,6 +10,7 @@ const decideImports = vi.fn()
 const openRun = vi.fn()
 const abandonRun = vi.fn()
 const apiGet = vi.fn()
+const applyDefaultFile = vi.fn()
 vi.mock('@/services/pipeline', () => ({
   getCheckpoints: (...args: unknown[]) => getCheckpoints(...args),
   launchJob: (...args: unknown[]) => launchJob(...args),
@@ -23,6 +24,12 @@ vi.mock('@/services/pipeline', () => ({
 }))
 vi.mock('@/services/inputs', () => ({
   getInputFiles: vi.fn().mockResolvedValue({}),
+  getDefaultFiles: vi.fn().mockResolvedValue({
+    'config/Malaria': { filename: 'config_malaria.json', size: 795 },
+    'external_data/csb': { filename: 'external_data_csb.csv', size: 875612 }
+  }),
+  applyDefaultFile: (...args: unknown[]) => applyDefaultFile(...args),
+  getDefaultPreview: vi.fn(),
   uploadInputFile: vi.fn(),
   deleteInputFile: vi.fn(),
   getConfigPreview: vi.fn(),
@@ -200,12 +207,22 @@ describe('Dashboard', () => {
     expect(malaria.find('.input-file').text()).toContain('config_malaria.json')
     expect(malaria.find('.dropzone').classes()).not.toContain('is-disabled')
     expect(runs.find('#forecast-Diarrhea .dropzone').classes()).toContain('is-disabled')
-    // Two shared external_data.csv inputs, above the cards; only the open run's level (fkt for COM) is active.
-    const external = runs.findAll('.external-data .input-file')
+    // Two shared external_data.csv inputs in each card; only the open run's level (fkt for COM) is active.
+    expect(runs.findAll('.external-data')).toHaveLength(3)
+    const external = malaria.findAll('.external-data .input-file')
     expect(external.map(e => e.text().split(':')[0])).toEqual(['Fokontany', 'Health centres'])
     expect(external[0].find('.dropzone').classes()).not.toContain('is-disabled')
     expect(external[1].find('.dropzone').classes()).toContain('is-disabled')
     expect(external[1].text()).toContain('can be changed while a CSB run is open')
+    // The repo's defaults: offered under each input, usable only where an upload is.
+    const useDefault = (input: typeof external[0]) => input.findAll('.default-status button').find(b => b.text() === 'Use default')
+    expect(malaria.find('.input-file .default-status').text()).toContain('config_malaria.json')
+    expect(external[0].find('.default-status').exists()).toBe(false) // no default for fkt in this mock
+    expect(useDefault(external[1])!.attributes('disabled')).toBeDefined()
+    applyDefaultFile.mockResolvedValue('input/config.json')
+    await useDefault(malaria.find('.input-file'))!.trigger('click')
+    await flushPromises()
+    expect(applyDefaultFile).toHaveBeenCalledWith('config', false)
     const [adj, com, csb] = malaria.findAll('.level-column')
     // The items live in each run's "Steps" drawer, rendered only once opened.
     for (const level of [adj, com, csb]) await level.findAll('button').find(b => b.text() === 'Steps')!.trigger('click')

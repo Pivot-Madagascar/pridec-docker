@@ -1,11 +1,11 @@
 import { ref, getCurrentScope, onScopeDispose } from 'vue'
 import * as pipeline from '@/services/pipeline'
-import { deleteInputFile, getInputFiles, uploadInputFile } from '@/services/inputs'
+import { applyDefaultFile, deleteInputFile, getDefaultFiles, getInputFiles, uploadInputFile } from '@/services/inputs'
 import { useNotification } from '@/composables/useNotification'
 import { errorMessage } from '@/services/api'
 import { plainError } from '@/config/pipeline'
 import type { Checkpoints, ConfirmationRequired, Disease, Source } from '@/types/pipeline'
-import type { InputName, ServerFile } from '@/types/inputs'
+import type { DefaultFile, InputName, ServerFile } from '@/types/inputs'
 
 // While a job holds the lock, the state is read again at this pace until the lock is free.
 export const POLL_MS = 3000
@@ -38,6 +38,7 @@ export function usePipeline(addActivity: AddActivity) {
   const { showNotification } = useNotification()
   const state = ref<Checkpoints | null>(null)
   const serverFiles = ref<Partial<Record<InputName, ServerFile>>>({})
+  const defaults = ref<Record<string, DefaultFile>>({})
   const busy = ref(false)
   const pending = ref<PendingConfirmation | null>(null)
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -50,9 +51,10 @@ export function usePipeline(addActivity: AddActivity) {
   const refresh = async (): Promise<void> => {
     stop()
     try {
-      const [checkpoints, files] = await Promise.all([pipeline.getCheckpoints(), getInputFiles()])
+      const [checkpoints, files, defaultFiles] = await Promise.all([pipeline.getCheckpoints(), getInputFiles(), getDefaultFiles()])
       state.value = checkpoints
       serverFiles.value = files
+      defaults.value = defaultFiles
     } catch {
       showNotification('Could not read the pipeline state', 'error')
     }
@@ -93,7 +95,7 @@ export function usePipeline(addActivity: AddActivity) {
   if (getCurrentScope()) onScopeDispose(stop)
 
   return {
-    state, serverFiles, busy, pending, refresh, stop, confirm,
+    state, serverFiles, defaults, busy, pending, refresh, stop, confirm,
     cancel: () => { pending.value = null },
     launch: (task: string, label: string) => act(label, c => pipeline.launchJob(task, c)),
     openRun: (source: Source, disease: Disease) => act(`Open run ${source}/${disease}`, c => pipeline.openRun(source, disease, c)),
@@ -105,6 +107,7 @@ export function usePipeline(addActivity: AddActivity) {
     setCycle: (cycle: string | null) => act(`Cycle ${cycle ?? 'of the current month'}`, () => pipeline.setCycle(cycle)),
     releaseLock: () => act('Release lock', () => pipeline.releaseLock()),
     upload: (name: InputName, file: File) => act(`Upload ${name}`, c => uploadInputFile(name, file, c)),
-    remove: (name: InputName) => act(`Delete ${name}`, c => deleteInputFile(name, c))
+    remove: (name: InputName) => act(`Delete ${name}`, c => deleteInputFile(name, c)),
+    useDefault: (name: InputName) => act(`Use the default ${name}`, c => applyDefaultFile(name, c))
   }
 }

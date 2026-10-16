@@ -12,7 +12,26 @@ vi.mock('@/services/api', async importOriginal => ({
   }
 }))
 
-import { uploadInputFile, getInputFiles, deleteInputFile, getConfigPreview, getExternalDataPreview } from '@/services/inputs'
+import {
+  uploadInputFile, getInputFiles, deleteInputFile, getConfigPreview, getExternalDataPreview,
+  getDefaultFiles, getDefaultPreview, applyDefaultFile
+} from '@/services/inputs'
+
+describe('default files', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('reads, previews and uses a default with the routes of etlhub', async () => {
+    get.mockResolvedValue({ data: {} })
+    post.mockResolvedValue({ data: { saved: 'input/config.json' } })
+
+    await getDefaultFiles()
+    await getDefaultPreview('config/Malaria', 100)
+    expect(await applyDefaultFile('config', true)).toBe('input/config.json')
+
+    expect(get.mock.calls).toEqual([['/input/defaults'], ['/input/defaults/config/Malaria/preview', { params: { limit: 100 } }]])
+    expect(post).toHaveBeenCalledWith('/input/files/config/from-default', null, { params: { confirm: true } })
+  })
+})
 
 describe('uploadInputFile', () => {
   beforeEach(() => vi.clearAllMocks())
