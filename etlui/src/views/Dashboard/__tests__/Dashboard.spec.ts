@@ -35,7 +35,7 @@ vi.mock('@/services/inputs', () => ({
   getConfigPreview: vi.fn(),
   getExternalDataPreview: vi.fn()
 }))
-vi.mock('@/services/api', () => ({ default: { get: (...args: unknown[]) => apiGet(...args) }, errorMessage: (_: unknown, f: string) => f }))
+vi.mock('@/services/api', () => ({ default: { get: (...args: unknown[]) => apiGet(...args), getUri: ({ url }: { url: string }) => `http://api${url}` }, errorMessage: (_: unknown, f: string) => f }))
 vi.mock('vue3-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn() } }))
 
 import Dashboard from '@/views/Dashboard/Dashboard.vue'
