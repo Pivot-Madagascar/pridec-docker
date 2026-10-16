@@ -12,7 +12,7 @@ from etlhub.infrastructure.config_store import ConfigStore
 
 def _get_output_dir() -> str:
     """Get the output directory path."""
-    settings = __import__('etlhub.core.config', fromlist=['get_settings']).get_settings()
+    settings = get_settings()
     return os.path.join(settings.data_dir, "output")
 
 
@@ -64,7 +64,7 @@ def _build_dynamic_env_file(host_pwd: str, job_id: str) -> str:
 def generate_signature() -> str:
     """Generate a unique signature for this server session."""
     import secrets
-    settings = __import__('etlhub.core.config', fromlist=['get_settings']).get_settings()
+    settings = get_settings()
     sig_file = os.path.join(settings.data_dir, ".output_sig")
     
     sig = secrets.token_hex(32)
@@ -76,7 +76,7 @@ def generate_signature() -> str:
 
 def verify_signature() -> bool:
     """Verify that the signature exists and is valid."""
-    settings = __import__('etlhub.core.config', fromlist=['get_settings']).get_settings()
+    settings = get_settings()
     sig_file = os.path.join(settings.data_dir, ".output_sig")
     
     if not os.path.exists(sig_file):
@@ -123,7 +123,8 @@ def run_rscript(job_id, params, job_store: JobStore):
             '--input_valid', params['input_valid_path'],
             '--polygon_valid', params['polygon_valid_path']
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        # R cli/message() output goes to stderr: merge it so the logs keep the order the R run printed.
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         completed = datetime.now().isoformat()
         if result.returncode == 0:
             status.update({
@@ -136,7 +137,8 @@ def run_rscript(job_id, params, job_store: JobStore):
                 "status": "error",
                 "completed": completed,
                 "logs": result.stdout,
-                "message": result.stderr
+                "message": "\n".join(result.stdout.splitlines()[-20:])
+                           or f"Forecast container exited with code {result.returncode}"
             })
     except FileNotFoundError as e:
         status.update({
@@ -176,7 +178,7 @@ def run_rscript(job_id, params, job_store: JobStore):
         print(f"Warning: Could not setup output permissions: {e}")
 
     try:
-        settings = __import__('etlhub.core.config', fromlist=['get_settings']).get_settings()
+        settings = get_settings()
         logs_dir = Path(settings.logs_dir)
         logs_dir.mkdir(parents=True, exist_ok=True)
         status_file = logs_dir / f"{job_id}.json"
