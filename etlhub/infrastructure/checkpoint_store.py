@@ -475,7 +475,7 @@ class CheckpointStore:
         """Marks the open CSB run's calc_orgunit_alerts as success without running anything.
 
         ponytail: stopgap while no script implements calc_orgunit_alerts (501); CSB alerts are then not computed.
-        Remove this, the route and the etlui Skip button once the script exists (etlhub/docs/test-incident-log.md).
+        Remove this, the route and the etlui Skip button once the script exists (etlhub/docs/testing-QA/test-incident-log.md).
         """
         with self._transaction() as conn:
             self._check_lock_free(conn)

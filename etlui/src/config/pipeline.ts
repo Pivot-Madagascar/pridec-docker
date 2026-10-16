@@ -36,6 +36,12 @@ export function step(state: Checkpoints | null, name: StepName) {
   return state?.steps.find(s => s.step === name)
 }
 
+/** The open run's external_data item: external_data/fkt for ADJ and COM, external_data/csb for CSB. */
+export function openLevel(state: Checkpoints | null) {
+  const couple = state?.run?.couple
+  return couple ? `external_data/${couple.startsWith('CSB/') ? 'csb' : 'fkt'}` : null
+}
+
 /** Card label of a checkpoint, also used for notifications and the activity log. */
 export function labelOf(item: string): string {
   const name = nameOf(item)

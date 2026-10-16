@@ -1,4 +1,4 @@
-// Shapes returned by etlhub's /pipeline routes (etlhub/docs/pipeline-checkpoints.md).
+// Shapes returned by etlhub's /pipeline routes (etlhub/docs/decision-design/pipeline-checkpoints/pipeline-checkpoints.md).
 
 export type ItemStatus = 'pending' | 'running' | 'success' | 'error'
 export type StepName = 'data_import' | 'forecast' | 'system_update'

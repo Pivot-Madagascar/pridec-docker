@@ -95,13 +95,31 @@
       </template>
       <span v-else class="server-text">Not on server</span>
     </div>
+
+    <!-- The file of the repo (assets/) offered for this item: previewable anytime, usable when an upload is. -->
+    <div v-if="defaultFile" class="server-status is-present default-status">
+      <span class="server-text">Default · {{ defaultFile.filename }} · {{ formatSize(defaultFile.size) }}</span>
+      <button type="button" class="server-preview" :aria-label="`Preview the default ${label}`" @click="emit('preview-default')">
+        <Icon :path="ICONS.eye" class="server-delete-icon" />
+        Preview
+      </button>
+      <button
+        type="button"
+        class="server-preview"
+        :disabled="disabled || uploading"
+        :aria-label="`Use the default ${label}`"
+        @click="emit('use-default')"
+      >
+        Use default
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, useId } from 'vue'
 import Icon, { ICONS } from '@/components/Icons'
-import type { ServerFile } from '@/types/inputs'
+import type { DefaultFile, ServerFile } from '@/types/inputs'
 
 const props = defineProps<{
   modelValue?: File
@@ -109,6 +127,7 @@ const props = defineProps<{
   description: string
   accept: string
   serverFile?: ServerFile
+  defaultFile?: DefaultFile
   deleting?: boolean
   uploading?: boolean
   // Nothing can be selected, dropped or uploaded (the server would refuse it now).
@@ -121,6 +140,8 @@ const emit = defineEmits<{
   upload: [file: File]
   'preview-local': [file: File]
   'preview-server': []
+  'preview-default': []
+  'use-default': []
 }>()
 
 const inputId = useId()
@@ -331,6 +352,11 @@ const formatDate = (iso: string) =>
 
 .server-preview:hover {
   background: rgba(59, 130, 246, 0.12);
+}
+
+.server-preview:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .dropzone-btn-primary {

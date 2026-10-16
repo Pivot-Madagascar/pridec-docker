@@ -104,3 +104,58 @@ def preview_external_data(
         raise HTTPException(status_code=404, detail="external_data is not in input/") from exc
     except (UnicodeDecodeError, csv.Error) as exc:
         raise HTTPException(status_code=422, detail=f"external_data.csv cannot be read: {exc}") from exc
+
+
+@router.get(
+    "/defaults",
+    summary="Default input files offered in the current mode",
+    description=(
+        "item (config/<disease>, external_data/<level>) → {filename, size}. Files of the repo: assets/forecast_configs/ "
+        "in production, assets/test/inputs/ in test mode. An item whose file is missing is left out."
+    ),
+)
+def default_files(
+    service: InputUploadService = Depends(get_input_upload_service),
+) -> dict[str, dict]:
+    return service.defaults()
+
+
+@router.get(
+    "/defaults/{name}/{key}/preview",
+    summary="Preview a default input file",
+    description="Same answer as /files/{name}/preview, for the default of the item <name>/<key> (e.g. config/Malaria).",
+)
+def preview_default(
+    name: InputName,
+    key: str,
+    limit: int = Query(100, ge=1, le=500),
+    service: InputUploadService = Depends(get_input_upload_service),
+) -> dict:
+    try:
+        path = service.default_path(f"{name}/{key}")
+        return service.preview_config(path) if name == "config" else service.preview_external_data(limit, path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"No default for {name}/{key}") from exc
+    except (ValidationError, UnicodeDecodeError, csv.Error) as exc:
+        raise HTTPException(status_code=422, detail=f"The default {name}/{key} cannot be read: {exc}") from exc
+
+
+@router.post(
+    "/files/{name}/from-default",
+    summary="Use the default file as a forecast input",
+    description=(
+        "Same as POST /files/{name}, with the default of the open run's item (config/<disease> or "
+        "external_data/<level>) instead of an upload. 409 without an open run, 404 when there is no default."
+    ),
+)
+def use_default_input_file(
+    name: InputName,
+    confirm: bool = CONFIRM_RELAUNCH,
+    service: InputUploadService = Depends(get_input_upload_service),
+) -> dict[str, str]:
+    try:
+        return {"saved": service.save_default(name, confirm)}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"No default {name} for the open run") from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
