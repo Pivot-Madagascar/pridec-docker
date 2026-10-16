@@ -67,3 +67,11 @@ def test_log_websocket_with_session_goes_past_the_check(app, fake_ws_redis):
         with pytest.raises(WebSocketDisconnect) as closed:
             ws.receive_json()
     assert closed.value.code == 4004  # unknown job, after the session check
+
+
+def test_openapi_documents_every_operation_and_its_session(anon_app):
+    """Each operation has a description; the session cookie and its 401 are declared exactly where it is required."""
+    operations = [(m.upper(), path, op) for path, ops in anon_app.openapi()["paths"].items() for m, op in ops.items()]
+    assert [(m, p) for m, p, op in operations if not op.get("description")] == []
+    assert {(m, p) for m, p, op in operations if "security" not in op} == {("POST", "/auth/login"), ("POST", "/auth/logout")}
+    assert [(m, p) for m, p, op in operations if "security" in op and "401" not in op["responses"]] == []
