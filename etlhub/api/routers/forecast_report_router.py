@@ -3,6 +3,7 @@ import shutil
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 
+from etlhub.api.routers import error_doc
 from etlhub.core.config import get_settings
 
 router = APIRouter(prefix="/output", tags=["Output Files"])
@@ -36,7 +37,16 @@ def _verify_signature() -> bool:
 @router.delete(
     "/reset",
     summary="Delete output directory",
-    description="Deletes the entire output directory and all its contents (requires valid signature).",
+    description=(
+        "Deletes the entire output directory and all its contents. Allowed only while `.output_sig` exists: "
+        "a forecast run writes it, a successful reset removes it (403 otherwise)."
+    ),
+    responses={
+        200: {"content": {"application/json": {"example": {"success": True, "message": "Output directory cleared"}}}},
+        403: error_doc("No `.output_sig`: no forecast ran since the last reset",
+                       {"detail": "Output directory deletion not authorized"}),
+        500: error_doc("Some files could not be deleted", {"detail": "Failed to delete output directory: ..."}),
+    },
 )
 def reset_output():
     # Plain `def`: FastAPI runs it in a thread, so deleting large files does not block the event loop.
@@ -84,7 +94,8 @@ def reset_output():
     responses={
         404: {
             "description": "Forecast report not found - run forecast step first",
-        }
+        },
+        500: error_doc("The file exists but cannot be read", {"detail": "Failed to read forecast report: ..."}),
     },
 )
 async def get_forecast_report():
@@ -112,6 +123,7 @@ async def get_forecast_report():
     response_model=dict,
     summary="Check if forecast report exists",
     description="Returns whether the forecast report HTML file exists.",
+    responses={200: {"content": {"application/json": {"example": {"exists": True}}}}},
 )
 async def check_forecast_report_exists():
     report_path = _get_forecast_report_path()

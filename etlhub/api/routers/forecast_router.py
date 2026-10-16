@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 
-from etlhub.api.routers import CONFIRM_RELAUNCH
+from etlhub.api.routers import BLOCKED, CONFIRM_RELAUNCH
 from etlhub.application.use_cases.forecast_service import ForecastService
 from etlhub.domain.schemas import ETLResponse, ForecastParams, JobStatus
 from etlhub.core.dependencies import get_forecast_service
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/forecast", tags=["Forecast"])
     summary="Launch R forecast pipeline via Docker",
     description=(
         "Starts a new R forecast pipeline inside a Docker container "
-        "(`mvevans89/pridec_forecast:latest`). The container is configured "
+        "(`mvevans89/pridec_forecast`, tag pinned in `infrastructure/forecast_runner.py`). The container is configured "
         "via `ForecastParams` input paths and Docker volume bindings. "
         "Runs asynchronously in the background. "
         "Pass `webhook_url` to be notified when the job completes."
@@ -23,8 +23,9 @@ router = APIRouter(prefix="/forecast", tags=["Forecast"])
     response_description="Forecast pipeline accepted and started in background.",
     responses={
         422: {
-            "description": "Validation Error - missing or invalid forecast parameters",
-        }
+            "description": "Validation Error - missing or invalid forecast parameters, or a path outside input/",
+        },
+        **BLOCKED,
     },
 )
 async def api_forecast(

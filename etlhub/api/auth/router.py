@@ -17,6 +17,7 @@ from etlhub.api.auth.dhis2_auth import (
     normalize_dhis2_url,
     revoke_pat,
 )
+from etlhub.api.routers import NOT_AUTHENTICATED, error_doc
 from etlhub.core.config import get_settings
 from etlhub.infrastructure import auth_store
 from etlhub.infrastructure.config_store import ConfigStore
@@ -27,6 +28,9 @@ auth_router = APIRouter(tags=["Authentication"])
 
 MAX_FAILED_LOGINS = 5
 FAILED_LOGIN_WINDOW_SECONDS = 15 * 60
+
+# Documented with examples, not response_model: a model would filter the user dict etlui reads.
+_USER = {"id": "xE7jOejl9FI", "email": None, "username": "admin", "displayName": "John Traore", "is_admin": True}
 
 
 class LoginRequest(BaseModel):
@@ -70,7 +74,23 @@ def _rollback(client: httpx.Client, url: str, uid: str, basic: tuple) -> None:
         logger.error("Could not remove the revoked DHIS2 credential from Redis: %s", e)
 
 
-@auth_router.post("/auth/login")
+@auth_router.post(
+    "/auth/login",
+    summary="Log in with DHIS2 credentials",
+    responses={
+        200: {"content": {"application/json": {"example": {"user": _USER, "expires_at": 1792137600}}}},
+        400: error_doc("dhis2_url refused: host not in DHIS2_ALLOWED_HOSTS, plain http outside localhost, "
+                       "or credentials, query or fragment in the URL",
+                       {"detail": "DHIS2 URL not allowed"}),
+        401: error_doc("DHIS2 rejected the username or password", {"detail": "Invalid DHIS2 username or password"}),
+        429: error_doc(f"{MAX_FAILED_LOGINS} failures for this IP and username in the last "
+                       f"{FAILED_LOGIN_WINDOW_SECONDS // 60} minutes",
+                       {"detail": "Too many failed attempts, try again later"}),
+        502: error_doc("DHIS2 unreachable or unexpected answer",
+                       {"detail": "DHIS2 unreachable or returned an unexpected response"}),
+        503: error_doc("Redis unavailable", {"detail": "Session store unavailable"}),
+    },
+)
 def login(body: LoginRequest, request: Request, response: Response):
     """Log in with a DHIS2 username and password.
 
@@ -123,7 +143,7 @@ def login(body: LoginRequest, request: Request, response: Response):
     return {"user": user, "expires_at": expires_at}
 
 
-@auth_router.post("/auth/logout", status_code=204)
+@auth_router.post("/auth/logout", status_code=204, summary="Log out")
 def logout(request: Request):
     """End the session and revoke its DHIS2 token. Always clears the cookie."""
     session_id = request.cookies.get(SESSION_COOKIE)
@@ -144,7 +164,14 @@ def logout(request: Request):
     return response
 
 
-@auth_router.get("/auth/me")
+@auth_router.get(
+    "/auth/me",
+    summary="Current user",
+    responses={
+        200: {"content": {"application/json": {"example": _USER}}},
+        **NOT_AUTHENTICATED,
+    },
+)
 def get_me(user: dict = Depends(get_current_user)):
     """Current user, while the session and its DHIS2 token are valid."""
     return user

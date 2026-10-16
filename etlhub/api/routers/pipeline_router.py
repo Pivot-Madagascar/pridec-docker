@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from etlhub.api.auth import require_admin
+from etlhub.api.routers import ADMIN_ONLY, BLOCKED, error_doc
 from etlhub.core.dependencies import get_pipeline_gate
 from etlhub.domain.interfaces.pipeline_gate import PipelineGate
 
@@ -58,6 +59,13 @@ def get_checkpoints(
         "OU_LEVEL and ALERT_NAME for every job of the run. Reopening a couple already closed in the cycle "
         "needs confirm=true and resets its items. The run closes when its post_forecast succeeds."
     ),
+    responses={
+        201: {"content": {"application/json": {"example": {
+            "cycle": "202610", "couple": "CSB/Malaria", "state": "open", "disease_code": "pridec_historic_CSBMalaria",
+            "ou_level": "5", "alert_name": "CSBMalariaVigilance", "opened_at": "2026-10-16T09:00:00.000000",
+        }}}},
+        **BLOCKED,
+    },
 )
 def open_run(body: RunRequest, confirm: bool = CONFIRM, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
     return gate.open_run(f"{body.source}/{body.disease}", confirm)
@@ -68,6 +76,7 @@ def open_run(body: RunRequest, confirm: bool = CONFIRM, gate: PipelineGate = Dep
     summary="Abandon the open forecast run",
     description="Nothing is published; the run's items go back to pending. Administrators only (DHIS2 authority ALL).",
     dependencies=[Depends(require_admin)],
+    responses={**BLOCKED, **ADMIN_ONLY},
 )
 def abandon_run(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str]:
     return {"abandoned": gate.abandon_run()}
@@ -78,6 +87,7 @@ def abandon_run(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, st
     response_class=FileResponse,
     summary="Report of a closed forecast run",
     description="forecast_report.html as it was when the run closed (post_forecast success). 404 if none was kept.",
+    responses={404: error_doc("No report kept for this run in the cycle", {"detail": "No report kept for run CSB/Malaria"})},
 )
 def run_report(source: Source, disease: Disease, cycle: str | None = CYCLE,
                gate: PipelineGate = Depends(get_pipeline_gate)) -> FileResponse:
@@ -94,6 +104,7 @@ def run_report(source: Source, disease: Disease, cycle: str | None = CYCLE,
         "approve: the {couple}:approve checkpoint becomes success and unlocks post_forecast. "
         "reject: forecast and what follows go back to pending, to be redone."
     ),
+    responses=BLOCKED,
 )
 def decide(body: Decision, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str]:
     return {"couple": gate.decide(body.decision), "decision": body.decision}
@@ -106,6 +117,7 @@ def decide(body: Decision, gate: PipelineGate = Depends(get_pipeline_gate)) -> d
         "{couple}:calc_orgunit_alerts becomes success without running anything, which unlocks approve. "
         "Temporary: no script implements calc_orgunit_alerts yet (POST /calc_orgunit_alerts answers 501)."
     ),
+    responses=BLOCKED,
 )
 def skip_alerts(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str]:
     return {"skipped": f"{gate.skip_alerts()}:calc_orgunit_alerts"}
@@ -118,6 +130,7 @@ def skip_alerts(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, st
         "After import_pivot_com and import_pivot_csb, check the case counts (COM < 100, CSB < limit). "
         "approve: approve_imports becomes success and unlocks build_analytics. reject: back to pending."
     ),
+    responses=BLOCKED,
 )
 def decide_imports(body: Decision, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str]:
     gate.decide_imports(body.decision)
@@ -132,6 +145,7 @@ def decide_imports(body: Decision, gate: PipelineGate = Depends(get_pipeline_gat
         "kept in Redis only. dry_run=false: back to production; the test checkpoints are discarded, which needs "
         "confirm=true when there are any. Refused while a job runs. GET /pipeline/checkpoints returns the mode."
     ),
+    responses={200: {"content": {"application/json": {"example": {"dry_run": True}}}}, **BLOCKED},
 )
 def set_mode(body: Mode, confirm: bool = CONFIRM, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
     return gate.set_mode(body.dry_run, confirm)
@@ -146,6 +160,7 @@ def set_mode(body: Mode, confirm: bool = CONFIRM, gate: PipelineGate = Depends(g
         "open in the current cycle gets 409. A complete cycle can be chosen but takes no launch. "
         "Kept per mode: leaving test mode forgets the test choice."
     ),
+    responses={200: {"content": {"application/json": {"example": {"cycle": "202610"}}}}, **BLOCKED},
 )
 def set_cycle(body: Cycle, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
     return gate.set_cycle(body.cycle)
@@ -159,6 +174,7 @@ def set_cycle(body: Cycle, gate: PipelineGate = Depends(get_pipeline_gate)) -> d
         "The lock never expires on its own. Returns the freed job_id, or null. Administrators only (DHIS2 authority ALL)."
     ),
     dependencies=[Depends(require_admin)],
+    responses=ADMIN_ONLY,
 )
 def release_lock(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str | None]:
     return {"released": gate.release_lock()}
