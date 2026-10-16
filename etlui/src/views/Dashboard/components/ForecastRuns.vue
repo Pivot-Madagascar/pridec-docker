@@ -104,8 +104,8 @@ const todo = computed(() => {
       (i.item.startsWith(`${run.couple}:`) || i.item === `config/${disease}` || i.item === openLevel(props.state))
   )
   if (!next) return `nothing to launch for ${name}.`
-  if (next.item.startsWith('config/')) return `provide the parameters of ${name}.`
-  if (next.item.startsWith('external_data/')) return `provide the external data of ${name}.`
+  if (next.item.startsWith('config/')) return `provide the parameters of ${name} (click its card).`
+  if (next.item.startsWith('external_data/')) return `provide the external data of ${name} (click its card).`
   const job = jobOf(next.item)
   return job === 'approve' ? `approve ${name}.` : `launch “${ITEM_NAMES[job] ?? job}” for ${name}.`
 })
@@ -244,16 +244,6 @@ const todo = computed(() => {
   border-color: #10b981;
 }
 
-.forecast-runs .input-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1.25rem;
-}
-
-.forecast-runs .input-file .hint {
-  margin-bottom: 0.5rem;
-}
-
 .forecast-runs code {
   font-size: 0.75rem;
   color: #94a3b8;
@@ -266,6 +256,7 @@ const todo = computed(() => {
 }
 
 .forecast-runs .level-column {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -275,9 +266,36 @@ const todo = computed(() => {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+/* The open run: highlighted, and the whole card is the button to its steps. */
 .forecast-runs .level-column.is-open {
   border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.12);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35);
 }
+
+.forecast-runs .card-steps {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.forecast-runs .card-steps:hover {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.forecast-runs .card-steps:focus-visible {
+  outline: 2px solid #818cf8;
+  outline-offset: 2px;
+}
+
+.forecast-runs .card-steps-hint {
+  color: #a5b4fc;
+  font-size: 0.8125rem;
+}
+
 
 .forecast-runs .level-title {
   font-size: 1rem;
@@ -327,8 +345,97 @@ const todo = computed(() => {
   accent-color: #10b981;
 }
 
-.forecast-runs .steps-drawer .drawer {
-  width: min(32rem, 100vw);
+.forecast-runs .steps-dialog {
+  width: min(96vw, 1600px); /* same as PreviewDialog */
+}
+
+/* Title, and the close button top right (same look as PreviewDialog's). */
+.forecast-runs .steps-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.forecast-runs .steps-close {
+  display: flex;
+  padding: 0.375rem;
+  border-radius: 0.5rem;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.forecast-runs .steps-close:hover {
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.forecast-runs .steps-close:focus-visible {
+  outline: 2px solid #818cf8;
+  outline-offset: 2px;
+}
+
+.forecast-runs .steps-close-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Stage 1: config and external data | the 3 fetches, then the data check button.
+   Stage 2: forecast (+ CSB alerts) and approval | publication. 6 columns: 1, 2 or 3 items per row. */
+.forecast-runs .steps-dialog .item-list {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+}
+
+.forecast-runs .steps-dialog .item {
+  grid-column: span 2;
+  align-content: start;
+  padding: 0.875rem;
+  border-radius: 0.75rem;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.forecast-runs .steps-dialog .item-input {
+  grid-column: span 3;
+}
+
+.forecast-runs .steps-dialog .job-post_forecast {
+  grid-column: 1 / -1;
+}
+
+.forecast-runs .data-check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Stage 2's Previous: where Next is in stage 1. */
+.forecast-runs .tile-nav {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* The text on the left, the data check and Next buttons together on the right. */
+.forecast-runs .data-check .item-text {
+  margin-right: auto;
+}
+
+/* Two per row, unless the CSB alerts make it three. */
+.forecast-runs .steps-dialog .item-list:not(:has(.job-calc_orgunit_alerts)) :is(.job-forecast, .job-approve) {
+  grid-column: span 3;
+}
+
+/* Narrow screens: one item per row (grid-column has no effect in a flex column). */
+@media (max-width: 640px) {
+  .forecast-runs .steps-dialog .item-list {
+    display: flex;
+  }
 }
 
 .forecast-runs .item-list {
@@ -343,6 +450,11 @@ const todo = computed(() => {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 0.75rem;
+}
+
+/* An input row: the dropzone takes the full width under its label. */
+.forecast-runs .item-file {
+  grid-column: 1 / -1;
 }
 
 .forecast-runs .item-dot {
@@ -420,6 +532,7 @@ const todo = computed(() => {
 }
 
 .forecast-runs .level-action {
+  position: relative; /* above .card-steps */
   margin-top: auto;
 }
 
@@ -432,13 +545,6 @@ const todo = computed(() => {
   color: #a5b4fc;
   font-weight: 600;
   padding: 0.75rem 0;
-}
-
-.forecast-runs .section-title {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #f1f5f9;
-  margin-bottom: 0.75rem;
 }
 
 .forecast-runs .admin-zone summary {
@@ -471,8 +577,7 @@ const todo = computed(() => {
 }
 
 @media (max-width: 820px) {
-  .forecast-runs .level-grid,
-  .forecast-runs .input-grid {
+  .forecast-runs .level-grid {
     grid-template-columns: 1fr;
   }
 
