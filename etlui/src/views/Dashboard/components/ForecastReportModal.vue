@@ -11,6 +11,14 @@
             </svg>
             <span>Refresh</span>
           </button>
+          <!-- Native download: the browser sends the session cookie and saves the zip itself. New tab so an
+               error page (404, expired session) does not replace the app. Open run only: a closed run's files left input/. -->
+          <a v-if="!run" class="modal-refresh" :href="archiveUrl" target="_blank" rel="noopener" download>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+            </svg>
+            <span>Download Forecast Data</span>
+          </a>
           <button class="modal-close" @click="closeModal">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -58,6 +66,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
+const archiveUrl = api.getUri({ url: '/output/archive' })
 const reportContent = ref('')
 const loading = ref(false)
 const errorMessage = ref('')

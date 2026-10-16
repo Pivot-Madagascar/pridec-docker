@@ -1,8 +1,12 @@
+import io
 import logging
 import os
 import shutil
+import zipfile
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 from etlhub.api.routers import error_doc
 from etlhub.core.config import get_settings
@@ -128,3 +132,32 @@ async def get_forecast_report():
 async def check_forecast_report_exists():
     report_path = _get_forecast_report_path()
     return {"exists": os.path.exists(report_path)}
+
+@router.get(
+    "/archive",
+    response_class=Response,
+    summary="Download input/ and output/ as one zip",
+    description="Zip of the open run's files, under `input/` and `output/`, to check the data or the forecast "
+                "before approval. Symbolic links are left out.",
+    responses={
+        200: {"content": {"application/zip": {}}},
+        404: error_doc("input/ and output/ are both empty", {"detail": "No files in input/ or output/"}),
+    },
+)
+def download_archive():
+    # Plain `def`: FastAPI runs it in a thread, so zipping does not block the event loop.
+    root = Path(get_settings().data_dir)
+    buffer = io.BytesIO()
+    # ponytail: zip built in memory (a few MB per run); stream from a temp file if runs grow to hundreds of MB.
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for folder in ("input", "output"):
+            for path in sorted((root / folder).rglob("*")):
+                if path.is_file() and not path.is_symlink():
+                    archive.write(path, path.relative_to(root))
+    if not archive.namelist():
+        raise HTTPException(status_code=404, detail="No files in input/ or output/")
+    return Response(
+        buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="pridec_input_output.zip"'},
+    )
