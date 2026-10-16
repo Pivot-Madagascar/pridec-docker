@@ -1,20 +1,20 @@
 <template>
-  <div class="dropzone-card">
+  <div>
+    <!-- Local file: drop or browse, then preview / replace / remove / upload. -->
     <div
       class="dropzone"
       :class="{ 'is-dragging': dragging, 'has-file': modelValue, 'has-error': error, 'is-disabled': disabled }"
       :aria-disabled="disabled"
       @dragover.prevent="dragging = !disabled"
       @dragleave.prevent="dragging = false"
-      @drop.prevent="!disabled && onDrop($event)"
+      @drop.prevent="onDrop"
     >
       <div class="dropzone-icon">
-        <Icon :path="modelValue ? ICONS.checkCircle : ICONS.upload" class="icon-svg" />
+        <Icon :path="modelValue ? ICONS.checkCircle : ICONS.upload" class="dropzone-icon-svg" />
       </div>
 
       <div class="dropzone-body">
         <span class="dropzone-title">{{ label }}</span>
-
         <template v-if="modelValue">
           <span class="dropzone-file">{{ modelValue.name }}</span>
           <span class="dropzone-hint">{{ formatSize(modelValue.size) }}</span>
@@ -26,25 +26,19 @@
             <label :for="inputId" class="dropzone-link">browse</label>
           </span>
         </template>
-
         <span v-if="error" class="dropzone-error" role="alert">{{ error }}</span>
       </div>
 
       <div v-if="modelValue" class="dropzone-actions">
-        <button
-          type="button"
-          class="dropzone-btn dropzone-btn-primary"
-          :aria-label="`Preview the selected ${label}`"
-          @click="emit('preview-local', modelValue)"
-        >
+        <button type="button" class="btn btn-preview" :aria-label="`Preview the selected ${label}`" @click="emit('preview-local', modelValue)">
           <Icon :path="ICONS.eye" class="btn-icon" />
           Preview
         </button>
-        <label :for="inputId" class="dropzone-btn" :class="{ 'is-disabled': uploading }">Replace</label>
-        <button type="button" class="dropzone-btn dropzone-btn-danger" :disabled="uploading" @click="clear">Remove</button>
+        <label :for="inputId" class="btn" :class="{ 'is-disabled': uploading }">Replace</label>
+        <button type="button" class="btn btn-danger" :disabled="uploading" @click="clear">Remove</button>
         <button
           type="button"
-          class="dropzone-btn dropzone-btn-upload"
+          class="btn btn-upload"
           :disabled="uploading || disabled"
           :aria-busy="uploading"
           :aria-label="`Upload ${label} to the server`"
@@ -56,56 +50,38 @@
         </button>
       </div>
 
-      <input
-        :id="inputId"
-        ref="input"
-        type="file"
-        :accept="accept"
-        class="sr-only"
-        :disabled="disabled"
-        @change="onChange"
-      />
+      <input :id="inputId" ref="input" type="file" :accept="accept" class="sr-only" :disabled="disabled" @change="onChange" />
     </div>
 
-    <div v-if="serverFile" class="server-status" :class="{ 'is-present': serverFile.exists }">
+    <!-- File already in input/ on the server. -->
+    <div v-if="serverFile" class="status-row" :class="{ 'is-present': serverFile.exists }">
       <template v-if="serverFile.exists">
-        <span class="server-dot" aria-hidden="true"></span>
-        <span class="server-text">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span class="status-text">
           On server · {{ formatSize(serverFile.size ?? 0) }}<template v-if="serverFile.modified"> · {{ formatDate(serverFile.modified) }}</template>
         </span>
-        <button
-          type="button"
-          class="server-preview"
-          :aria-label="`Preview ${label} on the server`"
-          @click="emit('preview-server')"
-        >
-          <Icon :path="ICONS.eye" class="server-delete-icon" />
+        <button type="button" class="btn btn-sm btn-preview" :aria-label="`Preview ${label} on the server`" @click="emit('preview-server')">
+          <Icon :path="ICONS.eye" class="btn-icon" />
           Preview
         </button>
-        <button
-          type="button"
-          class="server-delete"
-          :disabled="deleting"
-          :aria-label="`Delete ${label} from the server`"
-          @click="emit('delete')"
-        >
-          <Icon :path="ICONS.reset" class="server-delete-icon" />
+        <button type="button" class="btn btn-sm btn-danger" :disabled="deleting" :aria-label="`Delete ${label} from the server`" @click="emit('delete')">
+          <Icon :path="ICONS.reset" class="btn-icon" />
           {{ deleting ? 'Deleting…' : 'Delete' }}
         </button>
       </template>
-      <span v-else class="server-text">Not on server</span>
+      <span v-else class="status-text">Not on server</span>
     </div>
 
     <!-- The file of the repo (assets/) offered for this item: previewable anytime, usable when an upload is. -->
-    <div v-if="defaultFile" class="server-status is-present default-status">
-      <span class="server-text">Default · {{ defaultFile.filename }} · {{ formatSize(defaultFile.size) }}</span>
-      <button type="button" class="server-preview" :aria-label="`Preview the default ${label}`" @click="emit('preview-default')">
-        <Icon :path="ICONS.eye" class="server-delete-icon" />
+    <div v-if="defaultFile" class="status-row is-present default-status">
+      <span class="status-text">Default · {{ defaultFile.filename }} · {{ formatSize(defaultFile.size) }}</span>
+      <button type="button" class="btn btn-sm btn-preview" :aria-label="`Preview the default ${label}`" @click="emit('preview-default')">
+        <Icon :path="ICONS.eye" class="btn-icon" />
         Preview
       </button>
       <button
         type="button"
-        class="server-preview"
+        class="btn btn-sm btn-preview"
         :disabled="disabled || uploading"
         :aria-label="`Use the default ${label}`"
         @click="emit('use-default')"
@@ -117,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, useId } from 'vue'
+import { computed, ref, useId } from 'vue'
 import Icon, { ICONS } from '@/components/Icons'
 import type { DefaultFile, ServerFile } from '@/types/inputs'
 
@@ -149,13 +125,14 @@ const input = ref<HTMLInputElement>()
 const dragging = ref(false)
 const error = ref('')
 
-const isAccepted = (file: File) =>
-  props.accept.split(',').some(ext => ext.startsWith('.') && file.name.toLowerCase().endsWith(ext))
+// --- Selection -------------------------------------------------------------
+
+const extensions = computed(() => props.accept.split(',').filter(ext => ext.startsWith('.')))
 
 const select = (file?: File) => {
   if (!file) return
-  if (!isAccepted(file)) {
-    error.value = `Expected a ${props.accept.split(',').filter(e => e.startsWith('.')).join(' or ')} file`
+  if (!extensions.value.some(ext => file.name.toLowerCase().endsWith(ext))) {
+    error.value = `Expected a ${extensions.value.join(' or ')} file`
     return
   }
   error.value = ''
@@ -164,18 +141,20 @@ const select = (file?: File) => {
 
 const onChange = (event: Event) => {
   select((event.target as HTMLInputElement).files?.[0])
-  if (input.value) input.value.value = ''
+  if (input.value) input.value.value = '' // lets the same file be picked again
 }
 
 const onDrop = (event: DragEvent) => {
   dragging.value = false
-  select(event.dataTransfer?.files[0])
+  if (!props.disabled) select(event.dataTransfer?.files[0])
 }
 
 const clear = () => {
   error.value = ''
   emit('update:modelValue', undefined)
 }
+
+// --- Display ---------------------------------------------------------------
 
 const formatSize = (bytes: number) =>
   bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
@@ -185,12 +164,7 @@ const formatDate = (iso: string) =>
 </script>
 
 <style scoped>
-@reference "tailwindcss";
-
-.dropzone.is-disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+/* --- Dropzone ------------------------------------------------------------ */
 
 .dropzone {
   display: flex;
@@ -220,6 +194,11 @@ const formatDate = (iso: string) =>
   border-color: rgba(239, 68, 68, 0.6);
 }
 
+.dropzone.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .dropzone-icon {
   flex-shrink: 0;
   display: flex;
@@ -237,7 +216,7 @@ const formatDate = (iso: string) =>
   color: #4ade80;
 }
 
-.icon-svg {
+.dropzone-icon-svg {
   width: 1.5rem;
   height: 1.5rem;
 }
@@ -289,27 +268,9 @@ const formatDate = (iso: string) =>
   flex-shrink: 0;
 }
 
-.dropzone-btn {
-  padding: 0.375rem 0.75rem;
-  border-radius: 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  cursor: pointer;
-}
+/* --- Status rows (server file, default file) ----------------------------- */
 
-.dropzone-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.dropzone-btn-danger:hover {
-  color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.5);
-}
-
-.server-status {
+.status-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -320,11 +281,11 @@ const formatDate = (iso: string) =>
   font-size: 0.8125rem;
 }
 
-.server-status.is-present {
+.status-row.is-present {
   color: #94a3b8;
 }
 
-.server-dot {
+.status-dot {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
@@ -332,59 +293,81 @@ const formatDate = (iso: string) =>
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
 }
 
-.server-text {
+.status-text {
   flex: 1;
   min-width: 0;
 }
 
-.server-preview {
+/* --- Buttons ------------------------------------------------------------- */
+
+.btn {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.25rem 0.625rem;
-  border-radius: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
   font-weight: 600;
-  color: #93c5fd;
-  background: transparent;
-  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   cursor: pointer;
 }
 
-.server-preview:hover {
-  background: rgba(59, 130, 246, 0.12);
+.btn:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
-.server-preview:disabled {
-  opacity: 0.4;
+.btn:disabled,
+.btn.is-disabled {
+  opacity: 0.5;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
-.dropzone-btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
+/* Small outlined buttons of the status rows. */
+.btn-sm {
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.375rem;
+  background: transparent;
+}
+
+.btn-preview {
   color: #bfdbfe;
   border-color: rgba(59, 130, 246, 0.4);
 }
 
-.dropzone-btn-upload {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
+.btn-sm.btn-preview:hover {
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.btn-danger:hover {
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.btn-sm.btn-danger {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.btn-sm.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.btn-upload {
   color: #fff;
   background: #2563eb;
   border-color: #2563eb;
 }
 
-.dropzone-btn-upload:not(:disabled):hover {
+.btn-upload:hover {
   background: #1d4ed8;
 }
 
-.dropzone-btn:disabled,
-.dropzone-btn.is-disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  pointer-events: none;
+.btn-icon {
+  width: 0.875rem;
+  height: 0.875rem;
 }
 
 .btn-spinner {
@@ -395,45 +378,12 @@ const formatDate = (iso: string) =>
   border-radius: 50%;
 }
 
-.btn-icon {
-  width: 0.875rem;
-  height: 0.875rem;
-}
-
-.server-delete {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0.625rem;
-  border-radius: 0.375rem;
-  font-weight: 600;
-  color: #f87171;
-  background: transparent;
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  cursor: pointer;
-}
-
-.server-delete:not(:disabled):hover {
-  background: rgba(239, 68, 68, 0.12);
-}
-
-.server-delete:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.server-delete-icon {
-  width: 0.875rem;
-  height: 0.875rem;
-}
-
 @media (max-width: 640px) {
   .dropzone {
     flex-wrap: wrap;
   }
   .dropzone-actions {
     width: 100%;
-    justify-content: flex-end;
   }
 }
 </style>
