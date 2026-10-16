@@ -81,6 +81,7 @@ Run from `etlui/`. Yarn 1 is the package manager (`yarn.lock`; the `Dockerfile` 
 
 ## Where to look next
 
+- `etlui/docs/decision-design/` — etlui design and decision docs, one folder per feature. `tailwind-migration/`: styling migration to Tailwind tokens (gray + indigo, light/dark theme, `data-test` in specs), decided, not implemented
 - `etlhub/CLAUDE.MD` — backend rules, frozen contracts, gotchas
 - `etlhub/docs/ARCHITECTURE.md` — runtime topology, state, pipeline order
 - `etlhub/docs/DEVELOPMENT.md` — test and clean-code state, proposed rules
