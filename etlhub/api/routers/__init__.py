@@ -1,7 +1,26 @@
+from typing import Annotated
+from urllib.parse import urlparse
+
 from fastapi import Query
+from pydantic import AfterValidator
+
+from etlhub.core.config import get_settings
 
 CONFIRM_RELAUNCH = Query(False, description="Required to relaunch an item already in success (409 confirmation_required otherwise)")
 CONFIRM_OVERWRITE = Query(False, description="Required once a forecast of the cycle is in success: this job overwrites its input files (409 confirmation_required otherwise)")
+
+
+def _allowed_webhook(url: str) -> str:
+    """https to a host of WEBHOOK_ALLOWED_HOSTS only: the worker POSTs to it from the host network."""
+    parsed = urlparse(url)
+    allowed = {h.strip().lower() for h in get_settings().webhook_allowed_hosts.split(",") if h.strip()}
+    if parsed.scheme != "https" or parsed.hostname not in allowed:  # hostname: lowercase or None
+        raise ValueError("webhook_url must be https to a host of WEBHOOK_ALLOWED_HOSTS")
+    return url
+
+
+# Optional outside Annotated: FastAPI 0.136 drops the validator of Annotated[str | None, ...] on a Query.
+WebhookUrl = Annotated[str, AfterValidator(_allowed_webhook)] | None
 
 
 def error_doc(description: str, example: dict) -> dict:

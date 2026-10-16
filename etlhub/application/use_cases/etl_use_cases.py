@@ -1,8 +1,8 @@
 import contextlib
 import io
-import json
-import urllib.request
 from pathlib import Path
+
+import httpx
 
 from etlhub.core.config import get_settings
 from etlhub.domain.exceptions import ETLException
@@ -85,18 +85,12 @@ def notify_webhook(webhook_url: str | None, job_id: str, status: str, message: s
     if not webhook_url:
         return
     try:
-        payload = json.dumps({
+        # httpx does not follow redirects: the host checked at launch is the only one called.
+        httpx.post(webhook_url, json={
             "job_id": job_id,
             "status": status,
             "message": message,
             "logs_url": f"/api/tracking/etl-logs/{job_id}",
-        }).encode("utf-8")
-        req = urllib.request.Request(
-            webhook_url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        urllib.request.urlopen(req, timeout=10)
+        }, timeout=10)
     except Exception:
         pass

@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 from fastapi import APIRouter, HTTPException
@@ -6,6 +7,7 @@ from fastapi.responses import HTMLResponse
 from etlhub.api.routers import error_doc
 from etlhub.core.config import get_settings
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/output", tags=["Output Files"])
 
 
@@ -95,7 +97,7 @@ def reset_output():
         404: {
             "description": "Forecast report not found - run forecast step first",
         },
-        500: error_doc("The file exists but cannot be read", {"detail": "Failed to read forecast report: ..."}),
+        500: error_doc("The file exists but cannot be read", {"detail": "Failed to read forecast report"}),
     },
 )
 async def get_forecast_report():
@@ -111,11 +113,9 @@ async def get_forecast_report():
         with open(report_path, "r", encoding="utf-8") as f:
             content = f.read()
         return HTMLResponse(content=content)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to read forecast report: {str(e)}"
-        )
+    except Exception:
+        logger.exception("Failed to read forecast report %s", report_path)
+        raise HTTPException(status_code=500, detail="Failed to read forecast report")
 
 
 @router.get(
