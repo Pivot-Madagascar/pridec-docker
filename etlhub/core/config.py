@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     # Comma-separated host[:port] list. Empty = every login is refused.
     dhis2_allowed_hosts: str = ""
     cookie_secure: bool = True
+    # Comma-separated hosts webhook_url may point to (https only). Empty = webhook_url is refused.
+    webhook_allowed_hosts: str = ""
 
     @property
     def redis_url(self) -> str:

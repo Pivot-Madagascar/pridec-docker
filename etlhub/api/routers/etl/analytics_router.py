@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query, Depends
 from fastapi.responses import JSONResponse
 
-from etlhub.api.routers import BLOCKED, CONFIRM_RELAUNCH, error_doc
+from etlhub.api.routers import BLOCKED, CONFIRM_RELAUNCH, WebhookUrl, error_doc
 from etlhub.api.routers.etl.ingest_router import add_launch_route
 from etlhub.application.use_cases.analytics_service import AnalyticsService
 from etlhub.domain.schemas import ETLResponse
@@ -40,7 +40,7 @@ add_launch_route(
     },
 )
 async def api_post_forecast(
-    webhook_url: str | None = Query(None),
+    webhook_url: WebhookUrl = Query(None),
     confirm: bool = CONFIRM_RELAUNCH,
     service: AnalyticsService = Depends(get_analytics_service),
 ):
@@ -70,7 +70,7 @@ async def api_post_forecast(
     },
 )
 async def api_update_key(
-    webhook_url: str | None = Query(None),
+    webhook_url: WebhookUrl = Query(None),
     confirm: bool = CONFIRM_RELAUNCH,
     service: AnalyticsService = Depends(get_analytics_service),
 ):

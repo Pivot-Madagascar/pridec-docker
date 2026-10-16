@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Query, Depends
 
-from etlhub.api.routers import BLOCKED, CONFIRM_OVERWRITE
+from etlhub.api.routers import BLOCKED, CONFIRM_OVERWRITE, WebhookUrl
 from etlhub.application.use_cases.ingestion_service import IngestionService
-from etlhub.domain.schemas import ETLResponse
+from etlhub.domain.schemas import ETLResponse, InputPath
 from etlhub.core.dependencies import get_ingestion_service
 
 router = APIRouter(tags=["Validation"])
@@ -23,13 +23,13 @@ router = APIRouter(tags=["Validation"])
     responses=BLOCKED,
 )
 async def api_validate_inputs(
-    config_path: str | None = Query(None, description="Path to config.json"),
-    external_data_path: str | None = Query(None, description="Path to external_data.csv"),
-    disease_data_path: str | None = Query(None, description="Path to disease_data.json"),
-    climate_data_path: str | None = Query(None, description="Path to climate_data.json"),
-    orgunit_poly_path: str | None = Query(None, description="Path to orgUnit_poly.geojson"),
-    input_dir: str | None = Query(None, description="Base input directory (default: input/)"),
-    webhook_url: str | None = Query(None, description="Optional webhook callback URL"),
+    config_path: InputPath | None = Query(None, description="Path to config.json, under input/"),
+    external_data_path: InputPath | None = Query(None, description="Path to external_data.csv, under input/"),
+    disease_data_path: InputPath | None = Query(None, description="Path to disease_data.json, under input/"),
+    climate_data_path: InputPath | None = Query(None, description="Path to climate_data.json, under input/"),
+    orgunit_poly_path: InputPath | None = Query(None, description="Path to orgUnit_poly.geojson, under input/"),
+    input_dir: InputPath | None = Query(None, description="Subdirectory of input/, e.g. input/run1 (default: input)"),
+    webhook_url: WebhookUrl = Query(None, description="Optional webhook callback URL"),
     confirm: bool = CONFIRM_OVERWRITE,
     service: IngestionService = Depends(get_ingestion_service),
 ):

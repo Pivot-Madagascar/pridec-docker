@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 
-from etlhub.api.routers import BLOCKED, CONFIRM_RELAUNCH
+from etlhub.api.routers import BLOCKED, CONFIRM_RELAUNCH, WebhookUrl
 from etlhub.application.use_cases.forecast_service import ForecastService
 from etlhub.domain.schemas import ETLResponse, ForecastParams, JobStatus
 from etlhub.core.dependencies import get_forecast_service
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/forecast", tags=["Forecast"])
 )
 async def api_forecast(
     params: ForecastParams,
-    webhook_url: str | None = Query(None),
+    webhook_url: WebhookUrl = Query(None),
     confirm: bool = CONFIRM_RELAUNCH,
     service: ForecastService = Depends(get_forecast_service),
 ):
