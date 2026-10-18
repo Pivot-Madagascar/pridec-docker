@@ -71,6 +71,13 @@ export COVERAGE_FILE=/tmp/etlhub.coverage          # keep the coverage file out 
   --cov=. --cov-report=term-missing
 ```
 
+The only integration test (`test_fetch_me_with_a_real_token`) creates a 10 min DHIS2 token with a test account, reads `/api/me`, then deletes the token. It is skipped unless `DHIS2_TEST_URL`, `DHIS2_TEST_USERNAME` and `DHIS2_TEST_PASSWORD` are set in the shell (never in a file of the repo):
+
+```bash
+DHIS2_TEST_URL=http://localhost:8082 DHIS2_TEST_USERNAME=... DHIS2_TEST_PASSWORD=... \
+  ../test-venv/bin/python -m pytest tests -m integration -p no:cacheprovider
+```
+
 `pytest-cov` is installed in `test-venv`. Expect the `logs/requests/` side effect until rule 4 is applied. No linter is installed: do not add one without asking.
 
 ## 4. Decisions needed

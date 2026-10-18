@@ -17,3 +17,12 @@ export interface CsvPreviewData {
 }
 
 export type ConfigData = Record<string, unknown>
+
+// GET /input/defaults: the default file of each item (config/<disease>, external_data/<level>) in the current mode.
+export interface DefaultFile {
+  filename: string
+  size: number
+}
+
+// What a preview reads: the server's input/ file, a selected File, or the default of an item.
+export type PreviewFrom = File | 'server' | { default: string }

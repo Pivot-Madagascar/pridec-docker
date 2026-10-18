@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const getConfigPreview = vi.fn()
 const getExternalDataPreview = vi.fn()
+const getDefaultPreview = vi.fn()
 vi.mock('@/services/inputs', () => ({
+  getDefaultPreview: (...args: unknown[]) => getDefaultPreview(...args),
   getConfigPreview: (...args: unknown[]) => getConfigPreview(...args),
   getExternalDataPreview: (...args: unknown[]) => getExternalDataPreview(...args)
 }))
@@ -20,6 +22,18 @@ const fakeFile = (text: string) => {
 
 describe('useInputPreview', () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it('previews the default of an item', async () => {
+    getDefaultPreview.mockResolvedValue({ columns: ['orgUnit'], rows: [], total_rows: 0, period_range: null, org_units: 0 })
+    const { open, current, csv, config } = useInputPreview()
+
+    await open('external_data', { default: 'external_data/fkt' })
+
+    expect(getDefaultPreview).toHaveBeenCalledWith('external_data/fkt', PREVIEW_ROWS)
+    expect(current.value).toEqual({ name: 'external_data', source: 'default' })
+    expect(csv.value?.columns).toEqual(['orgUnit'])
+    expect(config.value).toBeNull()
+  })
 
   it('previews the server config', async () => {
     getConfigPreview.mockResolvedValue({ a: 1 })

@@ -19,14 +19,15 @@ def validate_input_files(
     input_dir: str | None = None,
 ) -> None:
     """Validates the forecast inputs and writes the *_valid files next to them. Its output is the job log."""
-    input_base = Path(input_dir or str(PROJECT_ROOT / "input"))
+    # Paths are relative to the repo root (the API only accepts paths under input/), not to the worker's cwd.
+    input_base = PROJECT_ROOT / (input_dir or "input")
 
     paths = {
-        "config": config_path or str(input_base / "config.json"),
-        "external_data": external_data_path or str(input_base / "external_data.csv"),
-        "disease_data": disease_data_path or str(input_base / "disease_data.json"),
-        "climate_data": climate_data_path or str(input_base / "climate_data.json"),
-        "orgunit_poly": orgunit_poly_path or str(input_base / "orgUnit_poly.geojson"),
+        "config": str(PROJECT_ROOT / (config_path or input_base / "config.json")),
+        "external_data": str(PROJECT_ROOT / (external_data_path or input_base / "external_data.csv")),
+        "disease_data": str(PROJECT_ROOT / (disease_data_path or input_base / "disease_data.json")),
+        "climate_data": str(PROJECT_ROOT / (climate_data_path or input_base / "climate_data.json")),
+        "orgunit_poly": str(PROJECT_ROOT / (orgunit_poly_path or input_base / "orgUnit_poly.geojson")),
     }
 
     for p in [paths["config"], paths["disease_data"], paths["climate_data"], paths["orgunit_poly"]]:

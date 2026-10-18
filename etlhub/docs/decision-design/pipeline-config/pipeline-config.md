@@ -359,7 +359,7 @@ flowchart LR
 ```
 
 1. **Tables and seed.** Create `pipeline_config`, `cycle_config`, `config_files`; insert version 1 built from today's
-   `PIPELINE`, `OU_LEVEL`, `run_context` and the files in `assets/forecast_configs/` (already recorded in `default_files`, see [../default-input-files/default-input-files.md](../default-input-files/default-input-files.md)). Check: `build_pipeline(version 1) == PIPELINE` (today's).
+   `PIPELINE`, `OU_LEVEL`, `run_context` and the files in `assets/forecast_configs/` (offered today as default files, see [../default-input-files/default-input-files.md](../default-input-files/default-input-files.md)). Check: `build_pipeline(version 1) == PIPELINE` (today's).
 2. **Pure domain on a config.** Every function of `pipeline.py` takes the cycle's built pipeline instead of module constants.
    The existing tests must pass unchanged.
 3. **Rename items to `dataElement` keys** (contract change, etlhub and etlui in the same change):

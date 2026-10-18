@@ -1,12 +1,12 @@
 import { ref } from 'vue'
-import { getConfigPreview, getExternalDataPreview } from '@/services/inputs'
+import { getConfigPreview, getDefaultPreview, getExternalDataPreview } from '@/services/inputs'
 import { errorMessage } from '@/services/api'
 import { previewCsvStream } from '@/utils/preview'
-import type { ConfigData, CsvPreviewData, InputName } from '@/types/inputs'
+import type { ConfigData, CsvPreviewData, InputName, PreviewFrom } from '@/types/inputs'
 
 export const PREVIEW_ROWS = 100
 
-type Source = 'server' | 'local'
+type Source = 'server' | 'local' | 'default'
 
 async function readLocalConfig(file: File): Promise<ConfigData> {
   const data: unknown = JSON.parse(await file.text())
@@ -16,7 +16,10 @@ async function readLocalConfig(file: File): Promise<ConfigData> {
   return data as ConfigData
 }
 
-/** Preview of input/config.json or input/external_data.csv, from the server or from a selected File. */
+// Checked by shape, not instanceof File: callers (and tests) may pass any File-like object.
+const isDefault = (from: PreviewFrom): from is { default: string } => typeof from === 'object' && 'default' in from
+
+/** Preview of input/config.json or input/external_data.csv, from the server, a selected File or an item's default. */
 export function useInputPreview() {
   const current = ref<{ name: InputName; source: Source } | null>(null)
   const loading = ref(false)
@@ -33,13 +36,19 @@ export function useInputPreview() {
     csv.value = null
   }
 
-  const open = async (name: InputName, from: File | 'server'): Promise<void> => {
+  const open = async (name: InputName, from: PreviewFrom): Promise<void> => {
     reset()
     const id = request
-    current.value = { name, source: from === 'server' ? 'server' : 'local' }
+    current.value = { name, source: from === 'server' ? 'server' : isDefault(from) ? 'default' : 'local' }
     loading.value = true
     try {
-      if (name === 'config') {
+      if (isDefault(from)) {
+        const data = await getDefaultPreview(from.default, PREVIEW_ROWS)
+        if (id === request) {
+          if (name === 'config') config.value = data as ConfigData
+          else csv.value = data as CsvPreviewData
+        }
+      } else if (name === 'config') {
         const data = from === 'server' ? await getConfigPreview() : await readLocalConfig(from)
         if (id === request) config.value = data
       } else {

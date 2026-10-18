@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query, Depends
 
-from etlhub.api.routers import CONFIRM_OVERWRITE, CONFIRM_RELAUNCH
+from etlhub.api.routers import BLOCKED, CONFIRM_OVERWRITE, CONFIRM_RELAUNCH, WebhookUrl
 from etlhub.application.use_cases.ingestion_service import IngestionService
 from etlhub.domain.schemas import ETLResponse
 from etlhub.core.dependencies import get_ingestion_service
@@ -12,7 +12,7 @@ def add_launch_route(router: APIRouter, task_type: str, summary: str, descriptio
                      message: str, confirm_query=CONFIRM_RELAUNCH) -> None:
     """POST /{task_type}: queues the Celery job, 202 with its job_id."""
     async def endpoint(
-        webhook_url: str | None = Query(None),
+        webhook_url: WebhookUrl = Query(None),
         confirm: bool = confirm_query,
         service: IngestionService = Depends(get_ingestion_service),
     ):
@@ -26,6 +26,7 @@ def add_launch_route(router: APIRouter, task_type: str, summary: str, descriptio
         summary=summary,
         description=description + "Pass `webhook_url` to be notified when the job completes.",
         response_description=response_description,
+        responses=BLOCKED,
         name=f"api_{task_type}",
     )(endpoint)
 

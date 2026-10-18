@@ -49,6 +49,7 @@
             :busy="busy"
             :is-admin="!!auth.user?.is_admin"
             :server-files="serverFiles"
+            :defaults="defaults"
             :upload-file="upload"
             @open="openRun"
             @launch="launchItem"
@@ -56,6 +57,7 @@
             @report="(source, disease) => openReport({ source, disease }, false)"
             @delete="name => (pendingDelete = name)"
             @preview="openPreview"
+            @use-default="useDefault"
             @abandon="abandonRun"
             @release="pendingRelease = true"
           />
@@ -151,8 +153,8 @@ const accordionItems = [
 
 const { activityLog, addActivity } = useActivityLog()
 const {
-  state, serverFiles, busy, pending, refresh, confirm, cancel,
-  launch, openRun, abandonRun, decide, decideImports, skipAlerts, setMode, setCycle, releaseLock, upload, remove
+  state, serverFiles, defaults, busy, pending, refresh, confirm, cancel,
+  launch, openRun, abandonRun, decide, decideImports, skipAlerts, setMode, setCycle, releaseLock, upload, remove, useDefault
 } = usePipeline(addActivity)
 
 // <input type="month"> gives 'YYYY-MM' ('' when cleared = back to the current month).

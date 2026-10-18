@@ -4,6 +4,8 @@ const getCheckpoints = vi.fn()
 const launchJob = vi.fn()
 const setMode = vi.fn()
 const getInputFiles = vi.fn()
+const getDefaultFiles = vi.fn()
+const applyDefaultFile = vi.fn()
 const showNotification = vi.fn()
 const addActivity = vi.fn()
 vi.mock('@/services/pipeline', () => ({
@@ -17,6 +19,8 @@ vi.mock('@/services/pipeline', () => ({
 }))
 vi.mock('@/services/inputs', () => ({
   getInputFiles: (...args: unknown[]) => getInputFiles(...args),
+  getDefaultFiles: (...args: unknown[]) => getDefaultFiles(...args),
+  applyDefaultFile: (...args: unknown[]) => applyDefaultFile(...args),
   uploadInputFile: vi.fn(),
   deleteInputFile: vi.fn()
 }))
@@ -32,9 +36,25 @@ describe('usePipeline', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getInputFiles.mockResolvedValue({})
+    getDefaultFiles.mockResolvedValue({})
     getCheckpoints.mockResolvedValue(STATE)
   })
   afterEach(() => vi.useRealTimers())
+
+  it('reads the defaults with the state, and uses one with the confirmation rule of an upload', async () => {
+    const DEFAULTS = { 'config/Malaria': { filename: 'config_malaria.json', size: 795 } }
+    getDefaultFiles.mockResolvedValue(DEFAULTS)
+    applyDefaultFile.mockRejectedValueOnce(conflict({ code: 'confirmation_required', message: 'used', impact: [] }))
+    applyDefaultFile.mockResolvedValue('input/config.json')
+    const { useDefault, defaults, pending, confirm } = usePipeline(addActivity)
+
+    expect(await useDefault('config')).toBe(false)
+    expect(defaults.value).toEqual(DEFAULTS)
+    expect(pending.value?.label).toBe('Use the default config')
+
+    expect(await confirm()).toBe(true)
+    expect(applyDefaultFile.mock.calls).toEqual([['config', false], ['config', true]])
+  })
 
   it('launches, notifies and reads the state again from the server', async () => {
     launchJob.mockResolvedValue({ jobId: 'import_gee_1', requestId: 'req-1' })

@@ -6,8 +6,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from etlhub.domain.exceptions import ValidationError
+from etlhub.domain.exceptions import PipelineBlockedError, ValidationError
+from etlhub.domain.interfaces.default_files import DefaultFileSource
 from etlhub.domain.interfaces.pipeline_gate import PipelineGate
+from etlhub.domain.pipeline import config_item, external_data_item
 
 CONFIG_NAME = "config.json"
 EXTERNAL_DATA_NAME = "external_data.csv"
@@ -59,9 +61,10 @@ CHECKS = {"config": _check_config, "external_data": _check_external_data}
 class InputUploadService:
     """Replaces the forecast input files after checking them."""
 
-    def __init__(self, input_dir: Path, gate: PipelineGate):
+    def __init__(self, input_dir: Path, gate: PipelineGate, defaults: DefaultFileSource | None = None):
         self.input_dir = Path(input_dir)
         self._gate = gate
+        self._defaults = defaults
 
     def save(self, name: InputName, content: bytes, confirm: bool = False) -> str:
         """Checks then replaces one input file. Raises ValidationError, leaving the old file in place.
@@ -98,15 +101,41 @@ class InputUploadService:
             (self.input_dir / file_name).unlink()
         return f"input/{file_name}"
 
-    def preview_config(self) -> dict:
-        """Raises FileNotFoundError when absent, ValidationError when not a JSON object."""
-        content = (self.input_dir / CONFIG_NAME).read_bytes()
+    def _mode(self) -> str:
+        return "test" if self._gate.progress()["dry_run"] else "production"
+
+    def defaults(self) -> dict[str, dict]:
+        """Default files of the current mode: item (config/<disease>, external_data/<level>) → {filename, size}."""
+        return self._defaults.current(self._mode()) if self._defaults else {}
+
+    def default_path(self, item: str) -> Path:
+        """File of the default offered for item. Raises FileNotFoundError when there is none."""
+        path = self._defaults.path(self._mode(), item) if self._defaults else None
+        if path is None:
+            raise FileNotFoundError(item)
+        return path
+
+    def save_default(self, name: InputName, confirm: bool = False) -> str:
+        """Same as save, with the default file of the open run's item (config/<disease> or external_data/<level>).
+
+        ponytail: the run is read before save checks it again; a run switched in between would get the other
+        item's default (needs two people within milliseconds). Read the item inside change_input if that matters.
+        """
+        run = self._gate.progress()["run"]
+        if run is None:
+            raise PipelineBlockedError(f"Using the default {name} needs an open forecast run (POST /pipeline/runs)")
+        item = config_item(run["couple"]) if name == "config" else external_data_item(run["couple"])
+        return self.save(name, self.default_path(item).read_bytes(), confirm)
+
+    def preview_config(self, path: Path | None = None) -> dict:
+        """input/config.json, or the file at path. Raises FileNotFoundError when absent, ValidationError when not a JSON object."""
+        content = (path or self.input_dir / CONFIG_NAME).read_bytes()
         _check_config(content)
         return json.loads(content)
 
-    def preview_external_data(self, limit: int) -> dict:
-        """First `limit` rows plus a summary of the whole file, read line by line."""
-        with open(self.input_dir / EXTERNAL_DATA_NAME, newline="", encoding="utf-8-sig") as f:
+    def preview_external_data(self, limit: int, path: Path | None = None) -> dict:
+        """First `limit` rows plus a summary of the whole file (input/external_data.csv or path), read line by line."""
+        with open(path or self.input_dir / EXTERNAL_DATA_NAME, newline="", encoding="utf-8-sig") as f:
             reader = csv.reader(f)
             columns = [column.strip() for column in next(reader, [])]
             org_index = columns.index("orgUnit") if "orgUnit" in columns else None

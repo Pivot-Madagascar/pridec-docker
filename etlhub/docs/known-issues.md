@@ -9,8 +9,6 @@ Priority scale: **P1** fix next (security or a broken feature), **P2** fix soon 
 | # | Priority | Issue | Section |
 |---|---|---|---|
 | 1 | P3 | `DELETE /output/reset`: "signature" is only "file exists" (sudo fallback removed) | 1.1 |
-| 2 | P1 | `webhook_url`: SSRF from the worker (any URL, redirects followed) | 1.2 |
-| 3 | P1 | `/validate_inputs`: free file paths and `input_dir` | 1.3 |
 | 5 | P1 | `/post_forecast`, `/update_key` block the event loop | 3 |
 | 6 | P2 | A login while a job runs revokes the token that job uses | 1.4 |
 | 7 | P2 | No roles: any DHIS2 user of an allowed host can log in and run anything | 1.5 |
@@ -19,13 +17,13 @@ Priority scale: **P1** fix next (security or a broken feature), **P2** fix soon 
 | 10 | P2 | `etlui` marks a step `success` on the 202; forecast logs only at the end | 3 |
 | 11 | P3 | Everything else below | — |
 
-Order of work suggested: 2 → 3 (small, independent, each its own change), then 5 (it freezes the whole API), then 6 and 7 (they need a product decision).
+Order of work suggested: 5 (it freezes the whole API), then 6 and 7 (they need a product decision).
 
 ## 1. Security
 
 1. **P3 — `DELETE /output/reset`** (`api/routers/forecast_report_router.py`). Behind the session; the "signature" only checks that `.output_sig` exists and is non-empty. The `sudo rm -rf` fallback is gone (2026-10-08): forecast containers run as the worker's user (`forecast_runner._container_user`), `output/` is created by the worker before `docker run`, and the endpoint deletes with `shutil.rmtree` only. Files left root-owned by older runs must be handed back once (`GETTING_STARTED.md`, "output/ owned by root"). *Unverified:* the `PRIDEC` R package (not in the repo) is assumed to write only under `output/` and `HOME` (`/tmp`); a forecast run as non-root has not been executed yet.
-2. **P1 — SSRF through `webhook_url`** (`infrastructure/tasks.py:24-38`). Any logged-in user can make the worker (host network) POST to any URL: no scheme or host check, and `urllib.request.urlopen` follows redirects. Fix: one validator (allowed hosts, https), called at launch; see migration m4.
-3. **P1 — `/validate_inputs` takes free paths** (`api/routers/etl/validation_router.py:24-31`, `validation_use_cases.py:36`). File paths and `input_dir` come from the query; the use case writes `config_valid.json`, `input_valid.json`, `polygon_valid.geojson` into `input_dir`. Fix: reuse the `ForecastParams` path validator (under `input/`, no `..`, no leading `-`).
+2. *Fixed (2026-10-16):* SSRF through `webhook_url`. Every route takes the `WebhookUrl` type (`api/routers/__init__.py`): https to a host of `WEBHOOK_ALLOWED_HOSTS` only, 422 otherwise; empty list = every webhook refused. `notify_webhook` uses httpx, which does not follow redirects. *Unverified:* a DNS name of the allow-list that resolves to an internal address is still called.
+3. *Fixed (2026-10-16):* `/validate_inputs` free paths. Its paths and `input_dir` take the `InputPath` type shared with `ForecastParams` (file path under `input/`, no `..`, no leading `-`), and the use case resolves them against the repo root instead of the worker's cwd.
 4. **P2 — A login revokes the token of running jobs.** Scripts read the DHIS2 token once at start (`DHIS_TOKEN = get_dhis_token()`). A new login revokes it (`api/auth/router.py`, `_revoke_previous`), so a running import gets 401 from DHIS2 mid-way and stops half done. Same at logout and at the 24 h expiry. Decision needed: refuse login/logout while a DHIS2 job runs (409), or document it.
 5. **P2 — No roles.** Any user of a host in `DHIS2_ALLOWED_HOSTS` who can log in becomes the global DHIS2 identity for every job, and can call every endpoint (`DELETE /output/reset`, `/forecast/`, DHIS2 writes). Decision needed: require a DHIS2 authority or user group at login?
 6. **P2 — Request logs keep the full URL** (`api/middleware.py:94-107`, stored in SQLite `logs/etlhub.db`, 30 days). A secret in a query string (a `webhook_url` carrying a token) is stored. Bodies and headers are not logged, so the login password and cookies are not.
@@ -91,7 +89,7 @@ Fixed: the order-dependent `test_auth.py` failure (file rewritten) · tests no l
 - **P3** — `GETTING_STARTED.md:90-94` says port 8000; `run_server.py` uses 8111.- **P3** — `.env.example` lacks `LOGS_DIR`, `DATA_DIR`, `HOST_PWD`, `ENV_FILE`, and has `GEE_PROJECT =` with a space.
 - **P3** — `.env.debug` duplicates most of `.env` with different values for `DHIS_TOKEN`, `PIVOT_URL`, `PIVOT_TOKEN`, `LOG_LEVEL` (names compared on 2026-10-08). To clean up with the `.env.debug` migration.
 - **P3** — Two diverging versions of the skill: `etlhub/docs/SKILL.md` and `.claude/skills/etlhub/implementation.md` (probably not loaded: not named `SKILL.md`).
-- **P3** — Version drift: `pridec_gee` and `pivot_dhis_tools` differ between `etlhub/requirements.txt` and `etl/requirements.txt`. The OpenAPI text of `/forecast/` says `:latest`, the code uses `:0.1.0`.
+- **P3** — Version drift: `pridec_gee` and `pivot_dhis_tools` differ between `etlhub/requirements.txt` and `etl/requirements.txt`.
 - **P3** — `etlhub/CLAUDE.MD` is in upper case; the root `CLAUDE.md` points to `etlhub/CLAUDE.md`.
 - **P3** — `compose.yaml` has no etlhub and no Redis; no etlhub Dockerfile.
 - **P3** — `local-docs/` (git-ignored) contradicts the code in many places (auth, Redis, tests); do not trust it.

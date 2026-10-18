@@ -5,6 +5,7 @@ from fastapi import Depends
 from etlhub.infrastructure.job_store import JobStore
 from etlhub.infrastructure.request_tracker import RequestTracker
 from etlhub.infrastructure.checkpoint_store import get_checkpoint_store
+from etlhub.infrastructure.default_files import DefaultFiles
 from etlhub.infrastructure.tasks import CeleryTaskLauncher
 
 from etlhub.domain.interfaces.job_repository import JobRepository
@@ -67,4 +68,4 @@ def get_tracking_service(
 
 
 def get_input_upload_service(gate: PipelineGate = Depends(get_pipeline_gate)) -> InputUploadService:
-    return InputUploadService(Path(get_settings().data_dir) / "input", gate)
+    return InputUploadService(Path(get_settings().data_dir) / "input", gate, DefaultFiles())

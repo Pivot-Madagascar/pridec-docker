@@ -47,7 +47,7 @@ def test_forecast_container_runs_as_the_worker_user_and_output_exists_first(tmp_
     def fake_run(cmd, **kwargs):
         seen["cmd"] = cmd
         seen["output_existed"] = (tmp_path / "output").is_dir()
-        return SimpleNamespace(returncode=1, stdout="", stderr="stop here")
+        return SimpleNamespace(returncode=1, stdout="stop here")
 
     monkeypatch.setattr(forecast_runner.subprocess, "run", fake_run)
 
@@ -59,3 +59,27 @@ def test_forecast_container_runs_as_the_worker_user_and_output_exists_first(tmp_
     assert cmd[cmd.index("--user") + 1] == "1000:1000"
     assert "HOME=/tmp" in cmd
     assert seen["output_existed"]
+
+
+def test_forecast_logs_keep_stderr_merged_with_stdout(tmp_path, monkeypatch):
+    (tmp_path / ".env").write_text("OTHER=1\n")
+    settings = SimpleNamespace(host_pwd=str(tmp_path), data_dir=str(tmp_path), logs_dir=str(tmp_path / "logs"))
+    monkeypatch.setattr(forecast_runner, "get_settings", lambda: settings)
+    monkeypatch.setattr(forecast_runner, "_get_output_dir", lambda: str(tmp_path / "output"))
+    monkeypatch.setattr(forecast_runner, "generate_signature", lambda: "sig")
+    monkeypatch.setattr(forecast_runner.ConfigStore, "get_all", lambda self: {})
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout="$pred_vars\n\u2714 SUCCESS: Forecast created.")
+
+    monkeypatch.setattr(forecast_runner.subprocess, "run", fake_run)
+
+    status = forecast_runner.run_rscript("forecast_logs", {
+        "config_valid_path": "input/c.json", "input_valid_path": "input/i.json", "polygon_valid_path": "input/p.geojson",
+    }, _RecordingJobStore())
+
+    assert seen["stderr"] is forecast_runner.subprocess.STDOUT
+    assert status["status"] == "success" and "SUCCESS: Forecast created" in status["logs"]
+    assert (tmp_path / "logs" / "forecast_logs.json").exists()

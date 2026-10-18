@@ -13,9 +13,15 @@ Michelle will add an option for the DRYRUN to the python function behind the `Bu
 
 1. It is slightly confusing to have the external_data upload before the button to open a run. I suggest adding it directly under the config.json section. For the PIVOT system, these could be automatically provided based on whether the data is ADJ/COM or CSB as a kind of default.
 
+**Status: resolved.** The config and external_data uploads now sit in the run's Steps dialog, in stage 1 before the data check. external_data has a default per level (fkt or csb), offered with Preview and "Use default".
+
 2. Add a default configuration for each dataElement and give the user an option to override by uploading a new one.
 
+**Status: resolved.** Each disease has a default config, which the user can preview, apply with "Use default", or replace by an upload.
+
 3. In the side window showing the steps, sometimes the `Data check` step will not be available to launch due to missing a config.json or external_data.json. Can we add make the upload of these files an explicit step so that it is clear to the user why the `Data check` step is not available?
+
+**Status: resolved.** Stage 1 of the Steps dialog lists the input files with their status, above the "Run the data check" button, so a missing file is visible there.
 
 4. The Forecast step encountered the following error when running full ensemble model that contained the INLA model:
 
@@ -115,8 +121,12 @@ Saving intermediate files to output
 ℹ Creating HTML report of forecast...
 ```
 
+**Status: resolved.** The R `cli` and `message()` lines go to stderr, and etlhub kept only stdout on success. `forecast_runner.py` now merges stderr into stdout, so the logs show the full run in order.
+
 
 6. At the forecast approval step, give the user the option to download everything in the `output/`  and `input/` folder. This is sometimes needed to investigate an error in the data or forecasts before approval.
+
+**Status: resolved.** The forecast report has a "Download Forecast Data" button next to Refresh. It downloads one zip with `input/` and `output/` of the open run.
 
 ### Tracking
 
