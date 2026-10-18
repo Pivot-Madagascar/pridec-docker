@@ -77,7 +77,7 @@ DHIS2 username/password login (`POST /auth/login`) → etlhub creates a 24 h DHI
 
 ## Forecast pipeline
 
-Docker image `mvevans89/pridec_forecast:0.1.0` (the OpenAPI text says `latest`), launched by `forecast_runner.run_rscript` from a Celery task, host network, `SYS_NICE`.
+Docker image `mvevans89/pridec_forecast:0.1.0`, launched by `forecast_runner.run_rscript` from a Celery task, host network, `SYS_NICE`.
 
 - `params` dict → `task_forecast`. `.env` merged with Redis overrides into a temp file `/tmp/forecast_{id}.env` that holds secrets while the container runs.
 - Volumes `{HOST_PWD}/input:/app/input:ro`, `{HOST_PWD}/output:/app/output:rw`. `HOST_PWD` is read from `Settings.host_pwd` (it must be exported in the worker's environment) and must be a **host** path containing `.env`; a missing `.env` marks the job `error` without running Docker. `ForecastParams` paths must be relative, under `input/`, without `..` or a leading `-` (422 otherwise).

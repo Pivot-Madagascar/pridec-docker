@@ -1,5 +1,5 @@
 import api, { withConfirm } from '@/services/api'
-import type { ConfigData, CsvPreviewData, InputName, ServerFile } from '@/types/inputs'
+import type { ConfigData, CsvPreviewData, DefaultFile, InputName, ServerFile } from '@/types/inputs'
 
 // POST /input/files/{name} (etlhub input_router): one file in the `file` field, ≤ 10 MB.
 // Needs an open forecast run; confirm=true to replace a file already used (409 confirmation_required otherwise).
@@ -37,4 +37,22 @@ export async function getConfigPreview(): Promise<ConfigData> {
 export async function getExternalDataPreview(limit: number): Promise<CsvPreviewData> {
   const response = await api.get<CsvPreviewData>('/input/files/external_data/preview', { params: { limit } })
   return response.data
+}
+
+// GET /input/defaults: item (config/Malaria, external_data/fkt) → its default file, in the current mode.
+export async function getDefaultFiles(): Promise<Record<string, DefaultFile>> {
+  const response = await api.get<Record<string, DefaultFile>>('/input/defaults')
+  return response.data
+}
+
+// GET /input/defaults/{item}/preview: same answer as the input/ previews; `limit` is used by CSV files only.
+export async function getDefaultPreview(item: string, limit: number): Promise<ConfigData | CsvPreviewData> {
+  const response = await api.get<ConfigData | CsvPreviewData>(`/input/defaults/${item}/preview`, { params: { limit } })
+  return response.data
+}
+
+// POST /input/files/{name}/from-default: the open run's default copied into input/, same rules as an upload.
+export async function applyDefaultFile(name: InputName, confirm = false): Promise<string> {
+  const response = await api.post<{ saved: string }>(`/input/files/${name}/from-default`, null, withConfirm(confirm))
+  return response.data.saved
 }

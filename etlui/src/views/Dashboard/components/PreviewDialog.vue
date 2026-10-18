@@ -5,7 +5,7 @@
         <Icon :path="ICONS.eye" class="preview-heading-icon" />
         <h3 :id="titleId" class="preview-title">{{ title }}</h3>
         <span class="preview-badge" :class="`is-${source}`">
-          {{ source === 'server' ? 'On server' : 'Selected file — not uploaded' }}
+          {{ BADGES[source] }}
         </span>
       </div>
       <button type="button" class="preview-close" aria-label="Close preview" @click="emit('close')">
@@ -32,7 +32,7 @@ import BaseDialog from './BaseDialog.vue'
 defineProps<{
   open: boolean
   title: string
-  source: 'server' | 'local'
+  source: 'server' | 'local' | 'default'
   loading: boolean
   error: string
 }>()
@@ -42,6 +42,7 @@ const emit = defineEmits<{
 }>()
 
 const titleId = useId()
+const BADGES = { server: 'On server', local: 'Selected file — not uploaded', default: 'Default file' }
 </script>
 
 <style scoped>
@@ -107,6 +108,11 @@ const titleId = useId()
 .preview-badge.is-local {
   color: #fbbf24;
   background: rgba(245, 158, 11, 0.12);
+}
+
+.preview-badge.is-default {
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.12);
 }
 
 .preview-close {

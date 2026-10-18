@@ -280,14 +280,27 @@ def test_config_never_returns_the_token(https_client, monkeypatch):
 
 @pytest.mark.integration
 def test_fetch_me_with_a_real_token():
-    """Read-only check against a real DHIS2 (GET /api/me). Needs DHIS_URL and DHIS_TOKEN."""
-    from etlhub.api.auth.dhis2_auth import fetch_me
+    """Against a real DHIS2: creates a PAT, reads GET /api/me with it, then revokes it.
 
-    url, token = os.getenv("DHIS_URL"), os.getenv("DHIS_TOKEN")
-    if not url or not token:
-        pytest.skip("DHIS_URL and DHIS_TOKEN environment variables not set")
+    Needs DHIS2_TEST_URL, DHIS2_TEST_USERNAME and DHIS2_TEST_PASSWORD in the environment
+    (a test account, never the .env token: that one may be expired or in use by jobs).
+    """
+    import time
 
-    with httpx.Client(timeout=10) as client:
-        user = fetch_me(client, url.rstrip("/"), token=token)
+    from etlhub.api.auth.dhis2_auth import create_pat, dhis2_client, fetch_me, revoke_pat
 
-    assert user is not None and user["id"]
+    url = os.getenv("DHIS2_TEST_URL", "").rstrip("/")
+    basic = (os.getenv("DHIS2_TEST_USERNAME"), os.getenv("DHIS2_TEST_PASSWORD"))
+    if not url or not all(basic):
+        pytest.skip("DHIS2_TEST_URL, DHIS2_TEST_USERNAME and DHIS2_TEST_PASSWORD not set")
+
+    with dhis2_client() as client:
+        key, uid = create_pat(client, url, basic, (int(time.time()) + 600) * 1000)
+        try:
+            user = fetch_me(client, url, token=key)
+        finally:
+            revoked = revoke_pat(client, url, uid, token=key)
+        assert user is not None and user["id"] and user["username"] == basic[0]
+        assert revoked
+        # Deleted in DHIS2. Not "fetch_me(token) is None": DHIS2 2.40 keeps accepting a deleted token from its cache for a while.
+        assert client.get(f"{url}/api/apiToken/{uid}", auth=basic).status_code == 404

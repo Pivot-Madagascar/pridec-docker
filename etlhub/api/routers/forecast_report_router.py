@@ -1,10 +1,17 @@
+import io
+import logging
 import os
 import shutil
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import HTMLResponse
+import zipfile
+from pathlib import Path
 
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import HTMLResponse, Response
+
+from etlhub.api.routers import error_doc
 from etlhub.core.config import get_settings
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/output", tags=["Output Files"])
 
 
@@ -36,7 +43,16 @@ def _verify_signature() -> bool:
 @router.delete(
     "/reset",
     summary="Delete output directory",
-    description="Deletes the entire output directory and all its contents (requires valid signature).",
+    description=(
+        "Deletes the entire output directory and all its contents. Allowed only while `.output_sig` exists: "
+        "a forecast run writes it, a successful reset removes it (403 otherwise)."
+    ),
+    responses={
+        200: {"content": {"application/json": {"example": {"success": True, "message": "Output directory cleared"}}}},
+        403: error_doc("No `.output_sig`: no forecast ran since the last reset",
+                       {"detail": "Output directory deletion not authorized"}),
+        500: error_doc("Some files could not be deleted", {"detail": "Failed to delete output directory: ..."}),
+    },
 )
 def reset_output():
     # Plain `def`: FastAPI runs it in a thread, so deleting large files does not block the event loop.
@@ -84,7 +100,8 @@ def reset_output():
     responses={
         404: {
             "description": "Forecast report not found - run forecast step first",
-        }
+        },
+        500: error_doc("The file exists but cannot be read", {"detail": "Failed to read forecast report"}),
     },
 )
 async def get_forecast_report():
@@ -100,11 +117,9 @@ async def get_forecast_report():
         with open(report_path, "r", encoding="utf-8") as f:
             content = f.read()
         return HTMLResponse(content=content)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to read forecast report: {str(e)}"
-        )
+    except Exception:
+        logger.exception("Failed to read forecast report %s", report_path)
+        raise HTTPException(status_code=500, detail="Failed to read forecast report")
 
 
 @router.get(
@@ -112,7 +127,37 @@ async def get_forecast_report():
     response_model=dict,
     summary="Check if forecast report exists",
     description="Returns whether the forecast report HTML file exists.",
+    responses={200: {"content": {"application/json": {"example": {"exists": True}}}}},
 )
 async def check_forecast_report_exists():
     report_path = _get_forecast_report_path()
     return {"exists": os.path.exists(report_path)}
+
+@router.get(
+    "/archive",
+    response_class=Response,
+    summary="Download input/ and output/ as one zip",
+    description="Zip of the open run's files, under `input/` and `output/`, to check the data or the forecast "
+                "before approval. Symbolic links are left out.",
+    responses={
+        200: {"content": {"application/zip": {}}},
+        404: error_doc("input/ and output/ are both empty", {"detail": "No files in input/ or output/"}),
+    },
+)
+def download_archive():
+    # Plain `def`: FastAPI runs it in a thread, so zipping does not block the event loop.
+    root = Path(get_settings().data_dir)
+    buffer = io.BytesIO()
+    # ponytail: zip built in memory (a few MB per run); stream from a temp file if runs grow to hundreds of MB.
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for folder in ("input", "output"):
+            for path in sorted((root / folder).rglob("*")):
+                if path.is_file() and not path.is_symlink():
+                    archive.write(path, path.relative_to(root))
+    if not archive.namelist():
+        raise HTTPException(status_code=404, detail="No files in input/ or output/")
+    return Response(
+        buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="pridec_input_output.zip"'},
+    )

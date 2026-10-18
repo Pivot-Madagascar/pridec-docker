@@ -23,6 +23,7 @@ Re-check against the code before relying on a line number or a default.
 | POST | `/auth/logout` | `auth_router` | Revokes the DHIS2 token, 204, clears the cookie | — |
 | GET | `/auth/me` | `auth_router` | Redis. The user carries `is_admin` (DHIS2 authority `ALL`, read at login) | **Session** |
 | GET | `/output/forecast_report.html[/exists]` | `forecast_report_router` | File | — |
+| GET | `/output/archive` | `forecast_report_router` | Zip of `input/` and `output/` (`pridec_input_output.zip`, symlinks left out). 404 if both empty | Session |
 | POST | `/input/files/{config\|external_data}` | `input_router` | Sync, multipart field `file` (≤ 10 MB) → replaces `input/config.json` or `input/external_data.csv`. 413 too big, 422 invalid JSON object / CSV without `orgUnit`,`period` / other name. The server writes `forecast_start` = the cycle into `config.json` | — |
 | GET | `/input/files` | `input_router` | Sync. `{config, external_data}` → `{exists, size?, modified?}` | — |
 | GET | `/input/files/config/preview` | `input_router` | Sync, content of `input/config.json`. 404 absent, 422 not a JSON object | — |

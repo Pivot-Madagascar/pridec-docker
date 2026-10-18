@@ -1,11 +1,11 @@
 import logging
 import os
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from dotenv import dotenv_values
 
-from etlhub.api.auth.dhis2_auth import get_current_user
+from etlhub.api.routers import error_doc
 from etlhub.infrastructure.config_store import ConfigStore
 from etlhub.infrastructure.auth_store import get_credential
 
@@ -31,7 +31,15 @@ class ConfigResponse(BaseModel):
     ou_level: int | None = None
     disease_code: str | None = None
 
-@router.get("/", response_model=ConfigResponse, dependencies=[Depends(get_current_user)])
+@router.get(
+    "/",
+    response_model=ConfigResponse,
+    summary="Current dynamic configuration",
+    description=(
+        "PARENT_OU, OU_LEVEL and DISEASE_CODE from Redis, plus the DHIS2 URL and token expiry of the last login. "
+        "The token itself is never returned (has_dhis_token only)."
+    ),
+)
 async def get_config():
     data = ConfigStore().get_all()
     credential = get_credential() or {}
@@ -44,20 +52,29 @@ async def get_config():
         disease_code=data.get("DISEASE_CODE"),
     )
 
-@router.put("/", response_model=ConfigResponse, dependencies=[Depends(get_current_user)])
+@router.put(
+    "/",
+    response_model=ConfigResponse,
+    summary="Update the dynamic configuration",
+    description="Writes the fields that are set (null fields are left as they are) and returns the new configuration.",
+    responses={502: error_doc("Redis write failed", {"detail": "Failed to write config to Redis"})},
+)
 async def update_config(config: ConfigUpdate):
     updates = {k.upper(): v for k, v in config.model_dump(exclude_none=True).items()}
     if updates and not ConfigStore().set_all(updates):
         raise HTTPException(status_code=502, detail="Failed to write config to Redis")
     return await get_config()
 
-@router.put("/reload", response_model=ConfigResponse, dependencies=[Depends(get_current_user)])
+@router.put(
+    "/reload",
+    response_model=ConfigResponse,
+    summary="Reload the dynamic configuration from .env",
+    responses={502: error_doc("Redis write failed", {"detail": "Failed to write config to Redis"})},
+)
 async def reload_config():
-    """
-    Relit les variables éditables depuis le fichier .env (racine du projet)
-    et les réécrit dans Redis, écrasant les valeurs actuelles de ConfigStore.
-    Utile pour resynchroniser après une modification manuelle du .env.
-    """
+    """Rereads PARENT_OU, OU_LEVEL and DISEASE_CODE from the root .env and writes them to Redis,
+    overwriting the current values. A key missing from .env is removed from Redis.
+    Use it after editing .env by hand."""
     _PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
     env_path = os.path.join(_PROJECT_ROOT, ".env")
     env_values = dotenv_values(env_path)

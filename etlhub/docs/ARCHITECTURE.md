@@ -69,7 +69,7 @@ Worth knowing:
 | HTTP requests | SQLite `logs/etlhub.db`, table `request_log` | 30 days, purged on each insert. Unhandled errors recorded as 500 with `error`; `/api/tracking` never recorded |
 | Dynamic config | Redis, hash `app:config:dynamic` | no TTL |
 | ETL data | `input/`, `output/` | never purged |
-| Default input files | SQLite `logs/etlhub.db`, table `default_files` (both modes); content in `assets/`, which etlhub must reach in production too (`docs/decision-design/default-input-files/default-input-files.md`) | kept; seeded once per process |
+| Default input files | Files of `assets/`, read on each request, no table (`docs/decision-design/default-input-files/default-input-files.md`); etlhub must reach `assets/` in production too | not stored |
 
 `list_recent` reads the files in `logs/requests/` (sorted by modification time), not Redis. Scripts write under `os.getcwd()/input|output`: the repository root on the API side, and an unverified directory on the worker side. Redis has four roles: Celery broker and backend, job state, pub/sub, and dynamic configuration. The dynamic config (`DHIS_URL`, `DHIS_TOKEN`, `PARENT_OU`, `OU_LEVEL`, `DISEASE_CODE`) is read by the forecast container **and** by the ETL scripts (which also read `DRYRUN` and `LOG_LEVEL`).
 
