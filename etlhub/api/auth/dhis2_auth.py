@@ -34,6 +34,11 @@ class DHIS2Error(Exception):
     """DHIS2 is unreachable or answered something unexpected."""
 
 
+def allowed_hosts() -> list[str]:
+    """DHIS2_ALLOWED_HOSTS as lowercase host[:port], in order."""
+    return [h.strip().lower() for h in get_settings().dhis2_allowed_hosts.split(",") if h.strip()]
+
+
 def normalize_dhis2_url(url: str) -> str | None:
     """Return the URL without trailing slash if it may receive credentials, else None.
 
@@ -50,8 +55,7 @@ def normalize_dhis2_url(url: str) -> str | None:
         return None
     if parsed.scheme == "http" and parsed.hostname not in _LOCAL_HOSTS:
         return None
-    allowed = {h.strip().lower() for h in get_settings().dhis2_allowed_hosts.split(",") if h.strip()}
-    if parsed.netloc.lower() not in allowed:
+    if parsed.netloc.lower() not in allowed_hosts():
         return None
     return url.strip().rstrip("/")
 

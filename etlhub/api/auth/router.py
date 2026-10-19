@@ -1,5 +1,6 @@
 import logging
 import time
+from urllib.parse import urlparse
 
 import httpx
 import redis
@@ -7,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field, SecretStr
 
 from etlhub.api.auth.dhis2_auth import (
+    _LOCAL_HOSTS,
+    allowed_hosts,
     SESSION_COOKIE,
     TOKEN_LIFETIME_SECONDS,
     DHIS2Error,
@@ -72,6 +75,20 @@ def _rollback(client: httpx.Client, url: str, uid: str, basic: tuple) -> None:
             auth_store.delete_credential()
     except redis.RedisError as e:
         logger.error("Could not remove the revoked DHIS2 credential from Redis: %s", e)
+
+
+@auth_router.get(
+    "/auth/dhis2-urls",
+    summary="DHIS2 URLs the login accepts",
+    responses={200: {"content": {"application/json": {"example": ["http://localhost:8082", "https://dhis2.example.org"]}}}},
+)
+def dhis2_urls() -> list[str]:
+    """URLs built from DHIS2_ALLOWED_HOSTS, for the login form to suggest.
+
+    Public: the login page needs them before any session. http for localhost, https
+    otherwise, the same rule as POST /auth/login.
+    """
+    return [f"{'http' if urlparse('//' + h).hostname in _LOCAL_HOSTS else 'https'}://{h}" for h in allowed_hosts()]
 
 
 @auth_router.post(

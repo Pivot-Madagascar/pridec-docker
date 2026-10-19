@@ -17,6 +17,7 @@ PUBLIC = {
     ("GET", "/"),
     ("POST", "/auth/login"),
     ("POST", "/auth/logout"),
+    ("GET", "/auth/dhis2-urls"),
 }
 
 
@@ -73,5 +74,5 @@ def test_openapi_documents_every_operation_and_its_session(anon_app):
     """Each operation has a description; the session cookie and its 401 are declared exactly where it is required."""
     operations = [(m.upper(), path, op) for path, ops in anon_app.openapi()["paths"].items() for m, op in ops.items()]
     assert [(m, p) for m, p, op in operations if not op.get("description")] == []
-    assert {(m, p) for m, p, op in operations if "security" not in op} == {("POST", "/auth/login"), ("POST", "/auth/logout")}
+    assert {(m, p) for m, p, op in operations if "security" not in op} == PUBLIC - {("GET", "/")}
     assert [(m, p) for m, p, op in operations if "security" in op and "401" not in op["responses"]] == []

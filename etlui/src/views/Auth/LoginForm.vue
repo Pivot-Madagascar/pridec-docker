@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { login } from '@/services/auth'
+import { getDhis2Urls, login } from '@/services/auth'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
@@ -11,6 +11,8 @@ const username = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
+const dhis2Urls = ref<string[]>([])
+getDhis2Urls().then(urls => (dhis2Urls.value = urls))
 
 watch(
   () => authStore.isAuthenticated,
@@ -56,9 +58,13 @@ const handleSubmit = async () => {
           v-model="dhis2Url"
           type="url"
           autocomplete="url"
+          list="dhis2-urls"
           placeholder="https://your-dhis2-instance.org"
           required
         />
+        <datalist id="dhis2-urls">
+          <option v-for="url in dhis2Urls" :key="url" :value="url" />
+        </datalist>
       </div>
       <div class="form-group">
         <label for="username">Username</label>

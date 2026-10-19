@@ -304,3 +304,10 @@ def test_fetch_me_with_a_real_token():
         assert revoked
         # Deleted in DHIS2. Not "fetch_me(token) is None": DHIS2 2.40 keeps accepting a deleted token from its cache for a while.
         assert client.get(f"{url}/api/apiToken/{uid}", auth=basic).status_code == 404
+
+
+def test_dhis2_urls_lists_allowed_hosts_with_the_scheme_login_accepts(anon_app, monkeypatch):
+    monkeypatch.setattr(get_settings(), "dhis2_allowed_hosts", " localhost:8082, DHIS2.test ,,")
+    response = TestClient(anon_app).get("/auth/dhis2-urls")
+    assert response.status_code == 200
+    assert response.json() == ["http://localhost:8082", "https://dhis2.test"]

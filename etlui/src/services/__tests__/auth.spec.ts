@@ -2,11 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useAuthStore } from '@/stores/auth'
 
 const post = vi.fn()
+const get = vi.fn()
 vi.mock('@/services/api', () => ({
-  default: { post: (...args: unknown[]) => post(...args) }
+  default: { post: (...args: unknown[]) => post(...args), get: (...args: unknown[]) => get(...args) }
 }))
 
-import { login, logout } from '@/services/auth'
+import { getDhis2Urls, login, logout } from '@/services/auth'
 
 const USER = { id: 'u1', email: null, username: 'admin', displayName: 'Admin' }
 
@@ -51,5 +52,16 @@ describe('logout', () => {
     expect(post).toHaveBeenCalledWith('/auth/logout')
     expect(store.isAuthenticated).toBe(false)
     assign.mockRestore()
+  })
+})
+
+describe('getDhis2Urls', () => {
+  it('returns the URLs etlhub accepts, or none if the request fails', async () => {
+    get.mockResolvedValueOnce({ data: ['https://dhis2.test'] })
+    expect(await getDhis2Urls()).toEqual(['https://dhis2.test'])
+    expect(get).toHaveBeenCalledWith('/auth/dhis2-urls')
+
+    get.mockRejectedValueOnce(new Error('network'))
+    expect(await getDhis2Urls()).toEqual([])
   })
 })

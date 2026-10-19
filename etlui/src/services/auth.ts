@@ -20,6 +20,10 @@ export async function login(dhis2Url: string, username: string, password: string
     }
 }
 
+// DHIS2_ALLOWED_HOSTS as URLs, to suggest in the login form. Optional: none if etlhub fails.
+export const getDhis2Urls = (): Promise<string[]> =>
+    api.get<string[]>('/auth/dhis2-urls').then(r => r.data, () => [])
+
 export async function logout(): Promise<void> {
     try {
         await api.post('/auth/logout')
