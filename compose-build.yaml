@@ -14,4 +14,4 @@ services:
     build:
       context: ./forecast
       dockerfile: Dockerfile
-    image: mvevans89/pridec_forecast:0.1.0
+    image: mvevans89/pridec_forecast:1.0.0
