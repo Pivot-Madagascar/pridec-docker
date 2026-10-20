@@ -43,7 +43,7 @@ Siblings in the repo:
 - Ports: Vite dev uses its default (5173, no `port` set). nginx listens on **8000**, but the `Dockerfile` says `EXPOSE 8111` (the API port). The `etlui` service is commented out in `compose.yaml`.
 - A 401 from any axios call clears the store and does a hard `window.location.href = '/login'`.
 - The drawer (`App.vue` `navItems`) links to `/forecast`, which has no route.
-- Toasts: `useNotification().showNotification` calls `vue3-hot-toast` directly.
+- Toasts: `useNotification().showNotification` calls `vue3-hot-toast` directly. The `<Toaster />` sits in a `popover="manual"` div (`App.vue`, `data-toasts`) shown on mount: it is in the top layer, where z-index cannot reach (native `<dialog>` modals are there too). `BaseDialog` re-shows it after each `showModal()` so toasts stay above the newest modal (checked in headless Chrome). While a modal is open the toasts are inert: visible, but hover-pause and clicks do not reach them. The `z-50` Tailwind modals (Tracking, Journal, RecentActivity) are below the toasts' `z-index: 9999` anyway.
 - There is no TS type for `ETLResponse` or `JobStatus`: responses are read untyped (`response.data?.job_id`).
 - Views importing services (layering debt): `api` called directly in `Dashboard/components/ForecastReportModal.vue`; `@/services/auth` in `Auth/LoginForm.vue` (`login`) and `Auth/ParametersPage.vue` (`logout`); `RequestLog` type imported from `@/services/api` in `TrackerView/` and, type only, in `types/pipeline.ts` (`JournalEvent.request`).
 - `useActivityLog()` creates a new list on every call: `usePipeline` takes the page's `addActivity` as a parameter.
@@ -57,7 +57,7 @@ Run from `etlui/`. Yarn 1 is the package manager (`yarn.lock`; the `Dockerfile` 
 - Dev: `yarn dev` (Vite; needs `etlhub` on `:8111`, proxy `/api` and `/auth`)
 - Build: `yarn build` (output `dist/`, git-ignored). `vite build` does **not** type-check.
 - Preview: `yarn preview`
-- Tests: `yarn vitest run` (there is no `test` script). 15 files, 94 tests, all passing.
+- Tests: `yarn vitest run` (there is no `test` script). 16 files, 95 tests, all passing.
 - One file: `yarn vitest run src/composables/__tests__/usePipeline.spec.ts`
 - Type-check, linter, formatter, coverage: none installed (`vue-tsc`, ESLint, Prettier and `@vitest/coverage-*` are absent). Do not invent one.
 - Docker: `docker build -t etlui etlui/` → nginx on 8000.

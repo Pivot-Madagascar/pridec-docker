@@ -1,5 +1,8 @@
 <template>
-  <Toaster />
+  <!-- A manual popover puts the toasts in the top layer, above native <dialog> modals (BaseDialog re-raises it). -->
+  <div ref="toasts" popover="manual" data-toasts class="toast-layer">
+    <Toaster />
+  </div>
   <div class="app-container">
     <!-- Top Navbar -->
     <header class="app-header">
@@ -49,6 +52,19 @@
 </template>
 
 <style scoped>
+/* The popover box covers the viewport without catching clicks; the Toaster places itself inside. */
+.toast-layer {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+  pointer-events: none;
+}
+
 @reference "tailwindcss";
 
 .app-container {
@@ -131,10 +147,13 @@
 </style>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import Icon, { ICONS } from '@/components/Icons'
 import Drawer from '@/components/Drawer.vue'
 import { Toaster } from 'vue3-hot-toast'
+
+const toasts = ref<HTMLElement>()
+onMounted(() => toasts.value?.showPopover?.()) // without the Popover API the div simply stays in the page
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8111'
 const isDrawerOpen = ref(false)

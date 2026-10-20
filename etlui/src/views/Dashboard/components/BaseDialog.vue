@@ -19,10 +19,21 @@ const emit = defineEmits<{
 
 const dialog = ref<HTMLDialogElement>()
 
+// The top layer stacks in opening order: the toasts' popover (App.vue) re-enters it to stay above this modal.
+function raiseToasts() {
+  const layer = document.querySelector<HTMLElement>('[data-toasts]')
+  if (!layer?.showPopover) return
+  layer.hidePopover()
+  layer.showPopover()
+}
+
 watch(
   () => props.open,
   (open) => {
-    if (open && !dialog.value?.open) dialog.value?.showModal?.()
+    if (open && !dialog.value?.open) {
+      dialog.value?.showModal?.()
+      raiseToasts()
+    }
     if (!open && dialog.value?.open) dialog.value.close()
   },
   { flush: 'post' }
