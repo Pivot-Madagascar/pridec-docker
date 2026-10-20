@@ -30,6 +30,7 @@ Siblings in the repo:
 
 ## Gotchas
 
+- **Cycle journal (since 2026-10-19)**: every write of `CheckpointStore` appends to `pipeline_events` through `_event`, in the same transaction. A new write method must call it too (one test per write method). The actor and `request_id` come from `core/request_context.py` (a per-request dict set by `RequestTrackingMiddleware`, `actor` set by `get_current_user`); outside a request (Celery worker) the actor is `worker`. Test-mode events live in the Redis blob only, kept when test mode is left. `request_log` lines flagged `journal` are never purged.
 - A Celery task must **re-raise** after writing the "error" status, or Celery reports success.
 - `_update_task_status` merges with the existing record. Do not overwrite `started` or `logs`.
 - `/post_forecast` and `/update_key` are **synchronous**: they block the event loop and redirect the global `stdout`. All other launch endpoints go through Celery (202).
@@ -83,6 +84,6 @@ Python 3.12 (use `test-venv`; the system `python3` is 3.11). Run from the repo r
 - `etlhub/docs/DEVELOPMENT.md` — measured test, architecture and clean-code state; proposed rules for new code
 - `etlhub/docs/known-issues.md` — security findings, layering violations, dead code, doc errors
 - `etlhub/docs/testing-QA/` — manual test logs: incidents (cause, fix) and testers' notes
-- `etlhub/docs/decision-design/<feature>/` — design and decision docs per feature, implemented or under discussion (`pipeline-checkpoints/`, `pipeline-config/`, `default-input-files/`)
+- `etlhub/docs/decision-design/<feature>/` — design and decision docs per feature, implemented or under discussion (`pipeline-checkpoints/`, `pipeline-config/`, `default-input-files/`, `cycle-journal/`)
 - `.claude/skills/etlhub/SKILL.md` — how etlhub is built: architecture, job lifecycle, endpoint and config tables, forecast pipeline
 - `.claude/skills/etlhub-practices/SKILL.md` — how to change it well: templates, missing best practices as small migrations, checklists

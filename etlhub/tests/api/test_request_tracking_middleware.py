@@ -87,3 +87,31 @@ def test_non_json_or_job_less_responses_have_no_job_id(app, recorded):
     TestClient(app).get("/input/files")  # JSON without job_id
 
     assert [log["job_id"] for log in recorded] == [None, None]
+
+
+def test_a_pipeline_refusal_is_recorded_with_its_reason_even_outside_tracked_endpoints(app, recorded, monkeypatch):
+    monkeypatch.setattr(get_settings(), "tracked_endpoints", "/nothing")
+
+    response = TestClient(app).post("/pipeline/runs", json={"source": "COM", "disease": "Malaria"})
+
+    assert response.status_code == 409
+    assert recorded[-1]["reason"] == response.json()["message"]
+    assert "code" not in recorded[-1] and "journal" not in recorded[-1]
+
+
+def test_a_confirmation_request_is_recorded_with_its_code(app, recorded, checkpoint_store):
+    checkpoint_store.start("import_gee", "done")
+    checkpoint_store.finish("done", "success")
+
+    response = TestClient(app).post("/import_gee")  # refused by the gate before anything is queued
+
+    assert response.status_code == 409
+    assert recorded[-1]["code"] == "confirmation_required"
+
+
+def test_a_journaled_request_is_recorded_and_flagged_for_the_journal(app, recorded, monkeypatch):
+    monkeypatch.setattr(get_settings(), "tracked_endpoints", "/nothing")
+
+    TestClient(app).put("/pipeline/mode", json={"dry_run": True})
+
+    assert recorded[-1]["journal"] is True

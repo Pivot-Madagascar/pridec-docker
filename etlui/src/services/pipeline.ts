@@ -1,5 +1,5 @@
 import api, { withConfirm } from '@/services/api'
-import type { Checkpoints, Disease, ForecastRun, Source } from '@/types/pipeline'
+import type { Checkpoints, Disease, ForecastRun, JournalCycle, JournalEvent, Source } from '@/types/pipeline'
 
 // GET /pipeline/checkpoints: the whole state of the current cycle, in the current mode.
 export async function getCheckpoints(): Promise<Checkpoints> {
@@ -63,3 +63,18 @@ export async function releaseLock(): Promise<string | null> {
   const response = await api.delete<{ released: string | null }>('/pipeline/lock')
   return response.data.released
 }
+
+// GET /pipeline/cycles: the cycles that have a history, newest first.
+export async function getCycles(): Promise<JournalCycle[]> {
+  const response = await api.get<JournalCycle[]>('/pipeline/cycles')
+  return response.data
+}
+
+// GET /pipeline/cycles/{cycle}/journal: every change of the cycle, both modes, with the request that caused it.
+export async function getJournal(cycle: string): Promise<JournalEvent[]> {
+  const response = await api.get<JournalEvent[]>(`/pipeline/cycles/${cycle}/journal`)
+  return response.data
+}
+
+// GET /pipeline/cycles/{cycle}/journal.csv (administrators): for a native <a download>, which sends the session cookie.
+export const journalCsvUrl = (cycle: string): string => api.getUri({ url: `/pipeline/cycles/${cycle}/journal.csv` })

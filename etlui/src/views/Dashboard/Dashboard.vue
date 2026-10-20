@@ -17,6 +17,7 @@
             />
           </label>
           · {{ state.cycle_state === 'closed' ? 'complete' : `current step: ${state.current_step}` }}
+          · <RouterLink :to="{ name: 'Journal', query: { cycle: state.cycle } }" class="journal-link">Journal</RouterLink>
         </template>
         <template v-else>Loading the pipeline state…</template>
       </p>
@@ -249,6 +250,10 @@ onMounted(refresh)
 
 .cycle-input:disabled {
   opacity: 0.5;
+}
+
+.journal-link {
+  color: #60a5fa;
 }
 
 .imports-approval {

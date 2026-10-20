@@ -14,6 +14,7 @@ from starlette.requests import HTTPConnection
 
 from etlhub.api.middleware import is_allowed_origin
 from etlhub.core.config import get_settings
+from etlhub.core.request_context import request_context
 from etlhub.infrastructure import auth_store
 
 logger = logging.getLogger(__name__)
@@ -141,6 +142,8 @@ async def get_current_user(connection: HTTPConnection) -> dict:
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)  # handshake refused
     user = await run_in_threadpool(user_from_cookies, connection.cookies)
     if user is not None:
+        if (context := request_context.get()) is not None:
+            context["actor"] = user.get("username")  # the pipeline journal records who acted
         return user
     if is_websocket:
         # Accept first: a refused handshake only shows code 1006 to the browser.

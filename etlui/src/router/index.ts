@@ -17,6 +17,12 @@ const router = createRouter({
       meta: { title: 'Request Tracking' }
     },
     {
+      path: '/journal',
+      name: 'Journal',
+      component: () => import('@/views/Journal/JournalView.vue'),
+      meta: { title: 'Cycle journal' }
+    },
+    {
       path: '/logs',
       name: 'ETLLogs',
       component: () => import('@/views/LogsStreamPage.vue'),

@@ -12,6 +12,7 @@ from starlette.responses import JSONResponse, Response
 
 from etlhub.infrastructure.request_tracker import get_request_tracker
 from etlhub.core.config import get_settings
+from etlhub.core.request_context import request_context
 
 
 def _should_track_request(path: str) -> bool:
@@ -89,20 +90,22 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
         start = time.perf_counter()
         request_id = _request_id(request.headers.get("X-Request-ID"))
         request.state.request_id = request_id
+        context = {"request_id": request_id}
+        token = request_context.set(context)
 
-        tracked = _should_track_request(request.url.path)
         status_code, error, job_id = 500, None, None
         try:
             response: Response = await call_next(request)
             status_code = response.status_code
-            if tracked:
+            if _tracked(request.url.path, context):
                 response, job_id = await _with_job_id(response)
         except Exception as exc:
             # Unhandled errors are the requests most worth tracking: record them, then re-raise.
             error = f"{type(exc).__name__}: {exc}"[:300]
             raise
         finally:
-            if tracked:
+            request_context.reset(token)
+            if _tracked(request.url.path, context):
                 log = {
                     "request_id": request_id,
                     "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -113,9 +116,16 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
                     "client_host": request.client.host if request.client else None,
                     "error": error,
                     "job_id": job_id,
+                    # 409 reason and code, and the journal flag the purge reads (core/request_context.py).
+                    **{k: context[k] for k in ("reason", "code", "journal") if k in context},
                 }
                 # SQLite write off the event loop.
                 await run_in_threadpool(get_request_tracker().save, log)
 
         response.headers["X-Request-ID"] = request_id
         return response
+
+
+def _tracked(path: str, context: dict) -> bool:
+    """TRACKED_ENDPOINTS, plus every request the pipeline gate journaled or refused: the journal links to them."""
+    return _should_track_request(path) or context.get("pipeline", False)

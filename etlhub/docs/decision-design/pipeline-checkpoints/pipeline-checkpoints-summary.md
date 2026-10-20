@@ -76,8 +76,10 @@ The etlui **"Test mode" (test = YES)** button switches etlhub to test mode (`PUT
   Not to be confused with the `DRYRUN` option of each `pridec` command, whose effect varies by command.
 - In test mode, checkpoints, runs and the lock are kept **in Redis only**, never in `logs/etlhub.db`.
   Production data is neither visible nor changed. The cycle stays the real month; the same rules apply.
-- **Going back to production** (`dry_run: false`) erases what is in Redis. If there is test data,
+- **Going back to production** (`dry_run: false`) erases the test checkpoints, runs and uploads. If there is test data,
   `confirm=true` is needed (otherwise 409 `confirmation_required`, with the open run and the successful items in `impact`).
+  The **test journal** stays in Redis (never in `logs/etlhub.db`) and is shown with the production one while Redis keeps it
+  ([../cycle-journal/cycle-journal.md](../cycle-journal/cycle-journal.md)).
 - Switching is refused while a job runs.
 - `GET /pipeline/checkpoints` shows the mode (`dry_run`).
 

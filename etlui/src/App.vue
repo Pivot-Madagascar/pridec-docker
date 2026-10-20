@@ -142,6 +142,7 @@ const isDrawerOpen = ref(false)
 const navItems = computed(() => [
   { to: '/', label: 'Dashboard' },
   { to: '/tracking', label: 'Tracking' },
+  { to: '/journal', label: 'Journal' },
   { to: '/logs', label: 'Logs' },
   { to: '/forecast', label: 'Forecast' },
   { to: '/parameters', label: 'Parameters' },

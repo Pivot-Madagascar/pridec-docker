@@ -189,4 +189,16 @@ describe('TrackerView', () => {
     expect(FakeWebSocket.instances[0].closed).toBe(true)
     expect(wrapper.find('.live-badge').exists()).toBe(false)
   })
+
+  it('shows why the pipeline refused a request, though it started no job', async () => {
+    const refused = { ...row('r', '/build_analytics'), status_code: 409, reason: 'build_analytics needs step data_import done first' }
+    listRequests.mockResolvedValue({ data: [refused] })
+    const wrapper = mount(TrackerView)
+    await flushPromises()
+
+    await openDetail(wrapper, refused)
+
+    expect(wrapper.text()).toContain('Refused by the pipeline: build_analytics needs step data_import done first')
+    expect(getJobLogs).not.toHaveBeenCalled()
+  })
 })

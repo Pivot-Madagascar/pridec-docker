@@ -55,6 +55,9 @@ export interface RequestLog {
   job_id: string | null
   // Set when the request raised an unhandled exception (status 500).
   error: string | null
+  // Why the pipeline gate refused it (409); code 'confirmation_required' when it asked for confirm=true.
+  reason?: string | null
+  code?: string | null
 }
 
 export interface JobLogs {

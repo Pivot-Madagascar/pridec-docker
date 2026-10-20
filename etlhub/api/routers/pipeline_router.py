@@ -1,12 +1,13 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from etlhub.api.auth import require_admin
 from etlhub.api.routers import ADMIN_ONLY, BLOCKED, error_doc
-from etlhub.core.dependencies import get_pipeline_gate
+from etlhub.application.use_cases.journal_service import JournalService
+from etlhub.core.dependencies import get_journal_service, get_pipeline_gate
 from etlhub.domain.interfaces.pipeline_gate import PipelineGate
 
 router = APIRouter(prefix="/pipeline", tags=["Pipeline"])
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/pipeline", tags=["Pipeline"])
 Source = Literal["ADJ", "COM", "CSB"]
 Disease = Literal["Malaria", "Diarrhea", "Respinf"]
 CYCLE = Query(None, pattern=r"^\d{6}$", description="YYYYMM; the target cycle (PUT /pipeline/cycle) by default")
+CYCLE_PATH = Path(pattern=r"^\d{4}(0[1-9]|1[0-2])$", description="YYYYMM", examples=["202610"])
 CONFIRM = Query(False, description="Required to undo something already in success (409 confirmation_required otherwise)")
 
 
@@ -178,3 +180,48 @@ def set_cycle(body: Cycle, gate: PipelineGate = Depends(get_pipeline_gate)) -> d
 )
 def release_lock(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str | None]:
     return {"released": gate.release_lock()}
+
+
+@router.get(
+    "/cycles",
+    summary="Cycles that have a history",
+    description=(
+        "Every cycle with checkpoints or journal events, plus the target cycle, newest first: `state` (production: "
+        "`closed` once its 3 steps are done), `test_state` (same for the test checkpoints in Redis, null without any), "
+        "`target` (launches go to it), `events` (production), `test_events` (kept in Redis only), `last_at` (latest "
+        "event, or null). Counts and `last_at` leave out mode_changed."
+    ),
+)
+def list_cycles(gate: PipelineGate = Depends(get_pipeline_gate)) -> list[dict]:
+    return gate.cycles()
+
+
+_JOURNAL_DESCRIPTION = (
+    "Every change of the cycle, oldest first: launched, succeeded, failed, reset, uploaded, removed, decided, skipped, "
+    "run_opened, run_closed, run_abandoned, cycle_chosen, lock_released, mode_changed, cycle_closed. Each event has its "
+    "actor (DHIS2 username, `worker`, `system`), `mode` (`production`, or `test` while Redis keeps the test journal) and "
+    "`request`: the HTTP request that caused it, or null. Refusals (409) are not events: see /api/tracking/requests. "
+    "Not seen: `DELETE /output/reset`, the `pridec` command line, build_analytics launched from DHIS2."
+)
+
+
+@router.get(
+    "/cycles/{cycle}/journal",
+    summary="Journal of a cycle",
+    description=_JOURNAL_DESCRIPTION,
+)
+def get_journal(cycle: str = CYCLE_PATH, service: JournalService = Depends(get_journal_service)) -> list[dict]:
+    return service.events(cycle)
+
+
+@router.get(
+    "/cycles/{cycle}/journal.csv",
+    response_class=Response,
+    summary="Journal of a cycle, as CSV",
+    description="The same events as the JSON journal, one line each. Administrators only (DHIS2 authority ALL).",
+    dependencies=[Depends(require_admin)],
+    responses={200: {"content": {"text/csv": {}}}, **ADMIN_ONLY},
+)
+def get_journal_csv(cycle: str = CYCLE_PATH, service: JournalService = Depends(get_journal_service)) -> Response:
+    return Response(service.csv(cycle), media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="journal_{cycle}.csv"'})

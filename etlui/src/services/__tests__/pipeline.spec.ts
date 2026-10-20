@@ -10,7 +10,8 @@ vi.mock('@/services/api', async importOriginal => ({
     post: (...args: unknown[]) => post(...args),
     get: (...args: unknown[]) => get(...args),
     put: (...args: unknown[]) => put(...args),
-    delete: (...args: unknown[]) => del(...args)
+    delete: (...args: unknown[]) => del(...args),
+    getUri: ({ url }: { url: string }) => `http://localhost:8111${url}`
   }
 }))
 
@@ -91,6 +92,25 @@ describe('pipeline service', () => {
 
     expect(await pipeline.releaseLock()).toBe('dead_job')
     expect(del).toHaveBeenCalledWith('/pipeline/lock')
+  })
+})
+
+describe('cycle journal', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('lists the cycles', async () => {
+    get.mockResolvedValue({ data: [{ cycle: '202610' }] })
+
+    expect(await pipeline.getCycles()).toEqual([{ cycle: '202610' }])
+    expect(get).toHaveBeenCalledWith('/pipeline/cycles')
+  })
+
+  it('reads the journal of a cycle and builds the CSV link', async () => {
+    get.mockResolvedValue({ data: [{ event: 'launched' }] })
+
+    expect(await pipeline.getJournal('202610')).toEqual([{ event: 'launched' }])
+    expect(get).toHaveBeenCalledWith('/pipeline/cycles/202610/journal')
+    expect(pipeline.journalCsvUrl('202610')).toBe('http://localhost:8111/pipeline/cycles/202610/journal.csv')
   })
 })
 

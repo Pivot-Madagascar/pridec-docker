@@ -20,8 +20,8 @@
             'bg-gray-800': selectedId === req.request_id,
             'hover:bg-gray-750': selectedId !== req.request_id,
           }"
-          :style="req.job_id ? 'cursor: pointer' : undefined"
-          @click="req.job_id && $emit('select', req.request_id)"
+          :style="hasDetail(req) ? 'cursor: pointer' : undefined"
+          @click="hasDetail(req) && $emit('select', req.request_id)"
         >
           <td class="px-4 py-2 font-mono text-xs text-gray-300">
             {{ shortRequestId(req.request_id) }}
@@ -52,9 +52,9 @@
             {{ req.duration_ms.toFixed(2) }}
           </td>
           <td class="px-4 py-2 text-right">
-            <!-- Only requests that started a job have something to show: their logs -->
+            <!-- Only requests that started a job (their logs) or were refused by the pipeline (the reason) have something to show -->
             <button
-              v-if="req.job_id"
+              v-if="hasDetail(req)"
               class="detail-btn text-xs text-blue-400 hover:text-blue-300"
               @click.stop="$emit('select', req.request_id)"
             >
@@ -100,6 +100,8 @@ const props = defineProps<{
   page?: number
   pageSize?: number
 }>()
+
+const hasDetail = (req: RequestLog) => req.job_id != null || req.reason != null
 
 defineEmits<{
   (e: 'select', requestId: string): void

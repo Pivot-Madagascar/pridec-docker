@@ -236,3 +236,72 @@ def test_the_report_of_a_closed_run(client, checkpoint_store, tmp_path):
     assert report.headers["content-type"].startswith("text/html")
     assert client.get("/pipeline/runs/ADJ/Malaria/report").status_code == 404
     assert client.get("/pipeline/runs/XYZ/Malaria/report").status_code == 422
+
+
+@pytest.fixture
+def journal_client(app):
+    """The journal reads request_log from the temporary db, not logs/etlhub.db."""
+    from etlhub.core.dependencies import get_request_tracker_repo
+    from etlhub.infrastructure.request_tracker import get_request_tracker
+    app.dependency_overrides[get_request_tracker_repo] = get_request_tracker
+    yield TestClient(app)
+    app.dependency_overrides.pop(get_request_tracker_repo)
+
+
+def test_the_journal_lists_events_with_the_request_that_caused_them(journal_client):
+    from etlhub.domain.pipeline import this_month
+    journal_client.put("/pipeline/mode", json={"dry_run": True})
+
+    events = journal_client.get(f"/pipeline/cycles/{this_month()}/journal").json()
+
+    assert [(e["event"], e["detail"], e["mode"]) for e in events] == [("mode_changed", {"to": "test"}, "production")]
+    assert (events[0]["request"]["method"], events[0]["request"]["status_code"]) == ("PUT", 200)
+    assert journal_client.get("/pipeline/cycles/2026-10/journal").status_code == 422
+
+
+def test_the_journal_csv_is_for_administrators(journal_client, app):
+    from etlhub.api.auth import get_current_user
+    journal_client.put("/pipeline/mode", json={"dry_run": True})
+
+    response = journal_client.get("/pipeline/cycles/202610/journal.csv")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert response.text.splitlines()[0].startswith("at,mode,cycle,step,item,event,actor")
+
+    app.dependency_overrides[get_current_user] = lambda: {"username": "op", "is_admin": False}
+    assert journal_client.get("/pipeline/cycles/202610/journal.csv").status_code == 403
+
+
+def test_the_logged_in_user_is_the_actor_of_the_events(anon_app, monkeypatch):
+    from etlhub.api.auth import dhis2_auth
+    from etlhub.domain.pipeline import this_month
+    from etlhub.infrastructure.checkpoint_store import get_checkpoint_store
+    monkeypatch.setattr(dhis2_auth, "user_from_cookies", lambda cookies: {"username": "jdoe", "is_admin": True})
+
+    TestClient(anon_app).put("/pipeline/mode", json={"dry_run": True})
+
+    assert [e["actor"] for e in get_checkpoint_store().journal(this_month())] == ["jdoe"]
+
+
+
+def test_the_csv_keeps_the_event_job_id_and_adds_the_request():
+    import csv
+    from types import SimpleNamespace
+    from etlhub.application.use_cases.journal_service import JournalService
+    event = {"cycle": "202610", "at": "t", "step": "forecast", "item": "config/Malaria", "event": "uploaded",
+             "job_id": "upload_config_1", "actor": "jdoe", "request_id": "r1", "detail": None, "mode": "production"}
+    request = {"request_id": "r1", "method": "POST", "url": "/input/files/config", "status_code": 200, "job_id": None}
+    service = JournalService(SimpleNamespace(journal=lambda cycle: [event]),
+                             SimpleNamespace(get_many=lambda ids: {"r1": request}))
+
+    (row,) = csv.DictReader(service.csv("202610").splitlines())
+
+    assert (row["job_id"], row["method"], row["status_code"]) == ("upload_config_1", "POST", "200")
+
+
+def test_the_cycles_route_lists_the_target_cycle(client):
+    from etlhub.domain.pipeline import this_month
+
+    assert client.get("/pipeline/cycles").json() == [
+        {"cycle": this_month(), "state": "open", "test_state": None, "target": True, "events": 0, "test_events": 0,
+         "last_at": None}]

@@ -54,3 +54,14 @@ def test_save_deletes_entries_older_than_the_retention(tracker, tmp_path):
 
     assert tracker.get("old") is None
     assert tracker.get("new") is not None
+
+
+def test_the_purge_keeps_requests_of_the_journal(tracker, tmp_path):
+    tracker.save({**_log("journaled", "http://x/import_gee"), "journal": True})
+    with sqlite3.connect(tmp_path / "etlhub.db") as conn:
+        conn.execute("UPDATE request_log SET created_at = '2000-01-01T00:00:00.000'")
+
+    tracker.save(_log("new", "http://x/import_gee"))
+
+    assert tracker.get("journaled") is not None
+    assert set(tracker.get_many({"journaled", "new", "missing"})) == {"journaled", "new"}

@@ -18,6 +18,7 @@ from etlhub.application.use_cases.analytics_service import AnalyticsService
 from etlhub.application.use_cases.ingestion_service import IngestionService
 from etlhub.application.use_cases.tracking_service import TrackingService
 from etlhub.application.use_cases.input_upload_service import InputUploadService
+from etlhub.application.use_cases.journal_service import JournalService
 from etlhub.core.config import get_settings
 
 
@@ -38,6 +39,13 @@ def get_task_launcher() -> TaskLauncher:
 
 def get_pipeline_gate() -> PipelineGate:
     return get_checkpoint_store()
+
+
+def get_journal_service(
+    gate: PipelineGate = Depends(get_pipeline_gate),
+    request_tracker: RequestTrackerProtocol = Depends(get_request_tracker_repo),
+) -> JournalService:
+    return JournalService(gate, request_tracker)
 
 
 def get_forecast_service(

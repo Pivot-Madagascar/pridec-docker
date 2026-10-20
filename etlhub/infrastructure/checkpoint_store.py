@@ -1,4 +1,5 @@
 import base64
+import json
 import logging
 import shutil
 import sqlite3
@@ -10,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from etlhub.core.config import get_settings
+from etlhub.core.request_context import request_context
 from etlhub.domain import pipeline
 from etlhub.domain.exceptions import ConfirmationRequiredError, ETLException, PipelineBlockedError
 from etlhub.domain.pipeline import (
@@ -59,9 +61,26 @@ CREATE TABLE IF NOT EXISTS pipeline_cycle (  -- the cycle chosen for launches; n
     id    INTEGER PRIMARY KEY CHECK (id = 1),
     cycle TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS pipeline_events (  -- the cycle journal: appended in the transaction of each change, never updated
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    cycle      TEXT NOT NULL,
+    at         TEXT NOT NULL,
+    step       TEXT,
+    item       TEXT,
+    event      TEXT NOT NULL,
+    job_id     TEXT,
+    actor      TEXT,
+    request_id TEXT,
+    detail     TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_pipeline_events_cycle ON pipeline_events(cycle, id);
+CREATE INDEX IF NOT EXISTS ix_pipeline_events_job_id ON pipeline_events(job_id);
 """
 # Databases created before 2026-10-12 also have an external_data column (DEFAULT 'none'): unused, inserts skip it.
 _RUN_COLUMNS = ("cycle", "couple", "state", "disease_code", "ou_level", "alert_name", "opened_at")
+_EVENT_COLUMNS = ("cycle", "at", "step", "item", "event", "job_id", "actor", "request_id", "detail")
+# Test tables emptied when test mode is left; pipeline_events stays in the blob (the test journal).
+_TEST_STATE = ("checkpoints", "forecast_runs", "pipeline_cycle")
 
 
 def _now() -> str:
@@ -185,8 +204,11 @@ class CheckpointStore:
         row = conn.execute("SELECT cycle FROM pipeline_cycle").fetchone()
         return row[0] if row else pipeline.this_month()
 
-    @staticmethod
-    def _abandon_other_cycles(conn: sqlite3.Connection, cycle: str) -> None:
+    def _abandon_other_cycles(self, conn: sqlite3.Connection, cycle: str) -> None:
+        for other, couple in conn.execute("SELECT cycle, couple FROM forecast_runs WHERE state = 'open' AND cycle != ?",
+                                          (cycle,)).fetchall():
+            self._event(conn, other, "run_abandoned", "forecast", detail={"couple": couple, "by": "month_change"},
+                        actor="system")
         conn.execute("UPDATE forecast_runs SET state = 'abandoned', closed_at = ? WHERE state = 'open' AND cycle != ?",
                      (_now(), cycle))
 
@@ -224,10 +246,36 @@ class CheckpointStore:
         )
 
     @staticmethod
-    def _reset(conn: sqlite3.Connection, cycle: str, items: list[str]) -> None:
-        """Back to pending = no row (forecast step only)."""
-        conn.executemany("DELETE FROM checkpoints WHERE cycle = ? AND step = 'forecast' AND item = ?",
-                         [(cycle, i) for i in items])
+    def _delete(conn: sqlite3.Connection, cycle: str, items: list[str]) -> list[str]:
+        """Back to pending = no row (forecast step only). Returns the items that had a row."""
+        return [i for i in items if conn.execute(
+            "DELETE FROM checkpoints WHERE cycle = ? AND step = 'forecast' AND item = ?", (cycle, i)).rowcount]
+
+    def _reset(self, conn: sqlite3.Connection, cycle: str, items: list[str], cause: str,
+               job_id: str | None = None) -> None:
+        """_delete, journaled when it reset something."""
+        if reset := self._delete(conn, cycle, items):
+            self._event(conn, cycle, "reset", "forecast", job_id=job_id, detail={"items": reset, "cause": cause})
+
+    @staticmethod
+    def _event(conn: sqlite3.Connection, cycle: str, event: str, step: str | None = None, item: str | None = None,
+               job_id: str | None = None, detail: dict | None = None, actor: str | None = None) -> None:
+        """Appends to the cycle journal, in the caller's transaction: the event exists if and only if the change does.
+
+        The actor and the request come from the HTTP request (core/request_context.py); without one, the worker acts.
+        ponytail: the request flags are set before the commit, so a request refused later in the same transaction
+        (rare: an automatic run_abandoned, then a 409) is kept out of the purge too; harmless.
+        """
+        context = request_context.get()
+        actor = actor or (context.get("actor") if context is not None else "worker")
+        conn.execute(f"INSERT INTO pipeline_events ({', '.join(_EVENT_COLUMNS)}) VALUES ({', '.join('?' * len(_EVENT_COLUMNS))})",
+                     (cycle, datetime.now().isoformat(timespec="microseconds"),  # orders the two journals (§ journal)
+                      step, item, event, job_id, actor, context and context["request_id"],
+                      json.dumps(detail) if detail else None))
+        if context is not None:
+            context["pipeline"] = True
+            if conn.execute("PRAGMA database_list").fetchone()[2]:  # a file: production (test mode is in memory)
+                context["journal"] = True
 
     def _kept_file(self, cycle: str, name: str, couple: str) -> Path:
         """config.json is kept per disease, external_data.csv per org unit level (fkt or csb)."""
@@ -280,10 +328,11 @@ class CheckpointStore:
             couple = run["couple"] if run else None
             step, item = resolve_slot(task, rows, couple)
             require_confirmation(step, item, rows, confirm)
-            if step == "forecast":
-                self._reset(conn, cycle, dependents(item))
             self._take_lock(conn, job_id, task)
             self._upsert(conn, cycle, step, item, job_id, "running")
+            self._event(conn, cycle, "launched", step, item, job_id, {"confirm": True} if confirm else None)
+            if step == "forecast":
+                self._reset(conn, cycle, dependents(item), "relaunch", job_id)
             if step == "forecast":
                 self._apply_context(run_context(couple))  # inside the transaction: a failure writes nothing
 
@@ -293,11 +342,23 @@ class CheckpointStore:
             row = conn.execute("SELECT step, item, cycle FROM checkpoints WHERE job_id = ?", (job_id,)).fetchone()
             conn.execute("UPDATE checkpoints SET status = ?, updated_at = ? WHERE job_id = ?", (state, _now(), job_id))
             conn.execute("DELETE FROM pipeline_lock WHERE job_id = ?", (job_id,))
+            # The launched event, not the checkpoint: a reset may have deleted the job's row before it ended.
+            step, item, cycle = self._launched(conn, job_id) or row or (None, None, self._target(conn))
+            self._event(conn, cycle, "succeeded" if state == "success" else "failed", step, item, job_id)
             if row and state == "success" and row[0] == "forecast" and row[1].endswith(":post_forecast"):
                 couple = row[1].split(":")[0]
                 conn.execute("UPDATE forecast_runs SET state = 'closed', closed_at = ? WHERE state = 'open' AND couple = ?",
                              (_now(), couple))
                 self._archive_report(row[2], couple)
+                self._event(conn, row[2], "run_closed", "forecast", job_id=job_id, detail={"couple": couple})
+            if state == "success" and progress(self._rows(conn, cycle))["current_step"] is None and not conn.execute(
+                    "SELECT 1 FROM pipeline_events WHERE cycle = ? AND event = 'cycle_closed'", (cycle,)).fetchone():
+                self._event(conn, cycle, "cycle_closed", job_id=job_id)
+
+    @staticmethod
+    def _launched(conn: sqlite3.Connection, job_id: str) -> tuple[str, str, str] | None:
+        return conn.execute("SELECT step, item, cycle FROM pipeline_events WHERE job_id = ? AND event = 'launched'",
+                            (job_id,)).fetchone()
 
     @contextmanager
     def run(self, task: str, job_id: str, confirm: bool = False) -> Iterator[None]:
@@ -352,11 +413,13 @@ class CheckpointStore:
         try:
             yield
             with self._transaction() as conn:
-                self._reset(conn, cycle, reset)
                 if removed:
-                    self._reset(conn, cycle, [item])
+                    self._delete(conn, cycle, [item])
                 else:
                     self._upsert(conn, cycle, "forecast", item, job_id, "success")
+                self._event(conn, cycle, "removed" if removed else "uploaded", "forecast", item, job_id,
+                            {"confirm": True} if confirm else None)
+                self._reset(conn, cycle, reset, "input_change", job_id)
                 self._keep(cycle, name, couple, removed)
                 conn.execute("DELETE FROM pipeline_lock WHERE job_id = ?", (job_id,))
         except BaseException:  # the change itself or its recording: the lock must not stay taken
@@ -394,6 +457,8 @@ class CheckpointStore:
             conn.execute("DELETE FROM pipeline_cycle")
             if cycle != month:
                 conn.execute("INSERT INTO pipeline_cycle (id, cycle) VALUES (1, ?)", (cycle,))
+            if cycle != current:
+                self._event(conn, cycle, "cycle_chosen", detail={"from": current, "to": cycle})
         return {"cycle": cycle}
 
     # --- forecast runs (R6) ---------------------------------------------------------------
@@ -419,7 +484,7 @@ class CheckpointStore:
                 raise ConfirmationRequiredError(
                     f"Run {couple} is already closed in cycle {cycle}: resend with confirm=true to reopen it",
                     impact("forecast", couple, rows, items))
-            self._reset(conn, cycle, items)
+            self._reset(conn, cycle, items, "reopen")
             context = run_context(couple)
             self._clear_workdirs()  # inside the transaction: if it fails, the run is not opened
             self._restore(cycle, couple, rows)
@@ -428,6 +493,7 @@ class CheckpointStore:
                    "opened_at": datetime.now().isoformat(timespec="microseconds")}
             conn.execute(f"INSERT INTO forecast_runs ({', '.join(_RUN_COLUMNS)})"
                          f" VALUES ({', '.join('?' * len(_RUN_COLUMNS))})", tuple(run[c] for c in _RUN_COLUMNS))
+            self._event(conn, cycle, "run_opened", "forecast", detail={"couple": couple, **({"confirm": True} if confirm else {})})
         return run
 
     def _restore(self, cycle: str, couple: str, rows: pipeline.Rows) -> None:
@@ -446,7 +512,8 @@ class CheckpointStore:
             if run is None:
                 raise PipelineBlockedError("No forecast run is open")
             conn.execute("UPDATE forecast_runs SET state = 'abandoned', closed_at = ? WHERE state = 'open'", (_now(),))
-            self._reset(conn, run["cycle"], list(run_items(run["couple"])))
+            self._event(conn, run["cycle"], "run_abandoned", "forecast", detail={"couple": run["couple"], "by": "admin"})
+            self._reset(conn, run["cycle"], list(run_items(run["couple"])), "abandon")
         return run["couple"]
 
     def decide(self, decision: str) -> str:
@@ -468,7 +535,9 @@ class CheckpointStore:
                 forecast = f"{couple}:forecast"
                 if status(rows, "forecast", forecast) != "success":
                     raise PipelineBlockedError(f"Nothing to reject: {forecast} is not in success")
-                self._reset(conn, cycle, [forecast, *dependents(forecast)])
+            self._event(conn, cycle, "decided", "forecast", f"{couple}:approve", detail={"decision": decision})
+            if decision != "approve":
+                self._reset(conn, cycle, [forecast, *dependents(forecast)], "reject")
         return couple
 
     def skip_alerts(self) -> str:
@@ -490,6 +559,7 @@ class CheckpointStore:
             if reason:
                 raise PipelineBlockedError(reason)
             self._upsert(conn, cycle, "forecast", item, None, "success")
+            self._event(conn, cycle, "skipped", "forecast", item)
         return couple
 
     def decide_imports(self, decision: str) -> None:
@@ -509,6 +579,7 @@ class CheckpointStore:
             else:
                 conn.execute("DELETE FROM checkpoints WHERE cycle = ? AND step = 'data_import' AND item = 'approve_imports'",
                              (cycle,))
+            self._event(conn, cycle, "decided", "data_import", "approve_imports", detail={"decision": decision})
 
     # --- reading and unlocking ------------------------------------------------------------
 
@@ -541,33 +612,98 @@ class CheckpointStore:
         if not current:  # production -> test
             with self._transaction() as conn:
                 self._check_lock_free(conn)
+                self._event(conn, self._target(conn), "mode_changed", detail={"to": "test"})
                 self._set_dry_run(True)
             return {"dry_run": True}
-        with self._blob.lock(), closing(sqlite3.connect(":memory:")) as conn:  # test -> production
+        with self._blob.lock(), closing(sqlite3.connect(":memory:", isolation_level=None)) as conn:  # test -> production
             data = self._blob.get()
             if data:
                 conn.deserialize(data)
+                conn.executescript(_SCHEMA)  # blobs written before the journal have no pipeline_events
                 self._check_lock_free(conn)
                 done = conn.execute("SELECT cycle, count(*) FROM checkpoints WHERE status = 'success' GROUP BY cycle").fetchall()
                 run = self._open_run(conn)
-                if not confirm:
+                if not confirm and any(conn.execute(f"SELECT 1 FROM {t}").fetchone() for t in _TEST_STATE):
                     raise ConfirmationRequiredError(
-                        "Leaving test mode discards the test cycle and its open run: resend with confirm=true",
+                        "Leaving test mode discards the test cycle and its open run (its journal is kept): "
+                        "resend with confirm=true",
                         {"mode": "dry_run", "items_in_success": dict(done), "open_run": run["couple"] if run else None})
-            self._blob.delete()
+                conn.executescript("".join(f"DELETE FROM {t};" for t in _TEST_STATE))
+                self._blob.set(conn.serialize())  # test data stays in Redis only: the journal, while Redis keeps it
             shutil.rmtree(self._uploads_root / "dry_run", ignore_errors=True)
+            with self._file_transaction() as file:
+                self._event(file, self._target(file), "mode_changed", detail={"to": "production"})
             self._set_dry_run(False)
         return {"dry_run": False}
 
     def release_lock(self) -> str | None:
         """Manual unlock (killed worker): its running checkpoint becomes error. Returns the freed job_id."""
         with self._transaction() as conn:
-            row = conn.execute("SELECT job_id FROM pipeline_lock").fetchone()
+            row = conn.execute("SELECT job_id, task FROM pipeline_lock").fetchone()
             if row:
                 conn.execute("UPDATE checkpoints SET status = 'error', updated_at = ?"
                              " WHERE job_id = ? AND status = 'running'", (_now(), row[0]))
                 conn.execute("DELETE FROM pipeline_lock WHERE job_id = ?", (row[0],))
+                step, item, cycle = self._launched(conn, row[0]) or (None, None, self._target(conn))
+                self._event(conn, cycle, "lock_released", step, item, row[0], {"task": row[1]})
         return row[0] if row else None
+
+    # --- journal ------------------------------------------------------------------------------
+
+    def journal(self, cycle: str) -> list[dict]:
+        """Events of a cycle in both modes: production from the SQLite file, test from the Redis blob while it exists."""
+        with self._file_transaction() as conn:
+            events = self._events(conn, cycle, "production")
+        with self._test_journal() as conn:
+            events += self._events(conn, cycle, "test") if conn else []
+        # Timestamps in microseconds: test mode blocks production writes, so the two journals never interleave.
+        return sorted(events, key=lambda e: e["at"])
+
+    def cycles(self) -> list[dict]:
+        """Every cycle with checkpoints or events (and the target one), newest first.
+
+        `state` is the production one; `test_state` that of the test checkpoints still in Redis (None without any).
+        Counts and `last_at` leave out mode_changed: they measure the pipeline's work, not the mode switches.
+        """
+        count = "SELECT cycle, count(*), max(at) FROM pipeline_events WHERE event != 'mode_changed' GROUP BY cycle"
+        with self._file_transaction() as conn:
+            production = {c: (n, at) for c, n, at in conn.execute(count)}
+            states = self._states(conn)
+        with self._test_journal() as conn:
+            test, test_states = ({c: (n, at) for c, n, at in conn.execute(count)}, self._states(conn)) if conn else ({}, {})
+        with self._transaction() as conn:
+            target = self._target(conn)
+        result = []
+        for c in sorted(set(states) | set(production) | set(test) | set(test_states) | {target}, reverse=True):
+            (events, last), (test_events, test_last) = production.get(c, (0, None)), test.get(c, (0, None))
+            result.append({"cycle": c, "state": states.get(c, "open"), "test_state": test_states.get(c),
+                           "target": c == target, "events": events, "test_events": test_events,
+                           "last_at": max(filter(None, (last, test_last)), default=None)})
+        return result
+
+    def _states(self, conn: sqlite3.Connection) -> dict[str, str]:
+        """open / closed of every cycle that has checkpoints in this db."""
+        return {c: "closed" if progress(self._rows(conn, c))["current_step"] is None else "open"
+                for (c,) in conn.execute("SELECT DISTINCT cycle FROM checkpoints").fetchall()}
+
+    @contextmanager
+    def _test_journal(self) -> Iterator[sqlite3.Connection | None]:
+        """The test-mode db kept in Redis (read only), or None once Redis no longer has it."""
+        data = self._blob.get()  # Redis down: no session either (401 before this)
+        if not data:
+            yield None
+            return
+        with closing(sqlite3.connect(":memory:")) as conn:
+            conn.deserialize(data)
+            conn.executescript(_SCHEMA)  # blobs written before the journal have no pipeline_events
+            yield conn
+
+    @staticmethod
+    def _events(conn: sqlite3.Connection, cycle: str, mode: str) -> list[dict]:
+        rows = conn.execute(f"SELECT {', '.join(_EVENT_COLUMNS)} FROM pipeline_events WHERE cycle = ? ORDER BY id",
+                            (cycle,)).fetchall()
+        return [{**dict(zip(_EVENT_COLUMNS, r)), "detail": json.loads(r[-1]) if r[-1] else None, "mode": mode}
+                for r in rows]
 
 
 def get_checkpoint_store() -> CheckpointStore:

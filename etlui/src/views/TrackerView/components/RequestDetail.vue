@@ -17,6 +17,11 @@
         <td class="px-3 py-2">{{ request.duration_ms.toFixed(2) }} ms</td>
         <td class="px-3 py-2 font-mono text-xs break-all">{{ request.job_id ?? '-' }}</td>
       </tr>
+      <tr v-if="request.reason" class="text-yellow-300">
+        <td colspan="5" class="px-3 py-2 text-xs">
+          Refused by the pipeline<template v-if="request.code"> ({{ request.code }})</template>: {{ request.reason }}
+        </td>
+      </tr>
     </tbody>
   </table>
 </template>

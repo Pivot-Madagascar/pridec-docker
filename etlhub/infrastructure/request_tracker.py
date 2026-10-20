@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 _request_tracker = None
 _lock = threading.Lock()
 
-# Older entries are deleted on each save (indexed on created_at, so cheap).
+# Older entries are deleted on each save (indexed on created_at, so cheap), except those a production pipeline
+# journal event refers to (`journal` flag): a cycle's journal keeps its requests.
 RETENTION_DAYS = 30
 
 _SCHEMA = """
@@ -48,7 +49,8 @@ class RequestTracker:
                     (log["request_id"], log.get("url", ""), json.dumps(log)),
                 )
                 conn.execute(
-                    "DELETE FROM request_log WHERE created_at < strftime('%Y-%m-%dT%H:%M:%f', 'now', ?)",
+                    "DELETE FROM request_log WHERE created_at < strftime('%Y-%m-%dT%H:%M:%f', 'now', ?)"
+                    " AND json_extract(data, '$.journal') IS NULL",
                     (f"-{RETENTION_DAYS} days",),
                 )
         except sqlite3.Error:
@@ -60,6 +62,15 @@ class RequestTracker:
                 "SELECT data FROM request_log WHERE request_id = ?", (request_id,)
             ).fetchone()
         return json.loads(row[0]) if row else None
+
+    def get_many(self, request_ids: set[str]) -> dict[str, dict]:
+        """The logs of these requests that still exist, by request_id."""
+        ids = list(request_ids)  # an empty IN () is valid SQLite
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                f"SELECT request_id, data FROM request_log WHERE request_id IN ({', '.join('?' * len(ids))})", ids
+            ).fetchall()
+        return {request_id: json.loads(data) for request_id, data in rows}
 
     def list_recent(self, limit: int = 50, endpoint: str | None = None) -> list[dict]:
         with closing(self._connect()) as conn:

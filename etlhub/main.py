@@ -22,6 +22,7 @@ from etlhub.api.routers.pipeline_router import router as pipeline_router
 from etlhub.api.auth import auth_router, get_current_user
 from etlhub.api.auth.dhis2_auth import SESSION_COOKIE
 from etlhub.api.routers import NOT_AUTHENTICATED
+from etlhub.core.request_context import request_context
 from etlhub.domain.exceptions import (
     ETLException, JobNotFoundError, ValidationError, PipelineBlockedError, ConfirmationRequiredError,
 )
@@ -46,8 +47,15 @@ async def validation_error_handler(request: Request, exc: ValidationError):
     return JSONResponse(status_code=400, content={"message": str(exc)})
 
 
+def _refused(reason: str, code: str | None = None) -> None:
+    """A refusal writes nothing to the pipeline: its reason goes to request_log (core/request_context.py)."""
+    if (context := request_context.get()) is not None:
+        context.update(pipeline=True, reason=reason, **({"code": code} if code else {}))
+
+
 @app.exception_handler(ConfirmationRequiredError)
 async def confirmation_required_handler(request: Request, exc: ConfirmationRequiredError):
+    _refused(str(exc), "confirmation_required")
     return JSONResponse(status_code=409, content={
         "code": "confirmation_required", "message": str(exc), "impact": exc.impact,
     })
@@ -55,6 +63,7 @@ async def confirmation_required_handler(request: Request, exc: ConfirmationRequi
 
 @app.exception_handler(PipelineBlockedError)
 async def pipeline_blocked_handler(request: Request, exc: PipelineBlockedError):
+    _refused(str(exc))
     return JSONResponse(status_code=409, content={"message": str(exc)})
 
 
