@@ -24,9 +24,8 @@ export function useActivityLog() {
       success,
       ...job
     })
-    if (activityLog.value.length > 20) {
-      activityLog.value = activityLog.value.slice(0, 20)
-    }
+    // Newest first: keep only the last 5
+    activityLog.value = activityLog.value.slice(0, 5)
   }
 
   return {
