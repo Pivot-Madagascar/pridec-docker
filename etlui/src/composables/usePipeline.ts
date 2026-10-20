@@ -35,7 +35,7 @@ const isLaunchedJob = (r: unknown): r is pipeline.LaunchedJob => typeof r === 'o
 
 /** The pipeline state from etlhub, and every action on it. The server decides: nothing is computed here. */
 export function usePipeline(addActivity: AddActivity) {
-  const { showNotification } = useNotification()
+  const { showNotification, followJob } = useNotification()
   const state = ref<Checkpoints | null>(null)
   const serverFiles = ref<Partial<Record<InputName, ServerFile>>>({})
   const defaults = ref<Record<string, DefaultFile>>({})
@@ -66,9 +66,13 @@ export function usePipeline(addActivity: AddActivity) {
     busy.value = true
     try {
       const result = await call(confirm)
-      showNotification(`${label}: accepted`, 'success')
-      // Only launch() returns a LaunchedJob: RecentActivity's Detail opens its request and logs
-      addActivity(label, 'Accepted', true, isLaunchedJob(result) ? result : undefined)
+      if (isLaunchedJob(result) && result.jobId) {
+        // The toast follows the job; the activity is its end, not the 202 (RecentActivity's Detail opens the request and logs)
+        void followJob(label, result.jobId).then(end => addActivity(label, end.message, end.success, result))
+      } else {
+        showNotification(`${label}: success`, 'success')
+        addActivity(label, 'Success', true)
+      }
       return true
     } catch (err) {
       const confirmation = confirmationRequired(err)

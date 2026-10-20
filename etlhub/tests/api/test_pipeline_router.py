@@ -142,11 +142,17 @@ def test_calc_orgunit_alerts_is_not_implemented(client):
     assert "not implemented" in response.json()["message"]
 
 
-def test_release_lock(client, checkpoint_store):
+def test_release_lock(app, client, checkpoint_store):
+    from etlhub.core.dependencies import get_job_repository
+    InMemoryJobStore.records = {"dead": {"job_id": "dead", "status": "running"}}
+    app.dependency_overrides[get_job_repository] = InMemoryJobStore
     checkpoint_store.start("import_gee", "dead")
 
     assert client.delete("/pipeline/lock").json() == {"released": "dead"}
     assert client.get("/pipeline/checkpoints").json()["lock"] is None
+    # Its end is seen by the toast and the tracking: no job left "running" for 24 h
+    assert InMemoryJobStore.records["dead"]["status"] == "error"
+    app.dependency_overrides.pop(get_job_repository)
 
 
 def test_a_task_end_records_the_checkpoint_and_frees_the_lock(checkpoint_store, queue):
@@ -305,3 +311,19 @@ def test_the_cycles_route_lists_the_target_cycle(client):
     assert client.get("/pipeline/cycles").json() == [
         {"cycle": this_month(), "state": "open", "test_state": None, "target": True, "events": 0, "test_events": 0,
          "last_at": None}]
+
+
+def test_journal_shows_a_job_once_at_its_end_with_its_launch_request():
+    from etlhub.application.use_cases.journal_service import _job_outcomes
+
+    def ev(event, job_id, actor="worker", request_id=None, detail=None):
+        return {"event": event, "job_id": job_id, "actor": actor, "request_id": request_id, "detail": detail}
+
+    events = [ev("launched", "a", "alice", "req-a", {"confirm": True}), ev("succeeded", "a"),
+              ev("launched", "b", "bob", "req-b"),  # still running
+              ev("launched", "c", "carol", "req-c"), ev("lock_released", "c", "admin", "req-x"),
+              ev("uploaded", None, "alice", "req-u")]
+
+    assert _job_outcomes(events) == [ev("succeeded", "a", "alice", "req-a", {"confirm": True}),
+                                     ev("launched", "c", "carol", "req-c"), ev("lock_released", "c", "admin", "req-x"),
+                                     ev("uploaded", None, "alice", "req-u")]

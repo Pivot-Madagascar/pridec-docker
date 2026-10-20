@@ -43,9 +43,10 @@
           <td class="px-4 py-2">
             <span
               class="inline-block rounded px-2 py-0.5 text-xs font-semibold"
-              :class="statusColor(req.status_code)"
+              :class="req.job_status ? JOB_STATUS_COLORS[req.job_status] : statusColor(req.status_code)"
             >
-              {{ req.status_code }}
+              <!-- A job launch shows its job's end, not its 202 -->
+              {{ req.job_status ?? req.status_code }}
             </span>
           </td>
           <td class="px-4 py-2 text-right font-mono text-xs text-gray-300">
@@ -151,6 +152,11 @@ function methodColor(method: string) {
     default:
       return 'bg-gray-700 text-gray-300'
   }
+}
+
+const JOB_STATUS_COLORS: Record<string, string> = {
+  success: 'bg-green-900 text-green-300',
+  error: 'bg-red-900 text-red-300',
 }
 
 function statusColor(statusCode: number) {

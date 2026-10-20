@@ -1,7 +1,7 @@
 <template>
   <!-- A manual popover puts the toasts in the top layer, above native <dialog> modals (BaseDialog re-raises it). -->
   <div ref="toasts" popover="manual" data-toasts class="toast-layer">
-    <Toaster />
+    <Toaster position="bottom-right" />
   </div>
   <div class="app-container">
     <!-- Top Navbar -->

@@ -187,6 +187,11 @@ entry (method, url, status, duration, error, reason) while it exists, else null.
 `GET /api/tracking/etl-logs/{job_id}` (etlui calls it for job events). `JournalService` (`application/use_cases/`) joins
 the gate's events and `RequestTracker.get_many`.
 
+Jobs show at their end only (2026-10-20, `_job_outcomes`, read side): `succeeded`/`failed` take the actor, request
+(the 202 launch) and detail of the job's `launched` event, and `launched` is left out, so a running job does not show.
+`launched` is kept only for a job freed by `DELETE /pipeline/lock` (its only trace of who launched it). The stored
+events do not change: `finish()` still reads `launched`. The CSV goes through the same read.
+
 `GET /pipeline/cycles` (added 2026-10-20) → the cycles that have checkpoints or events, plus the target cycle, newest
 first: `{cycle, state, test_state, target, events, test_events, last_at}`. `state` is the production one, `test_state`
 that of the test checkpoints still in Redis (null without any: they are discarded when test mode is left). `events`

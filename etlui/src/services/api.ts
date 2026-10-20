@@ -53,6 +53,8 @@ export interface RequestLog {
   client_host: string | null
   // Job started or read by this request (from its JSON response), if any.
   job_id: string | null
+  // Status of that job while its record exists (24 h); the list leaves out jobs not ended yet.
+  job_status?: string | null
   // Set when the request raised an unhandled exception (status 500).
   error: string | null
   // Why the pipeline gate refused it (409); code 'confirmation_required' when it asked for confirm=true.

@@ -8,6 +8,7 @@ const getDefaultFiles = vi.fn()
 const applyDefaultFile = vi.fn()
 const showNotification = vi.fn()
 const addActivity = vi.fn()
+const followJob = vi.fn()
 vi.mock('@/services/pipeline', () => ({
   getCheckpoints: (...args: unknown[]) => getCheckpoints(...args),
   launchJob: (...args: unknown[]) => launchJob(...args),
@@ -24,7 +25,7 @@ vi.mock('@/services/inputs', () => ({
   uploadInputFile: vi.fn(),
   deleteInputFile: vi.fn()
 }))
-vi.mock('@/composables/useNotification', () => ({ useNotification: () => ({ showNotification }) }))
+vi.mock('@/composables/useNotification', () => ({ useNotification: () => ({ showNotification, followJob }) }))
 
 import { usePipeline, POLL_MS } from '@/composables/usePipeline'
 
@@ -56,16 +57,23 @@ describe('usePipeline', () => {
     expect(applyDefaultFile.mock.calls).toEqual([['config', false], ['config', true]])
   })
 
-  it('launches, notifies and reads the state again from the server', async () => {
+  it('launches, follows the job in a toast, logs only its end and reads the state again', async () => {
     launchJob.mockResolvedValue({ jobId: 'import_gee_1', requestId: 'req-1' })
+    let end!: (value: { success: boolean; message: string }) => void
+    followJob.mockReturnValue(new Promise(resolve => { end = resolve }))
     const { launch, state } = usePipeline(addActivity)
 
     expect(await launch('import_gee', 'Import GEE')).toBe(true)
 
     expect(launchJob).toHaveBeenCalledWith('import_gee', false)
-    expect(showNotification).toHaveBeenCalledWith('Import GEE: accepted', 'success')
-    expect(addActivity).toHaveBeenCalledWith('Import GEE', 'Accepted', true, { jobId: 'import_gee_1', requestId: 'req-1' })
+    expect(followJob).toHaveBeenCalledWith('Import GEE', 'import_gee_1')
+    expect(showNotification).not.toHaveBeenCalled()
+    expect(addActivity).not.toHaveBeenCalled() // the 202 is not an activity
     expect(state.value).toEqual(STATE)
+
+    end({ success: false, message: 'boom' })
+    await Promise.resolve()
+    expect(addActivity).toHaveBeenCalledWith('Import GEE', 'boom', false, { jobId: 'import_gee_1', requestId: 'req-1' })
   })
 
   it('shows a 409 in plain words and does not retry', async () => {
