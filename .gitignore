@@ -63,3 +63,4 @@ graphify-out/
 # Redis (see redis.conf)
 redis-data/
 redis-secret.conf
+.claude/
