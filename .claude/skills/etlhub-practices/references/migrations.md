@@ -117,7 +117,7 @@ Also a known behaviour to fix here or separately: on failure `_run_task` calls `
 
 ---
 
-## m5 — Make the test configuration real
+## m5 — Make the test configuration real (done 2026-10-21)
 
 **Problem.** `etlhub/pytest.ini` starts with `[tool:pytest]` (setup.cfg syntax). pytest ignores the whole file, so `testpaths`, `pythonpath`, `addopts` and the `integration` marker are not applied, and `PytestUnknownMarkWarning` appears.
 

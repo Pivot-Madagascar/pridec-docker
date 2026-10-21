@@ -54,7 +54,7 @@ Python 3.12 (use `test-venv`; the system `python3` is 3.11). Run from the repo r
 - Redis: `redis-server`
 - Worker: `python -m etlhub.run_celery`
 - API: `cd etlhub && python -m run_server`
-- Tests: `cd etlhub && ../test-venv/bin/python -m pytest tests -m "not integration"` (31 tests)
+- Tests: `cd etlhub && ../test-venv/bin/python -m pytest tests -m "not integration"` (223 tests; bare `pytest` works too since `pytest.ini` is read)
 - One file: `cd etlhub && ../test-venv/bin/python -m pytest tests/api/test_ingest_router.py`
 - Linter / formatter: none configured. Do not invent one.
 
@@ -69,7 +69,6 @@ Python 3.12 (use `test-venv`; the system `python3` is 3.11). Run from the repo r
 
 ## Required checks
 
-- `etlhub/pytest.ini` starts with `[tool:pytest]`, so pytest ignores it entirely. Always pass `tests` and `-m` explicitly.
 - `conftest.py` replaces Redis, GEE and geopandas with a global `MagicMock`: a passing test says nothing about real Redis behaviour. `ee` (the real earthengine module) is not mocked.
 - Patching `etlhub.core.config.get_settings` or `etlhub.core.dependencies.get_*` does not affect code that already imported the name. Use `app.dependency_overrides`.
 - Run the tests before and after any change in this module.

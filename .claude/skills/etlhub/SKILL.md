@@ -96,7 +96,6 @@ cd etlhub && ../test-venv/bin/python -m pytest tests -m "not integration"
 ```
 
 - `.vscode/launch.json` and `GETTING_STARTED.md` mention port 8000; `run_server.py` uses 8111.
-- `etlhub/pytest.ini` starts with `[tool:pytest]`, so pytest ignores it: always pass `tests` and `-m`.
 - 31 tests are collected (29 pass, 1 known failing, 1 integration deselected). They live in `tests/api/` and `tests/infrastructure/`. `conftest.py` replaces `redis`, `redis.asyncio`, `pridec_gee`, `pivot_dhis_tools`, `earthengine_api` and `geopandas` with a global `MagicMock`. `ee`, the real Earth Engine module, is not mocked. A passing test says nothing about real Redis behaviour.
 - Untested: `config_router`, `forecast_report_router`, `validation_router`, `/post_forecast`, `/update_key`, the WebSocket, `JobStore`, `RequestTracker`, `ConfigStore`, `forecast_runner`, and every Celery task except `task_forecast`.
 - CI: `etlhub-unit-tests.yml` (push/PR on `etlhub/**`) and `etlhub-integration-tests.yml` (PR, needs `DHIS_URL` and `DHIS_TOKEN` secrets).
