@@ -112,7 +112,7 @@ Concurrency: **one job at a time**, in cycle order, **one forecast run (source Ã
 ## 9. Operations
 
 - **Start**: see section 2, plus `GETTING_STARTED.md`. The real port is 8111 (some files say 8000).
-- **Test**: `cd etlhub && ../test-venv/bin/python -m pytest tests -m "not integration"`. 31 tests, Redis and GEE mocked, source coverage 58 % (infrastructure 37 %). Each run writes about 119 files into `logs/requests/`. `etlhub/pytest.ini` is ignored (its header is `[tool:pytest]`).
+- **Test**: `cd etlhub && ../test-venv/bin/python -m pytest tests -m "not integration"`. 223 tests, Redis and GEE mocked, source coverage 58 % (infrastructure 37 %). Each run writes about 119 files into `logs/requests/`. `etlhub/pytest.ini` sets `pythonpath = .` and the `integration` marker.
 - **CI**: `etlhub-unit-tests.yml` (push and PR on `etlhub/**`), `etlhub-integration-tests.yml` (PR, DHIS2 secrets).
 - **Observe**: `GET /api/tracking/*`, `logs/`. There is no logging configuration in `etlhub/`.
 - **Purge**: nothing is automatic (`logs/`, `logs/requests/`, `input/`, `output/`). `dump.rdb` and `logs/` are ignored by git.
