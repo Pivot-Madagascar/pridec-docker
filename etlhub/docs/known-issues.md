@@ -14,7 +14,7 @@ Priority scale: **P1** fix next (security or a broken feature), **P2** fix soon 
 | 7 | P2 | No roles: any DHIS2 user of an allowed host can log in and run anything | 1.5 |
 | 8 | P2 | No timeout, no reconciliation, no lock on jobs | 3 |
 | 9 | P2 | Full URL (query string) stored in request logs | 1.6 |
-| 10 | P2 | `etlui` marks a step `success` on the 202; forecast logs only at the end | 3 |
+| 10 | P2 | `etlui` marks a step `success` on the 202 (forecast logs: fixed, live) | 3 |
 | 11 | P3 | Everything else below | — |
 
 Order of work suggested: 5 (it freezes the whole API), then 6 and 7 (they need a product decision).
@@ -52,7 +52,7 @@ There is no event port. Proposed fix: move `ETLEventManager` to `infrastructure/
 - **P1 — `/post_forecast` and `/update_key` run inline** in `async def` handlers (`analytics_router.py:56,109` → `analytics_service.py:22,38`): the whole API, login and WebSockets included, is frozen while they run.
 - **P2 — No timeout, no reconciliation, no lock.** No Celery time limit, no timeout on the forecast `subprocess.run` (`forecast_runner.py:111`). A killed worker leaves `job:{id}` at `running` until the 24 h TTL. Lock: fixed since 2026-10-08 (one job at a time, `docs/decision-design/pipeline-checkpoints/pipeline-checkpoints.md`); it never expires, so a killed worker blocks everything until `DELETE /pipeline/lock`. `DELETE /output/reset` still bypasses it. Imports resend the same `dataValueSets` each time.
 - *Fixed (2026-10-09):* `etlui` no longer marks a step `success` on the 202: `usePipeline.ts` only shows an "accepted" toast and reads every status from `GET /pipeline/checkpoints`.
-- **P2 — Forecast logs are written only at the end** (`forecast_runner.py`): a WebSocket opened during a forecast gets status updates but no log lines until the end.
+- ~~**P2 — Forecast logs are written only at the end**~~ Fixed 2026-10-21: `run_rscript` reads `docker run` line by line, appends each line to the history (`JobStore.append_logs`) then publishes it. Not yet checked on a real run: R may buffer `stdout` (`print`/`cat`) when writing to a pipe; `message()`/cli go to `stderr` and are unbuffered. If lines come in bursts, try `docker run -t`.
 - **P2 — Swallowed errors**: `JobStore` and pub/sub publishing catch every exception. So does the gate's `finish()` at the end of a job (logged, on purpose: the job keeps its real status, and the lock then needs `DELETE /pipeline/lock`).
 - **P3** — `run_rscript` rewrites the job record with a new `started` before `_run_task` writes the final status.
 - **P3** — `api/middleware.py:61`: `threading.local` shared across asyncio requests.

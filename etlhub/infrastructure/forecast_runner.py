@@ -124,21 +124,33 @@ def run_rscript(job_id, params, job_store: JobStore):
             '--polygon_valid', params['polygon_valid_path']
         ]
         # R cli/message() output goes to stderr: merge it so the logs keep the order the R run printed.
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        # Each line is stored then published as it comes: the log WebSocket follows the run live.
+        from etlhub.api.etl_events import get_etl_event_manager
+        events = get_etl_event_manager()
+        lines = []
+        with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as proc:
+            for line in proc.stdout:
+                lines.append(line)
+                job_store.append_logs(job_id, line)  # history first: a client connecting now loses nothing
+                try:
+                    events.publish_log(job_id, "INFO", line.rstrip("\n"))
+                except Exception:
+                    pass
+        output = "".join(lines)
         completed = datetime.now().isoformat()
-        if result.returncode == 0:
+        if proc.returncode == 0:
             status.update({
                 "status": "success",
                 "completed": completed,
-                "logs": result.stdout
+                "logs": output
             })
         else:
             status.update({
                 "status": "error",
                 "completed": completed,
-                "logs": result.stdout,
-                "message": "\n".join(result.stdout.splitlines()[-20:])
-                           or f"Forecast container exited with code {result.returncode}"
+                "logs": output,
+                "message": "\n".join(output.splitlines()[-20:])
+                           or f"Forecast container exited with code {proc.returncode}"
             })
     except FileNotFoundError as e:
         status.update({
@@ -189,15 +201,11 @@ def run_rscript(job_id, params, job_store: JobStore):
 
     job_store.set(job_id, status)
 
-    logs = status.get("logs") or status.get("message") or ""
-    if logs:
-        try:
-            job_store.save_logs(job_id, logs)
-        except Exception:
-            pass
+    if not status.get("logs") and status.get("message"):  # nothing streamed: a failure to start
+        job_store.save_logs(job_id, status["message"])
         try:
             from etlhub.api.etl_events import get_etl_event_manager
-            get_etl_event_manager().publish_log(job_id, "ERROR" if status.get("status") == "error" else "INFO", logs)
+            get_etl_event_manager().publish_log(job_id, "ERROR", status["message"])
         except Exception:
             pass
 
