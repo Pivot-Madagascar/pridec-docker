@@ -29,10 +29,11 @@ def checkpoint_store(tmp_path, monkeypatch):
     """The real pipeline gate, on a temporary db: launches never touch logs/etlhub.db."""
     from etlhub.infrastructure import checkpoint_store as module
     # data_dir = tmp_path: input/ and output/ are emptied when a run opens, uploads/ keeps the uploaded files.
-    mode = {"dry_run": False}  # production by default; tests switch it through store.set_mode or mode[...]
+    mode = {"test_mode": False, "dry_run": True}  # production by default; tests switch it through store.set_mode or mode[...]
     store = module.CheckpointStore(
         tmp_path / "etlhub.db", data_dir=tmp_path, apply_context=lambda ctx: store.contexts.append(ctx),
-        dry_run=lambda: mode["dry_run"], set_dry_run=lambda value: mode.update(dry_run=value), blob=FakeBlob(),
+        test_mode=lambda: mode["test_mode"], set_test_mode=lambda value: mode.update(test_mode=value),
+        dry_run=lambda: mode["dry_run"], blob=FakeBlob(),
     )
     store.contexts = []  # run contexts the jobs received (instead of Redis)
     store.mode = mode

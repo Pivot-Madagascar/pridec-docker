@@ -543,7 +543,7 @@ def test_replacing_a_used_config_resets_only_the_open_run(checkpoint_store):
     assert _status(checkpoint_store.progress(), "forecast", "ADJ/Malaria:post_forecast") == "success"
 
 
-# --- test mode (DRYRUN) -----------------------------------------------------------------
+# --- test mode (TEST_MODE) -----------------------------------------------------------------
 
 def test_test_mode_keeps_checkpoints_in_redis_only(checkpoint_store, tmp_path):
     _pass(checkpoint_store, "import_gee")  # production
@@ -552,7 +552,7 @@ def test_test_mode_keeps_checkpoints_in_redis_only(checkpoint_store, tmp_path):
     _pass(checkpoint_store, "import_pivot_com")
 
     test_state = checkpoint_store.progress()
-    assert test_state["dry_run"] is True
+    assert test_state["test_mode"] is True
     assert _status(test_state, "data_import", "import_pivot_com") == "success"
     assert _status(test_state, "data_import", "import_gee") == "pending"  # production data is not visible
     assert checkpoint_store._blob.data is not None
@@ -570,16 +570,16 @@ def test_leaving_test_mode_needs_confirm_and_discards_the_test_data_but_its_jour
     with pytest.raises(ConfirmationRequiredError) as refused:
         checkpoint_store.set_mode(False)
     assert refused.value.impact["open_run"] == "CSB/Malaria"
-    assert checkpoint_store.progress()["dry_run"] is True
+    assert checkpoint_store.progress()["test_mode"] is True
 
-    assert checkpoint_store.set_mode(False, confirm=True) == {"dry_run": False}
+    assert checkpoint_store.set_mode(False, confirm=True) == {"test_mode": False}
     import sqlite3
     blob = sqlite3.connect(":memory:")
     blob.deserialize(checkpoint_store._blob.data)  # test data stays in Redis only: the journal, nothing else
     assert [blob.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in ("checkpoints", "forecast_runs")] == [0, 0]
     assert blob.execute("SELECT count(*) FROM pipeline_events").fetchone()[0] > 0
     state = checkpoint_store.progress()
-    assert (state["dry_run"], state["run"]) == (False, None)
+    assert (state["test_mode"], state["run"]) == (False, None)
     assert _status(state, "data_import", "import_gee") == "success"  # production untouched
 
 
@@ -593,7 +593,7 @@ def test_switching_mode_is_refused_while_a_job_runs(checkpoint_store):
 def test_leaving_an_empty_test_mode_needs_no_confirmation(checkpoint_store):
     checkpoint_store.set_mode(True)
 
-    assert checkpoint_store.set_mode(False) == {"dry_run": False}
+    assert checkpoint_store.set_mode(False) == {"test_mode": False}
 
 
 # --- journal ------------------------------------------------------------------------------
@@ -732,3 +732,33 @@ def test_cycles_shows_the_test_state_while_test_mode_has_checkpoints(checkpoint_
     (cycle,) = checkpoint_store.cycles()
 
     assert (cycle["state"], cycle["test_state"], cycle["events"], cycle["test_events"]) == ("open", "open", 2, 2)
+
+
+def test_test_mode_starts_from_the_old_dryrun_once_then_leaves_dryrun_to_env(monkeypatch):
+    from etlhub.infrastructure import checkpoint_store as module
+
+    class Redis(dict):
+        def set(self, key, value, nx=False):
+            if not (nx and key in self):
+                self[key] = value
+
+    redis, removed = Redis(), []
+    monkeypatch.setattr(module, "get_redis", lambda: redis)
+    monkeypatch.setattr(module, "ConfigStore", lambda: type("C", (), {"delete_keys": lambda self, keys: removed.extend(keys) or True})())
+    monkeypatch.setattr(module, "dry_run_enabled", lambda: True)  # the pipeline was in test mode through DRYRUN
+
+    assert module.test_mode_enabled() is True
+    assert removed == ["DRYRUN"]  # the scripts read DRYRUN from .env again
+
+    monkeypatch.setattr(module, "dry_run_enabled", lambda: False)
+    module.write_test_mode(False)
+    assert module.test_mode_enabled() is False and removed == ["DRYRUN"]  # TEST_MODE alone from now on
+
+
+def test_test_mode_and_dryrun_are_independent(checkpoint_store):
+    checkpoint_store.mode["dry_run"] = False  # .env: the scripts write to DHIS2
+
+    assert checkpoint_store.set_mode(True) == {"test_mode": True}
+
+    state = checkpoint_store.progress()
+    assert (state["test_mode"], state["dry_run"]) == (True, False)

@@ -23,7 +23,7 @@
       </p>
 
       <!-- Before step 1: the mode applies to the whole cycle. -->
-      <ModeToggle :dry-run="state?.dry_run" :disabled="busy || state?.lock != null" @change="setMode" />
+      <ModeToggle :test-mode="state?.test_mode" :dry-run="state?.dry_run" :disabled="busy || state?.lock != null" @change="setMode" />
 
       <div v-if="state?.lock" class="lock-banner" role="status">
         <span>Running: <strong>{{ state.lock.task }}</strong> ({{ state.lock.job_id }}) since {{ state.lock.acquired_at }}. One job at a time.</span>

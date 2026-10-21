@@ -58,7 +58,7 @@ def test_every_repo_default_exists():
 def test_defaults_follow_the_mode(client, checkpoint_store):
     assert client.get("/input/defaults").json()["external_data/fkt"]["filename"] == "external_data_fkt.csv"
 
-    checkpoint_store.mode["dry_run"] = True
+    checkpoint_store.mode["test_mode"] = True
 
     assert client.get("/input/defaults").json() == {
         "config/Malaria": {"filename": "config.json", "size": 17},

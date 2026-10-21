@@ -47,10 +47,10 @@ export async function decideImports(decision: 'approve' | 'reject'): Promise<voi
   await api.post('/pipeline/imports/approve', { decision })
 }
 
-// PUT /pipeline/mode: test mode = DRYRUN=true; leaving it discards the test checkpoints (confirm when there are any).
-export async function setMode(dryRun: boolean, confirm = false): Promise<boolean> {
-  const response = await api.put<{ dry_run: boolean }>('/pipeline/mode', { dry_run: dryRun }, withConfirm(confirm))
-  return response.data.dry_run
+// PUT /pipeline/mode: TEST_MODE, the test cycle kept apart (DRYRUN stays the .env's); leaving it discards the test checkpoints (confirm when there are any).
+export async function setMode(testMode: boolean, confirm = false): Promise<boolean> {
+  const response = await api.put<{ test_mode: boolean }>('/pipeline/mode', { test_mode: testMode }, withConfirm(confirm))
+  return response.data.test_mode
 }
 
 // PUT /pipeline/cycle: the cycle (YYYYMM) launches go to; null = follow the calendar month.

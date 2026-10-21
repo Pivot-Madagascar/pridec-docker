@@ -196,15 +196,15 @@ def test_a_queueing_failure_frees_the_lock(checkpoint_store, monkeypatch):
 
 
 def test_mode_switch_through_the_api(client, checkpoint_store):
-    assert client.put("/pipeline/mode", json={"dry_run": True}).json() == {"dry_run": True}
+    assert client.put("/pipeline/mode", json={"test_mode": True}).json() == {"test_mode": True}
     _import(checkpoint_store)
 
-    refused = client.put("/pipeline/mode", json={"dry_run": False})
-    accepted = client.put("/pipeline/mode", json={"dry_run": False}, params={"confirm": "true"})
+    refused = client.put("/pipeline/mode", json={"test_mode": False})
+    accepted = client.put("/pipeline/mode", json={"test_mode": False}, params={"confirm": "true"})
 
     assert refused.status_code == 409 and refused.json()["code"] == "confirmation_required"
-    assert accepted.json() == {"dry_run": False}
-    assert client.get("/pipeline/checkpoints").json()["dry_run"] is False
+    assert accepted.json() == {"test_mode": False}
+    assert client.get("/pipeline/checkpoints").json()["test_mode"] is False
 
 
 def test_cycle_choice_through_the_api(client):
@@ -256,7 +256,7 @@ def journal_client(app):
 
 def test_the_journal_lists_events_with_the_request_that_caused_them(journal_client):
     from etlhub.domain.pipeline import this_month
-    journal_client.put("/pipeline/mode", json={"dry_run": True})
+    journal_client.put("/pipeline/mode", json={"test_mode": True})
 
     events = journal_client.get(f"/pipeline/cycles/{this_month()}/journal").json()
 
@@ -267,7 +267,7 @@ def test_the_journal_lists_events_with_the_request_that_caused_them(journal_clie
 
 def test_the_journal_csv_is_for_administrators(journal_client, app):
     from etlhub.api.auth import get_current_user
-    journal_client.put("/pipeline/mode", json={"dry_run": True})
+    journal_client.put("/pipeline/mode", json={"test_mode": True})
 
     response = journal_client.get("/pipeline/cycles/202610/journal.csv")
     assert response.status_code == 200
@@ -284,7 +284,7 @@ def test_the_logged_in_user_is_the_actor_of_the_events(anon_app, monkeypatch):
     from etlhub.infrastructure.checkpoint_store import get_checkpoint_store
     monkeypatch.setattr(dhis2_auth, "user_from_cookies", lambda cookies: {"username": "jdoe", "is_admin": True})
 
-    TestClient(anon_app).put("/pipeline/mode", json={"dry_run": True})
+    TestClient(anon_app).put("/pipeline/mode", json={"test_mode": True})
 
     assert [e["actor"] for e in get_checkpoint_store().journal(this_month())] == ["jdoe"]
 

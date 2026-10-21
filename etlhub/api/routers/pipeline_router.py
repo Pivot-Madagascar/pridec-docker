@@ -30,7 +30,7 @@ class Decision(BaseModel):
 
 
 class Mode(BaseModel):
-    dry_run: bool
+    test_mode: bool
 
 
 class Cycle(BaseModel):
@@ -142,16 +142,17 @@ def decide_imports(body: Decision, gate: PipelineGate = Depends(get_pipeline_gat
 
 @router.put(
     "/mode",
-    summary="Switch test mode (DRYRUN)",
+    summary="Switch test mode (TEST_MODE)",
     description=(
-        "dry_run=true: the ETL scripts write nothing to DHIS2 (DRYRUN in the dynamic config) and the checkpoints are "
-        "kept in Redis only. dry_run=false: back to production; the test checkpoints are discarded, which needs "
-        "confirm=true when there are any. Refused while a job runs. GET /pipeline/checkpoints returns the mode."
+        "test_mode=true: the checkpoints, runs and uploads are kept apart from production (Redis only). "
+        "test_mode=false: back to production; the test checkpoints are discarded, which needs confirm=true when there "
+        "are any. Refused while a job runs. DHIS2 writes are not switched here: they follow DRYRUN in the root .env, "
+        "returned read-only as dry_run by GET /pipeline/checkpoints with test_mode."
     ),
-    responses={200: {"content": {"application/json": {"example": {"dry_run": True}}}}, **BLOCKED},
+    responses={200: {"content": {"application/json": {"example": {"test_mode": True}}}}, **BLOCKED},
 )
 def set_mode(body: Mode, confirm: bool = CONFIRM, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
-    return gate.set_mode(body.dry_run, confirm)
+    return gate.set_mode(body.test_mode, confirm)
 
 
 @router.put(

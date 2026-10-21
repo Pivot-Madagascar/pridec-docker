@@ -96,15 +96,32 @@ def apply_to_config_store(context: dict[str, str | None]) -> None:
         raise ETLException("Could not write the forecast run context (DISEASE_CODE, OU_LEVEL) to Redis")
 
 
+TEST_MODE_KEY = "pipeline:test_mode"
+
+
 def dry_run_enabled() -> bool:
-    """Same source as the ETL scripts: DRYRUN in the dynamic config (Redis), else .env, default true."""
+    """DRYRUN as the ETL scripts read it: the root .env (etlhub no longer writes it to Redis), default true."""
     from etl.scripts.config import get_dry_run
     return get_dry_run()
 
 
-def write_dry_run(value: bool) -> None:
-    if not ConfigStore().set_all({"DRYRUN": "true" if value else "false"}):
-        raise ETLException("Could not write DRYRUN to Redis")
+def test_mode_enabled() -> bool:
+    """TEST_MODE: etlhub's own test mode (Redis), switched by PUT /pipeline/mode only. Independent of DRYRUN.
+
+    ponytail: one-time migration from the days DRYRUN was also the test mode. The first read starts in the mode DRYRUN
+    gave, then removes DRYRUN from Redis so that the scripts read .env again. Delete once every deployment ran it.
+    """
+    value = get_redis().get(TEST_MODE_KEY)
+    if value is None:
+        value = "true" if dry_run_enabled() else "false"
+        get_redis().set(TEST_MODE_KEY, value, nx=True)
+        if not ConfigStore().delete_keys(["DRYRUN"]):
+            raise ETLException("Could not remove the old DRYRUN from Redis")
+    return value == "true"
+
+
+def write_test_mode(value: bool) -> None:
+    get_redis().set(TEST_MODE_KEY, "true" if value else "false")
 
 
 class RedisBlob:
@@ -134,11 +151,15 @@ class CheckpointStore:
 
     def __init__(self, db_path: str | Path | None = None, data_dir: str | Path | None = None,
                  apply_context: Callable[[dict], None] = apply_to_config_store,
-                 dry_run: Callable[[], bool] = dry_run_enabled, set_dry_run: Callable[[bool], None] = write_dry_run,
+                 test_mode: Callable[[], bool] = test_mode_enabled, set_test_mode: Callable[[bool], None] = write_test_mode,
+                 dry_run: Callable[[], bool] = dry_run_enabled,
                  blob: RedisBlob | None = None):
-        """In test mode (DRYRUN=true) everything is kept in Redis (`blob`), never in the SQLite file."""
+        """In test mode (TEST_MODE) everything is kept in Redis (`blob`), never in the SQLite file.
+
+        The Redis keys and the uploads folder keep their dry_run names: they hold the test state of before TEST_MODE.
+        """
         settings = get_settings()
-        self._dry_run, self._set_dry_run = dry_run, set_dry_run
+        self._test_mode, self._set_test_mode, self._dry_run = test_mode, set_test_mode, dry_run
         self._blob = blob or RedisBlob()
         self._db_path = Path(db_path or Path(settings.logs_dir) / "etlhub.db")
         data_dir = Path(data_dir or settings.data_dir)
@@ -151,12 +172,12 @@ class CheckpointStore:
 
     @property
     def _uploads_dir(self) -> Path:
-        return self._uploads_root / "dry_run" if self._dry_run() else self._uploads_root
+        return self._uploads_root / "dry_run" if self._test_mode() else self._uploads_root
 
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:
         """Same SQL in both modes: the SQLite file in production, an in-memory copy kept in Redis in test mode."""
-        transaction = self._memory_transaction if self._dry_run() else self._file_transaction
+        transaction = self._memory_transaction if self._test_mode() else self._file_transaction
         with transaction() as conn:
             yield conn
 
@@ -596,25 +617,26 @@ class CheckpointStore:
         state["cycle_state"] = "closed" if state["current_step"] is None else "open"
         state["run"] = run
         state["lock"] = dict(zip(("job_id", "task", "acquired_at"), lock)) if lock else None
-        state["dry_run"] = self._dry_run()
+        state["test_mode"] = self._test_mode()
+        state["dry_run"] = self._dry_run()  # read only, from .env: whether the scripts write to DHIS2
         return state
 
-    # --- test mode (DRYRUN) -----------------------------------------------------------------
+    # --- test mode (TEST_MODE) ---------------------------------------------------------------
 
-    def set_mode(self, dry_run: bool, confirm: bool = False) -> dict:
-        """Switches DRYRUN (read by the ETL scripts). Refused while a job runs.
+    def set_mode(self, test_mode: bool, confirm: bool = False) -> dict:
+        """Switches TEST_MODE (where the pipeline state lives; DRYRUN, .env, stays as it is). Refused while a job runs.
 
         Leaving test mode discards the test checkpoints kept in Redis: confirm=true is needed when there are any.
         """
-        current = self._dry_run()
-        if dry_run == current:
-            return {"dry_run": current}
+        current = self._test_mode()
+        if test_mode == current:
+            return {"test_mode": current}
         if not current:  # production -> test
             with self._transaction() as conn:
                 self._check_lock_free(conn)
                 self._event(conn, self._target(conn), "mode_changed", detail={"to": "test"})
-                self._set_dry_run(True)
-            return {"dry_run": True}
+                self._set_test_mode(True)
+            return {"test_mode": True}
         with self._blob.lock(), closing(sqlite3.connect(":memory:", isolation_level=None)) as conn:  # test -> production
             data = self._blob.get()
             if data:
@@ -627,14 +649,14 @@ class CheckpointStore:
                     raise ConfirmationRequiredError(
                         "Leaving test mode discards the test cycle and its open run (its journal is kept): "
                         "resend with confirm=true",
-                        {"mode": "dry_run", "items_in_success": dict(done), "open_run": run["couple"] if run else None})
+                        {"mode": "test_mode", "items_in_success": dict(done), "open_run": run["couple"] if run else None})
                 conn.executescript("".join(f"DELETE FROM {t};" for t in _TEST_STATE))
                 self._blob.set(conn.serialize())  # test data stays in Redis only: the journal, while Redis keeps it
             shutil.rmtree(self._uploads_root / "dry_run", ignore_errors=True)
             with self._file_transaction() as file:
                 self._event(file, self._target(file), "mode_changed", detail={"to": "production"})
-            self._set_dry_run(False)
-        return {"dry_run": False}
+            self._set_test_mode(False)
+        return {"test_mode": False}
 
     def release_lock(self) -> str | None:
         """Manual unlock (killed worker): its running checkpoint becomes error. Returns the freed job_id."""

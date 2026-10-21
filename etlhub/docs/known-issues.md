@@ -58,7 +58,7 @@ There is no event port. Proposed fix: move `ETLEventManager` to `infrastructure/
 - **P3** — `api/middleware.py:61`: `threading.local` shared across asyncio requests.
 - **P3** — `forecast_runner._build_dynamic_env_file` opens `.env` without checking it exists (the job is marked `error` before Docker, see the test).
 - **P3** — `build_analytics` ignores `DRYRUN`. Whether `update_key` calls DHIS2 with `DRYRUN=true` depends on `pivot_dhis_tools` (not in the repo, *unverified*). Target (2026-10-12): test mode passes `DRYRUN=True` to `import_gee` and `post_forecast` only, as distinct from each `pridec` command's own `DRYRUN` option.
-- **P2 — Pipeline revision of 2026-10-12, partly applied.** Not done: `calc_orgunit_alerts` (501, no script in `etl/scripts/`, so CSB runs and the cycle cannot complete), the test-mode scope (`DRYRUN` stays global), and the level check of `external_data.csv` (columns unknown). `forecast_start` is written as the cycle month until `pivot_forecast.sh`'s value is confirmed. See `decision-design/pipeline-checkpoints/pipeline-checkpoints.md` §6 and §8.
+- **P2 — Pipeline revision of 2026-10-12, partly applied.** Not done: `calc_orgunit_alerts` (501, no script in `etl/scripts/`, so CSB runs and the cycle cannot complete), the test-mode scope (`TEST_MODE` is separate from `DRYRUN` since 2026-10-20 and passes nothing to the scripts), and the level check of `external_data.csv` (columns unknown). `forecast_start` is written as the cycle month until `pivot_forecast.sh`'s value is confirmed. See `decision-design/pipeline-checkpoints/pipeline-checkpoints.md` §6 and §8.
 - **P3** — Scripts write under `os.getcwd()/input|output`; the worker's cwd is *unverified*.
 - **Since 2026-10-08** `Settings` reads the root `.env` by default; `ENV_FILE` overrides it (VS Code debug configurations use `.env.debug`). Values exported in the process environment override the file. **Pending migration:** `.env.debug` is meant for local debugging only; decide what it keeps and align the launch configurations.
 
@@ -102,7 +102,7 @@ Fixed: `etlui/CLAUDE.md` now describes etlui · `.env.example` writes `DRYRUN` �
 - Login during a running job (1.4) and roles (1.5): which behaviour do we want?
 - Celery pool and concurrency in production (default prefork)? How is etlhub deployed, and over http or https (`COOKIE_SECURE`)?
 - Front/back mismatch on JSON bodies for `/fetch_disease` and `/validate_inputs`: fix the front or the back?
-- `DRYRUN` and `LOG_LEVEL` are read from Redis by the scripts but cannot be edited through `/api/config`. Intended?
+- `DRYRUN` and `LOG_LEVEL` are read from Redis by the scripts but cannot be edited through `/api/config`. Intended? (Since 2026-10-20 etlhub no longer writes `DRYRUN`: the test mode is `TEST_MODE`, see `decision-design/dry-run/dry-run.md`.)
 - In which working directory does the worker run? This decides where `input/` and `output/` land.
 - `README.md` mentions `compose-prod.yaml`, which is not in the repository.
 - Which tolerated imports become official (section 2)? Test-first for all new code? See `DEVELOPMENT.md`.

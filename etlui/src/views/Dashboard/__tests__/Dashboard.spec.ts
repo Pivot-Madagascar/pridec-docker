@@ -45,7 +45,7 @@ const item = (name: string, status = 'pending', launchable = false) => ({ item: 
 
 function state(overrides: object = {}) {
   return {
-    cycle: '202610', cycle_state: 'open', current_step: 'data_import', run: null, lock: null, dry_run: false,
+    cycle: '202610', cycle_state: 'open', current_step: 'data_import', run: null, lock: null, test_mode: false, dry_run: true,
     steps: [
       { step: 'data_import', done: false, accessible: true, items: [{ ...item('import_gee', 'success', true), updated_at: '2026-10-13T14:02:11' }, item('build_analytics')] },
       { step: 'forecast', done: false, accessible: false, items: [item('config/Malaria')] },
@@ -96,6 +96,7 @@ describe('Dashboard', () => {
 
     const html = wrapper.html()
     expect(html.indexOf('mode-toggle')).toBeLessThan(html.indexOf('Data Import'))
+    expect(wrapper.text()).toContain('DHIS2: DRYRUN on (.env), nothing is written.') // read only, from GET /pipeline/checkpoints
 
     await wrapper.findAll('.mode-btn').find(b => b.text() === 'YES')!.trigger('click')
     await flushPromises()

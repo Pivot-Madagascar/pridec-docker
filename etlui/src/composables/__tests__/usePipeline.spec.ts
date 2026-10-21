@@ -29,7 +29,7 @@ vi.mock('@/composables/useNotification', () => ({ useNotification: () => ({ show
 
 import { usePipeline, POLL_MS } from '@/composables/usePipeline'
 
-const STATE = { cycle: '202610', lock: null, dry_run: false, steps: [] }
+const STATE = { cycle: '202610', lock: null, test_mode: false, dry_run: true, steps: [] }
 const LOCKED = { ...STATE, lock: { job_id: 'import_gee_1', task: 'import_gee', acquired_at: 't' } }
 const conflict = (data: object) => ({ response: { status: 409, data } })
 
@@ -107,7 +107,7 @@ describe('usePipeline', () => {
   })
 
   it('drops the action when the user cancels the confirmation', async () => {
-    setMode.mockRejectedValue(conflict({ code: 'confirmation_required', message: 'Leaving test mode…', impact: { mode: 'dry_run' } }))
+    setMode.mockRejectedValue(conflict({ code: 'confirmation_required', message: 'Leaving test mode…', impact: { mode: 'test_mode' } }))
     const { setMode: switchMode, pending, cancel } = usePipeline(addActivity)
 
     await switchMode(false)

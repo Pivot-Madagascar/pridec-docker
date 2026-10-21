@@ -1,18 +1,23 @@
 <template>
-  <!-- Before step 1: the mode applies to the whole cycle (DRYRUN on the server). -->
-  <section class="mode-toggle" :class="{ 'is-test': dryRun }">
+  <!-- Before step 1: the mode applies to the whole cycle (TEST_MODE on the server). DHIS2 writes follow DRYRUN (.env). -->
+  <section class="mode-toggle" :class="{ 'is-test': testMode }">
     <div class="mode-text">
       <span class="mode-label">Test mode</span>
       <span class="mode-hint">
-        <template v-if="dryRun">DRYRUN on: nothing is written to DHIS2, the checkpoints live in Redis only.</template>
-        <template v-else>Production: jobs write to DHIS2.</template>
+        <template v-if="testMode">Test cycle: checkpoints, runs and uploads are kept apart from production.</template>
+        <template v-else>Production cycle.</template>
+      </span>
+      <!-- Read only: DRYRUN is set in the root .env, not here -->
+      <span v-if="dryRun !== undefined" class="mode-hint" :class="{ 'mode-warn': testMode && !dryRun }">
+        <template v-if="dryRun">DHIS2: DRYRUN on (.env), nothing is written.</template>
+        <template v-else>DHIS2: DRYRUN off (.env), jobs write to DHIS2{{ testMode ? ', even in test mode' : '' }}.</template>
       </span>
     </div>
     <div class="mode-buttons" role="group" aria-label="Test mode">
-      <button type="button" :class="['mode-btn', { active: dryRun === false }]" :disabled="disabled || dryRun === false" @click="emit('change', false)">
+      <button type="button" :class="['mode-btn', { active: testMode === false }]" :disabled="disabled || testMode === false" @click="emit('change', false)">
         NO
       </button>
-      <button type="button" :class="['mode-btn', { active: dryRun === true }]" :disabled="disabled || dryRun === true" @click="emit('change', true)">
+      <button type="button" :class="['mode-btn', { active: testMode === true }]" :disabled="disabled || testMode === true" @click="emit('change', true)">
         YES
       </button>
     </div>
@@ -21,12 +26,13 @@
 
 <script setup lang="ts">
 defineProps<{
-  dryRun: boolean | undefined // unknown until the first read of the state
+  testMode: boolean | undefined // unknown until the first read of the state
+  dryRun: boolean | undefined
   disabled?: boolean
 }>()
 
 const emit = defineEmits<{
-  change: [dryRun: boolean]
+  change: [testMode: boolean]
 }>()
 </script>
 
@@ -64,6 +70,10 @@ const emit = defineEmits<{
 .mode-hint {
   font-size: 0.8125rem;
   color: #94a3b8;
+}
+
+.mode-hint.mode-warn {
+  color: #fca5a5;
 }
 
 .mode-buttons {

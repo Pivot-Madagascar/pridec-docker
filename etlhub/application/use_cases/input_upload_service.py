@@ -102,7 +102,7 @@ class InputUploadService:
         return f"input/{file_name}"
 
     def _mode(self) -> str:
-        return "test" if self._gate.progress()["dry_run"] else "production"
+        return "test" if self._gate.progress()["test_mode"] else "production"
 
     def defaults(self) -> dict[str, dict]:
         """Default files of the current mode: item (config/<disease>, external_data/<level>) → {filename, size}."""

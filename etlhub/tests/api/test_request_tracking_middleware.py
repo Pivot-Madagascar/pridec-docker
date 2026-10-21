@@ -112,6 +112,6 @@ def test_a_confirmation_request_is_recorded_with_its_code(app, recorded, checkpo
 def test_a_journaled_request_is_recorded_and_flagged_for_the_journal(app, recorded, monkeypatch):
     monkeypatch.setattr(get_settings(), "tracked_endpoints", "/nothing")
 
-    TestClient(app).put("/pipeline/mode", json={"dry_run": True})
+    TestClient(app).put("/pipeline/mode", json={"test_mode": True})
 
     assert recorded[-1]["journal"] is True

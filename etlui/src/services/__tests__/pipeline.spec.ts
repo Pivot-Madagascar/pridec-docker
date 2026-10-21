@@ -72,10 +72,10 @@ describe('pipeline service', () => {
   })
 
   it('switches the mode with PUT /pipeline/mode', async () => {
-    put.mockResolvedValue({ data: { dry_run: false } })
+    put.mockResolvedValue({ data: { test_mode: false } })
 
     expect(await pipeline.setMode(false, true)).toBe(false)
-    expect(put).toHaveBeenCalledWith('/pipeline/mode', { dry_run: false }, CONFIRM)
+    expect(put).toHaveBeenCalledWith('/pipeline/mode', { test_mode: false }, CONFIRM)
   })
 
   it('chooses the cycle with PUT /pipeline/cycle, null for the current month', async () => {

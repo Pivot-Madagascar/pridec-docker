@@ -41,7 +41,8 @@ export interface Checkpoints {
   current_step: StepName | null
   run: ForecastRun | null
   lock: PipelineLock | null
-  dry_run: boolean
+  test_mode: boolean // TEST_MODE: where the pipeline state lives, switched by PUT /pipeline/mode
+  dry_run: boolean // DRYRUN of the root .env, read only: whether the scripts write to DHIS2
   steps: PipelineStep[]
 }
 

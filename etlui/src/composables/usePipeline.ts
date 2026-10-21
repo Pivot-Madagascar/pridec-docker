@@ -107,7 +107,7 @@ export function usePipeline(addActivity: AddActivity) {
     decide: (decision: 'approve' | 'reject') => act(decision === 'approve' ? 'Approve forecast' : 'Reject forecast', () => pipeline.decideRun(decision)),
     skipAlerts: () => act('Skip alert thresholds', () => pipeline.skipAlerts()),
     decideImports: (decision: 'approve' | 'reject') => act(decision === 'approve' ? 'Approve imports' : 'Reject imports', () => pipeline.decideImports(decision)),
-    setMode: (dryRun: boolean) => act(dryRun ? 'Switch to test mode' : 'Switch to production', c => pipeline.setMode(dryRun, c)),
+    setMode: (testMode: boolean) => act(testMode ? 'Switch to test mode' : 'Switch to production', c => pipeline.setMode(testMode, c)),
     setCycle: (cycle: string | null) => act(`Cycle ${cycle ?? 'of the current month'}`, () => pipeline.setCycle(cycle)),
     releaseLock: () => act('Release lock', () => pipeline.releaseLock()),
     upload: (name: InputName, file: File) => act(`Upload ${name}`, c => uploadInputFile(name, file, c)),
