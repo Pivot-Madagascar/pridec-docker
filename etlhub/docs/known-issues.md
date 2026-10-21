@@ -76,7 +76,7 @@ Fixed: the five separate Redis clients.
 ## 5. Tests
 
 - 102 tests pass, 1 integration test deselected. Coverage of the sources (`api`, `application`, `core`, `domain`, `infrastructure`) is **70 %**; `infrastructure` 61 %, `etl_logs.py` 23 %, `job_store.py` 26 %, auth 83–95 %.
-- **P3** — `etlhub/pytest.ini` uses `[tool:pytest]`: the file is ignored, hence the `PytestUnknownMarkWarning` for `integration`. Fix: rename the header to `[pytest]`.
+- ~~**P3** — `etlhub/pytest.ini` used `[tool:pytest]`, so the file was ignored.~~ Fixed 2026-10-21: header renamed to `[pytest]` (CI broke on `No module named 'tests'` without its `pythonpath = .`).
 - **P3** — `test_tracking_router.py:10,22,34` patch `etlhub.core.dependencies.get_tracking_service`, which has no effect; the tests pass thanks to `override_dependencies`.
 - **P3** — Redis is a global `MagicMock` in `conftest.py`; only the auth tests use an in-memory fake. A green test says nothing about real Redis behaviour (the auth store was checked once against a real Redis 7.0.15 by hand).
 - **P3** — `conftest.py` does not mock `ee`. No linter, formatter or type checker, no git hook. CI runs `pytest --cov` without threshold.

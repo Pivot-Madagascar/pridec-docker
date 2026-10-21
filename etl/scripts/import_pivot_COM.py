@@ -14,7 +14,7 @@ Usage:
 
 Notes:
 -   This requires `PIVOT_URL` and `PIVOT_TOKEN` in .env
--   The fokontany imported are limited to those that were supported from YEAR.
+-   The fokontany imported are all level 6 orgUnits under `PARENT_OU` (comma-separated for several) in the Pivot instance.
 """)
 
 def parse_args():
@@ -24,11 +24,12 @@ def parse_args():
     return parser.parse_args()
 
 def import_pivot_com():
-    from etl.scripts.config import get_dhis_url, get_dhis_token, get_dry_run, PIVOT_URL, PIVOT_TOKEN, setup_logging, check_envvars
+    from etl.scripts.config import get_dhis_url, get_dhis_token, get_dry_run,  get_parent_ou, PIVOT_URL, PIVOT_TOKEN, setup_logging, check_envvars
 
     DHIS_URL = get_dhis_url()
     DHIS_TOKEN = get_dhis_token()
     DRYRUN = get_dry_run()
+    PARENT_OU = get_parent_ou()
 
     setup_logging()
 
@@ -39,6 +40,7 @@ def import_pivot_com():
                 'DHIS_URL': DHIS_URL,
                 'PIVOT_TOKEN': PIVOT_TOKEN,
                 'PIVOT_URL': PIVOT_URL,
+                'PARENT_OU' : PARENT_OU
             }
     )
 
@@ -51,23 +53,9 @@ def import_pivot_com():
 
     period_list = create_period_range(start = (date.today()-relativedelta(months=8)))
 
-    #fokontany for which we have enough data
-    com_ids = [
-        "nkoqILeLIGJ", "NGjuCieFofW", "NGk42ableWs", "NgNK7cFJDLR", "ngOUK2x3rO8", "nGswNcrtBCW", "NGuHJF8vef8", "NGxXvp7qi48",
-        "nh1SDW0DuQP", "NH6km4XsRdx", "NhBFAojLAnq", "NhcIarFZ0gg", "nHeDldiT3lB", "NhgHicA7zmx", "NHGlRwg0Qwu", "nhp8hOvQUT3",
-        "NhPMW9k508q", "nhR0Pat5DlD", "NHsAEr2hrhx", "NHTwonuDKC6", "nHTZ72jAFvv", "NHvhM6egCml", "NHVkAeLFPcK", "ni2fhsEBQV4",
-        "Ni6HLgy72nt", "nI8ROa8oOxH", "niA2fAJNCjN", "nIcna9odW5i", "NIF2yn3SFhU", "NiGaS2wQ7nC", "nIhczINg82d", "niiqdtu9lFU",
-        "NioaQKw6eR8", "NiOIIht8nBW", "NiPVq9fdj9I", "niPWWDnI4AE", "Niqsy6XdJfM", "niqxHXfJaZg", "nit1VMYMSEc", "nIU59blKoSz",
-        "nJ41cDAbDTK", "njF5rCZeEin", "NjFmT8vGYte", "nJg2gFtkEQG", "NjgEEmvRRTt", "njIuCDYoiFv", "nkIbspPvmRh", "nKiccllE1Gt",
-        "NKnlmpvCHID", "NkUoPHdmiA2", "NKVKLTSXOa9", "nKX9oIy5HTw", "nKzUk8iUYao", "Nl3gjVEOoCS", "nL4inf71e6v", "NlA2gFHEn2e",
-        "NLbaZ2vV52C", "nLcJCGOmAq5", "Nle2yV3LLqH", "NlgNaSRnFOb", "NLhVCk2cWFQ", "nLJ2df5ihXt", "Nlj6ztotjaY", "nll5Vf4HO0u",
-        "nlLJxsMVKbi", "nlyV8TTcLAC", "nm0fEIqvkKG", "nm0HDq47aqP", "nObSjXaMtmC", "NocwbwPY49A", "NoDz1A2X03y", "NOf5U0kPmmS",
-        "noGSitwu1YV", "NojOuDYO6d9", "NOKJwSSC9yV", "nongBlHhnBk", "NoTbIakXnYE", "noTUS4NpOt9", "NOUicYmzdkM", "nOvkLuoAvaE",
-        "NoYX2eHiThV", "Np9zQuuUkT0", "npDsoxdC4tm", "nPErooJK6FG", "NPG9aF3lhTC", "nPjsBwjNwN5", "nPKeJthEM73", "NpOSpQvGHoL",
-        "NPoWFLdHHLc", "nPUb0c5EcMk", "nPX6RxV9I6v"
-    ]
-
-    com_org_query = f"ou:{';'.join(com_ids)}"
+    
+    com_org_query = f"ou:LEVEL-6;{';'.join(p.strip() for p in PARENT_OU.split(',') if p.strip())}"
+    logger.info("Importing level 6 orgUnits (fokontany) under %s", PARENT_OU)
 
     ##  -------------------Total Consultations ---------------
     # This is used to identify missing data vs. zeroes
