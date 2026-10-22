@@ -1,5 +1,6 @@
 import os
 import sys
+from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Request
 from fastapi.dependencies.utils import get_flat_dependant
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -23,14 +24,25 @@ from etlhub.api.auth import auth_router, get_current_user
 from etlhub.api.auth.dhis2_auth import SESSION_COOKIE
 from etlhub.api.routers import NOT_AUTHENTICATED
 from etlhub.core.request_context import request_context
+from etlhub.infrastructure.config_store import ConfigStore
 from etlhub.domain.exceptions import (
     ETLException, JobNotFoundError, ValidationError, PipelineBlockedError, ConfirmationRequiredError,
 )
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # .env is the default of the editable config: copied into Redis at each start, overwriting etlui's changes.
+    # No start on stale Redis values (e.g. DRYRUN=false while .env says true).
+    if not ConfigStore().load_env():
+        raise RuntimeError("Could not load the .env config into Redis (app:config:dynamic): is Redis running?")
+    yield
+
 
 app = FastAPI(
     title="Hub Center API",
     description="Hub Center application",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(RequestTrackingMiddleware)

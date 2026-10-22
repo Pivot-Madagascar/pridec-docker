@@ -8,12 +8,12 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 
 # The repo root .env by default. ENV_FILE overrides it, e.g. .env.debug in the
 # VS Code launch configurations (local debugging only).
-_env_file = os.getenv("ENV_FILE", str(_PROJECT_ROOT.parent / ".env"))
+ENV_FILE = os.getenv("ENV_FILE", str(_PROJECT_ROOT.parent / ".env"))
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=_env_file,
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="allow",
     )

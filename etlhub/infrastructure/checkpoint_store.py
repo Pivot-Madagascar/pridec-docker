@@ -170,7 +170,7 @@ TEST_MODE_KEY = "pipeline:test_mode"
 
 
 def dry_run_enabled() -> bool:
-    """DRYRUN as the ETL scripts read it: the root .env (etlhub no longer writes it to Redis), default true."""
+    """DRYRUN as the ETL scripts read it: Redis, loaded from .env at each API start (main.py lifespan), default true."""
     from etl.scripts.config import get_dry_run
     return get_dry_run()
 
@@ -178,15 +178,13 @@ def dry_run_enabled() -> bool:
 def test_mode_enabled() -> bool:
     """TEST_MODE: etlhub's own test mode (Redis), switched by PUT /pipeline/mode only. Independent of DRYRUN.
 
-    ponytail: one-time migration from the days DRYRUN was also the test mode. The first read starts in the mode DRYRUN
-    gave, then removes DRYRUN from Redis so that the scripts read .env again. Delete once every deployment ran it.
+    ponytail: one-time migration from the days DRYRUN was also the test mode: the first read starts in the mode DRYRUN
+    gives. DRYRUN stays in Redis (the API reloads it from .env at each start). Delete once every deployment ran it.
     """
     value = get_redis().get(TEST_MODE_KEY)
     if value is None:
         value = "true" if dry_run_enabled() else "false"
         get_redis().set(TEST_MODE_KEY, value, nx=True)
-        if not ConfigStore().delete_keys(["DRYRUN"]):
-            raise ETLException("Could not remove the old DRYRUN from Redis")
     return value == "true"
 
 

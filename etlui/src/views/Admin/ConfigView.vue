@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useConfigStore } from '@/stores/config'
+import { LOG_LEVELS, type ConfigUpdate } from '@/types/config'
 
 const configStore = useConfigStore()
 // DHIS2 URL and token come from the login and are read-only here.
@@ -13,19 +14,28 @@ const tokenStatus = computed(() => {
 const form = ref({
   parent_ou: '',
   ou_level: '' as number | string | null,
-  disease_code: ''
+  disease_code: '',
+  log_level: '',
+  gee_variables: ''
 })
 const showSuccess = ref(false)
 
+// etlhub copies these values from .env into Redis at each start: a change here lasts until the next restart.
+const fillForm = () => {
+  const config = configStore.config
+  if (!config) return
+  form.value = {
+    parent_ou: config.parent_ou || '',
+    ou_level: config.ou_level ?? '',
+    disease_code: config.disease_code || '',
+    log_level: config.log_level || '',
+    gee_variables: config.gee_variables || ''
+  }
+}
+
 onMounted(async () => {
   await configStore.fetchConfig()
-  if (configStore.config) {
-    form.value = {
-      parent_ou: configStore.config.parent_ou || '',
-      ou_level: configStore.config.ou_level ?? '',
-      disease_code: configStore.config.disease_code || ''
-    }
-  }
+  fillForm()
 })
 
 const handleSave = async () => {
@@ -33,7 +43,10 @@ const handleSave = async () => {
   const payload = {
     parent_ou: form.value.parent_ou || null,
     ou_level: form.value.ou_level ? Number(form.value.ou_level) : null,
-    disease_code: form.value.disease_code || null
+    disease_code: form.value.disease_code || null,
+    log_level: (form.value.log_level || null) as ConfigUpdate['log_level'],
+    // '' is sent as is: it means all GEE variables
+    gee_variables: form.value.gee_variables.trim()
   }
   try {
     await configStore.updateConfig(payload)
@@ -50,13 +63,7 @@ const handleReload = async () => {
   }
   try {
     await configStore.reloadConfig()
-    if (configStore.config) {
-      form.value = {
-        parent_ou: configStore.config.parent_ou || '',
-        ou_level: configStore.config.ou_level ?? '',
-        disease_code: configStore.config.disease_code || ''
-      }
-    }
+    fillForm()
     showSuccess.value = true
     setTimeout(() => showSuccess.value = false, 3000)
   } catch (e) {
@@ -125,6 +132,27 @@ const handleReload = async () => {
         />
       </div>
 
+      <div class="form-group">
+        <label for="log_level">Log level</label>
+        <select id="log_level" v-model="form.log_level">
+          <option value="">Default (INFO)</option>
+          <option v-for="level in LOG_LEVELS" :key="level" :value="level">{{ level }}</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="gee_variables">GEE variables</label>
+        <input
+          id="gee_variables"
+          v-model="form.gee_variables"
+          type="text"
+          pattern="[A-Za-z0-9_]+( *, *[A-Za-z0-9_]+)*"
+          placeholder="Empty = all variables (comma-separated names)"
+        />
+      </div>
+
+      <p class="hint">Values are reset from .env each time etlhub starts.</p>
+
       <div class="button-group">
         <button @click="handleSave" :disabled="configStore.loading" class="submit-btn">
           {{ configStore.loading ? 'Saving...' : 'Save' }}
@@ -160,12 +188,17 @@ const handleReload = async () => {
   @apply block text-sm font-medium text-white;
 }
 
-.form-group input {
+.form-group input,
+.form-group select {
   @apply w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 transition-colors;
 }
 
 .form-group input[readonly] {
   @apply opacity-60 cursor-not-allowed;
+}
+
+.hint {
+  @apply text-xs text-gray-400;
 }
 
 .token-status {

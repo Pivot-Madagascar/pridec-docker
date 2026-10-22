@@ -14,22 +14,19 @@ get_settings()
 
 from etl.scripts import config  # noqa: E402
 
-_EDITABLE_KEYS = {"PARENT_OU", "OU_LEVEL", "DISEASE_CODE", "DRYRUN", "LOG_LEVEL"}
-
-
 class DHIS2SessionError(RuntimeError):
     pass
 
 
 def _get(key: str, default=None) -> str | None:
-    """Editable keys: Redis first, then the environment / .env. A Redis error fails the job instead of
-    silently running on .env values."""
-    if key in _EDITABLE_KEYS:
-        from etlhub.infrastructure.config_store import CONFIG_KEY
-        from etlhub.infrastructure.redis_client import get_redis
+    """Editable keys (config_store.EDITABLE_KEYS): Redis only, loaded from .env at API start; absent = the default.
+    A Redis error fails the job instead of silently running on .env values. Other keys: the environment / .env."""
+    # Imported here, not at module level: this module loads with the etlhub package, before tests mock redis.
+    from etlhub.infrastructure.config_store import CONFIG_KEY, EDITABLE_KEYS
+    from etlhub.infrastructure.redis_client import get_redis
+    if key in EDITABLE_KEYS:
         value = get_redis().hget(CONFIG_KEY, key)
-        if value is not None:
-            return value.strip()
+        return value.strip() if value is not None else default
     return os.getenv(key, default)
 
 

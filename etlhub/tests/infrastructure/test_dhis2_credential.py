@@ -56,13 +56,17 @@ class _Redis:
         return self.values.get(field)
 
 
-def test_editable_keys_come_from_redis_then_env(monkeypatch):
+def test_editable_keys_come_from_redis_only(monkeypatch):
     monkeypatch.setattr(redis_client, "get_redis", lambda: _Redis({"OU_LEVEL": " 5 "}))
     monkeypatch.setenv("OU_LEVEL", "6")
     monkeypatch.setenv("PARENT_OU", "ou_env")
+    monkeypatch.setenv("DRYRUN", "false")
+    monkeypatch.setenv("PIVOT_URL", "https://pivot.test")
 
     assert config.get_ou_level() == "5"
-    assert config.get_parent_ou() == "ou_env"
+    assert config.get_parent_ou() is None  # absent from Redis: the default, not .env
+    assert config.get_dry_run() is True
+    assert script_config._get("PIVOT_URL") == "https://pivot.test"  # not editable: the environment
 
 
 def test_redis_down_fails_the_job_instead_of_using_env(monkeypatch):

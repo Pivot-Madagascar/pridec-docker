@@ -851,7 +851,7 @@ def test_a_store_keyed_by_month_is_split_into_passes_at_each_cycle_closed(checkp
     assert checkpoint_store.cycles() == [cycle]  # migrated once: the ids stay
 
 
-def test_test_mode_starts_from_the_old_dryrun_once_then_leaves_dryrun_to_env(monkeypatch):
+def test_test_mode_starts_from_dryrun_once_then_is_independent(monkeypatch):
     from etlhub.infrastructure import checkpoint_store as module
 
     class Redis(dict):
@@ -859,17 +859,15 @@ def test_test_mode_starts_from_the_old_dryrun_once_then_leaves_dryrun_to_env(mon
             if not (nx and key in self):
                 self[key] = value
 
-    redis, removed = Redis(), []
+    redis = Redis()
     monkeypatch.setattr(module, "get_redis", lambda: redis)
-    monkeypatch.setattr(module, "ConfigStore", lambda: type("C", (), {"delete_keys": lambda self, keys: removed.extend(keys) or True})())
     monkeypatch.setattr(module, "dry_run_enabled", lambda: True)  # the pipeline was in test mode through DRYRUN
 
     assert module.test_mode_enabled() is True
-    assert removed == ["DRYRUN"]  # the scripts read DRYRUN from .env again
 
-    monkeypatch.setattr(module, "dry_run_enabled", lambda: False)
+    monkeypatch.setattr(module, "dry_run_enabled", lambda: True)
     module.write_test_mode(False)
-    assert module.test_mode_enabled() is False and removed == ["DRYRUN"]  # TEST_MODE alone from now on
+    assert module.test_mode_enabled() is False  # TEST_MODE alone from now on
 
 
 def test_test_mode_and_dryrun_are_independent(checkpoint_store):
