@@ -74,8 +74,8 @@ describe('pipeline service', () => {
   it('switches the mode with PUT /pipeline/mode', async () => {
     put.mockResolvedValue({ data: { test_mode: false } })
 
-    expect(await pipeline.setMode(false, true)).toBe(false)
-    expect(put).toHaveBeenCalledWith('/pipeline/mode', { test_mode: false }, CONFIRM)
+    expect(await pipeline.setMode(false)).toBe(false)
+    expect(put).toHaveBeenCalledWith('/pipeline/mode', { test_mode: false })
   })
 
   it('chooses the cycle with PUT /pipeline/cycle, null for the current month', async () => {
@@ -105,12 +105,23 @@ describe('cycle journal', () => {
     expect(get).toHaveBeenCalledWith('/pipeline/cycles')
   })
 
-  it('reads the journal of a cycle and builds the CSV link', async () => {
+  it('reads the journal of a pass and builds the CSV link', async () => {
     get.mockResolvedValue({ data: [{ event: 'launched' }] })
 
-    expect(await pipeline.getJournal('202610')).toEqual([{ event: 'launched' }])
-    expect(get).toHaveBeenCalledWith('/pipeline/cycles/202610/journal')
-    expect(pipeline.journalCsvUrl('202610')).toBe('http://localhost:8111/pipeline/cycles/202610/journal.csv')
+    expect(await pipeline.getJournal('3f9c1a2b')).toEqual([{ event: 'launched' }])
+    expect(get).toHaveBeenCalledWith('/pipeline/passes/3f9c1a2b/journal')
+    expect(pipeline.journalCsvUrl('3f9c1a2b')).toBe('http://localhost:8111/pipeline/passes/3f9c1a2b/journal.csv')
+  })
+
+  it('pauses the active pass, resumes or abandons one by its id', async () => {
+    post.mockResolvedValue({ data: { id: '3f9c1a2b', state: 'paused' } })
+
+    await pipeline.pausePass()
+    await pipeline.resumePass('3f9c1a2b')
+    await pipeline.abandonPass('3f9c1a2b')
+
+    expect(post.mock.calls).toEqual([
+      ['/pipeline/passes/current/pause'], ['/pipeline/passes/3f9c1a2b/resume'], ['/pipeline/passes/3f9c1a2b/abandon']])
   })
 })
 

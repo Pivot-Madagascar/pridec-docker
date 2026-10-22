@@ -31,13 +31,13 @@ def upload_app(app, tmp_path):
 def test_checkpoints_of_a_new_cycle(client):
     body = client.get("/pipeline/checkpoints").json()
 
-    assert (body["current_step"], body["cycle_state"], body["run"], body["lock"]) == ("data_import", "open", None, None)
+    assert (body["current_step"], body["run"], body["lock"]) == ("data_import", None, None)
     assert [s["accessible"] for s in body["steps"]] == [True, False, False]
     assert body["steps"][0]["items"][0]["launchable"] is True
 
 
-def test_checkpoints_rejects_a_bad_cycle(client):
-    assert client.get("/pipeline/checkpoints", params={"cycle": "2026-10"}).status_code == 422
+def test_checkpoints_rejects_a_bad_pass_id(client):
+    assert client.get("/pipeline/checkpoints", params={"pass_id": "2026-10"}).status_code == 422
 
 
 def test_launching_out_of_order_is_refused_with_409(client, queue):
@@ -199,11 +199,7 @@ def test_mode_switch_through_the_api(client, checkpoint_store):
     assert client.put("/pipeline/mode", json={"test_mode": True}).json() == {"test_mode": True}
     _import(checkpoint_store)
 
-    refused = client.put("/pipeline/mode", json={"test_mode": False})
-    accepted = client.put("/pipeline/mode", json={"test_mode": False}, params={"confirm": "true"})
-
-    assert refused.status_code == 409 and refused.json()["code"] == "confirmation_required"
-    assert accepted.json() == {"test_mode": False}
+    assert client.put("/pipeline/mode", json={"test_mode": False}).json() == {"test_mode": False}  # nothing discarded
     assert client.get("/pipeline/checkpoints").json()["test_mode"] is False
 
 
@@ -254,39 +250,55 @@ def journal_client(app):
     app.dependency_overrides.pop(get_request_tracker_repo)
 
 
-def test_the_journal_lists_events_with_the_request_that_caused_them(journal_client):
-    from etlhub.domain.pipeline import this_month
-    journal_client.put("/pipeline/mode", json={"test_mode": True})
+def test_the_journal_lists_events_with_the_request_that_caused_them(journal_client, queue):
+    journal_client.post("/import_gee")  # the first launch starts the pass
+    pass_id = journal_client.get("/pipeline/checkpoints").json()["pass"]["id"]
 
-    events = journal_client.get(f"/pipeline/cycles/{this_month()}/journal").json()
+    events = journal_client.get(f"/pipeline/passes/{pass_id}/journal").json()
 
-    assert [(e["event"], e["detail"], e["mode"]) for e in events] == [("mode_changed", {"to": "test"}, "production")]
-    assert (events[0]["request"]["method"], events[0]["request"]["status_code"]) == ("PUT", 200)
-    assert journal_client.get("/pipeline/cycles/2026-10/journal").status_code == 422
+    assert [(e["event"], e["mode"]) for e in events] == [("pass_started", "production")]  # the launch: still running
+    assert (events[0]["request"]["method"], events[0]["request"]["status_code"]) == ("POST", 202)
+    assert journal_client.get("/pipeline/passes/2026-10/journal").status_code == 422
 
 
-def test_the_journal_csv_is_for_administrators(journal_client, app):
+def test_the_journal_csv_is_for_administrators(journal_client, app, queue):
     from etlhub.api.auth import get_current_user
-    journal_client.put("/pipeline/mode", json={"test_mode": True})
+    journal_client.post("/import_gee")
+    pass_id = journal_client.get("/pipeline/checkpoints").json()["pass"]["id"]
 
-    response = journal_client.get("/pipeline/cycles/202610/journal.csv")
+    response = journal_client.get(f"/pipeline/passes/{pass_id}/journal.csv")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/csv")
-    assert response.text.splitlines()[0].startswith("at,mode,cycle,step,item,event,actor")
+    assert response.text.splitlines()[0].startswith("at,mode,cycle,pass_id,step,item,event,actor")
 
     app.dependency_overrides[get_current_user] = lambda: {"username": "op", "is_admin": False}
-    assert journal_client.get("/pipeline/cycles/202610/journal.csv").status_code == 403
+    assert journal_client.get(f"/pipeline/passes/{pass_id}/journal.csv").status_code == 403
 
 
-def test_the_logged_in_user_is_the_actor_of_the_events(anon_app, monkeypatch):
+def test_the_logged_in_user_is_the_actor_of_the_events(anon_app, monkeypatch, checkpoint_store):
     from etlhub.api.auth import dhis2_auth
-    from etlhub.domain.pipeline import this_month
     from etlhub.infrastructure.checkpoint_store import get_checkpoint_store
     monkeypatch.setattr(dhis2_auth, "user_from_cookies", lambda cookies: {"username": "jdoe", "is_admin": True})
+    checkpoint_store.start("import_gee", "g")
+    checkpoint_store.finish("g", "success")
 
-    TestClient(anon_app).put("/pipeline/mode", json={"test_mode": True})
+    paused = TestClient(anon_app).post("/pipeline/passes/current/pause").json()
 
-    assert [e["actor"] for e in get_checkpoint_store().journal(this_month())] == ["jdoe"]
+    assert [(e["event"], e["actor"]) for e in get_checkpoint_store().journal(paused["id"])][-1] == ("paused", "jdoe")
+
+
+def test_pause_resume_and_abandon_through_the_api(client, checkpoint_store):
+    checkpoint_store.start("import_gee", "g")
+    checkpoint_store.finish("g", "success")
+
+    paused = client.post("/pipeline/passes/current/pause").json()
+    assert paused["state"] == "paused"
+    assert client.post("/pipeline/passes/current/pause").status_code == 409  # nothing active any more
+    assert client.post(f"/pipeline/passes/{paused['id']}/resume").json()["state"] == "active"
+    assert client.post(f"/pipeline/passes/{paused['id']}/abandon").json()["state"] == "abandoned"
+    refused = client.post(f"/pipeline/passes/{paused['id']}/resume")
+    assert (refused.status_code, refused.json()["message"]) == (409, f"Pass {paused['id']} is abandoned: it cannot be resumed")
+    assert client.post("/pipeline/passes/nothex!/resume").status_code == 422
 
 
 
@@ -308,9 +320,7 @@ def test_the_csv_keeps_the_event_job_id_and_adds_the_request():
 def test_the_cycles_route_lists_the_target_cycle(client):
     from etlhub.domain.pipeline import this_month
 
-    assert client.get("/pipeline/cycles").json() == [
-        {"cycle": this_month(), "state": "open", "test_state": None, "target": True, "events": 0, "test_events": 0,
-         "last_at": None}]
+    assert client.get("/pipeline/cycles").json() == [{"cycle": this_month(), "target": True, "passes": []}]
 
 
 def test_journal_shows_a_job_once_at_its_end_with_its_launch_request():

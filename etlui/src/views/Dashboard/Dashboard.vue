@@ -6,18 +6,23 @@
         <template v-if="state">
           <label>
             Cycle
-            <!-- The server keeps the choice; picking the current month follows the calendar again. -->
+            <!-- The month the next pass starts on; picking the current month follows the calendar again. -->
             <input
               type="month"
               class="cycle-input"
               :value="`${state.cycle.slice(0, 4)}-${state.cycle.slice(4)}`"
-              :disabled="busy || state.lock != null || state.run != null"
-              :title="state.run ? 'Finish or abandon the open run first' : 'Cycle the launches go to'"
+              :disabled="busy || state.lock != null || active"
+              :title="active ? 'Pause or abandon this cycle first' : 'Month the next launch starts a cycle on'"
               @change="changeCycle"
             />
           </label>
-          · {{ state.cycle_state === 'closed' ? 'complete' : `current step: ${state.current_step}` }}
-          · <RouterLink :to="{ name: 'Journal', query: { cycle: state.cycle } }" class="journal-link">Journal</RouterLink>
+          <template v-if="state.pass">
+            · {{ state.pass.state === 'active' ? `current step: ${state.current_step}` : state.pass.state }}
+            · started by {{ state.pass.started_by ?? '-' }}
+          </template>
+          <template v-else> · not started: the first launch starts it</template>
+          · <RouterLink :to="{ name: 'Journal', query: state.pass ? { pass: state.pass.id } : {} }" class="journal-link">Journal</RouterLink>
+          <span v-if="state.pass?.state === 'paused'" class="paused-note"> · paused: resume it from the Journal</span>
         </template>
         <template v-else>Loading the pipeline state…</template>
       </p>
@@ -70,6 +75,14 @@
           </div>
         </template>
       </Accordion>
+
+      <!-- After System Update: stop the cycle for now (resumed from the Journal), or for good. -->
+      <div v-if="active" class="pass-actions">
+        <button type="button" class="approval-btn" :disabled="busy || state?.lock != null" @click="pause">Pause the cycle</button>
+        <button type="button" class="approval-btn approval-btn-danger" :disabled="busy || state?.lock != null" @click="pendingAbandon = true">
+          Abandon the cycle
+        </button>
+      </div>
     </section>
 
     <RecentActivity :activityLog="activityLog" />
@@ -105,6 +118,17 @@
     >
       The file <strong>input/{{ pendingDelete ? FILE_LABELS[pendingDelete] : '' }}</strong> of the open run will be removed.
       Once it was used, the server asks for a confirmation and the run starts again from "Validate inputs".
+    </ConfirmDialog>
+
+    <ConfirmDialog
+      :open="pendingAbandon"
+      title="Abandon this cycle?"
+      confirm-label="Abandon"
+      @confirm="confirmAbandon"
+      @cancel="pendingAbandon = false"
+    >
+      The cycle {{ state?.cycle }} (pass {{ state?.pass?.id }}) stops for good: it cannot be resumed, and its open
+      forecast run is abandoned. Its journal stays readable. The month can be run again in a new pass.
     </ConfirmDialog>
 
     <ConfirmDialog
@@ -155,8 +179,10 @@ const accordionItems = [
 const { activityLog, addActivity } = useActivityLog()
 const {
   state, serverFiles, defaults, busy, pending, refresh, confirm, cancel,
-  launch, openRun, abandonRun, decide, decideImports, skipAlerts, setMode, setCycle, releaseLock, upload, remove, useDefault
+  launch, openRun, abandonRun, decide, decideImports, skipAlerts, setMode, setCycle, releaseLock, upload, remove, useDefault,
+  pause, abandonPass
 } = usePipeline(addActivity)
+const active = computed(() => state.value?.pass?.state === 'active')
 
 // <input type="month"> gives 'YYYY-MM' ('' when cleared = back to the current month).
 const changeCycle = (event: Event) => setCycle((event.target as HTMLInputElement).value.replace('-', '') || null)
@@ -177,6 +203,7 @@ const reportRun = ref<{ source: string; disease: string } | null>(null)
 const validating = ref(false) // opened by "Read and approve": Approve / Reject under the report
 const pendingDelete = ref<InputName | null>(null)
 const pendingRelease = ref(false)
+const pendingAbandon = ref(false)
 
 // approve_imports is a decision (Approve / Reject buttons), not a job card.
 const cards = (name: StepName) =>
@@ -203,6 +230,11 @@ const confirmDelete = async () => {
   const name = pendingDelete.value
   pendingDelete.value = null
   if (name) await remove(name)
+}
+
+const confirmAbandon = async () => {
+  pendingAbandon.value = false
+  if (state.value?.pass) await abandonPass(state.value.pass.id)
 }
 
 const confirmRelease = async () => {
@@ -284,6 +316,22 @@ onMounted(refresh)
   background: #4f46e5;
   border-color: #4f46e5;
   color: #fff;
+}
+
+.approval-btn-danger {
+  color: #f87171;
+}
+
+.pass-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.paused-note {
+  color: #fde68a;
 }
 
 .approval-btn:disabled {

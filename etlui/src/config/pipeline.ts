@@ -98,7 +98,7 @@ const PLAIN_ERRORS: [RegExp, string][] = [
   [/one job at a time/i, 'A job is already running.'],
   [/needs (an open forecast run|its forecast run open)|no forecast run is open/i, 'Open a forecast run first.'],
   [/is open: finish or abandon it first/i, 'A forecast run is already open: finish or abandon it first.'],
-  [/is complete/i, 'This cycle is complete: choose another month.'],
+  [/is paused: resume it from the Journal/i, 'This cycle is paused: resume it from the Journal, or choose another month.'],
   [/does not match the run level/i, 'This file does not match the level of this forecast run.'],
   [/administrators only/i, 'Administrators only.'],
   [/needs .* first/i, 'A previous step must be completed first.']

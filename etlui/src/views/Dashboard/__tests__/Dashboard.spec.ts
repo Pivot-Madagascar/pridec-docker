@@ -9,6 +9,8 @@ const decideRun = vi.fn()
 const decideImports = vi.fn()
 const openRun = vi.fn()
 const abandonRun = vi.fn()
+const pausePass = vi.fn()
+const abandonPass = vi.fn()
 const apiGet = vi.fn()
 const applyDefaultFile = vi.fn()
 vi.mock('@/services/pipeline', () => ({
@@ -20,6 +22,8 @@ vi.mock('@/services/pipeline', () => ({
   decideImports: (...args: unknown[]) => decideImports(...args),
   openRun: (...args: unknown[]) => openRun(...args),
   abandonRun: (...args: unknown[]) => abandonRun(...args),
+  pausePass: (...args: unknown[]) => pausePass(...args),
+  abandonPass: (...args: unknown[]) => abandonPass(...args),
   releaseLock: vi.fn()
 }))
 vi.mock('@/services/inputs', () => ({
@@ -45,7 +49,8 @@ const item = (name: string, status = 'pending', launchable = false) => ({ item: 
 
 function state(overrides: object = {}) {
   return {
-    cycle: '202610', cycle_state: 'open', current_step: 'data_import', run: null, lock: null, test_mode: false, dry_run: true,
+    cycle: '202610', current_step: 'data_import', run: null, lock: null, test_mode: false, dry_run: true,
+    pass: { id: '3f9c1a2b', cycle: '202610', state: 'active', started_at: 't', started_by: 'jdoe' },
     steps: [
       { step: 'data_import', done: false, accessible: true, items: [{ ...item('import_gee', 'success', true), updated_at: '2026-10-13T14:02:11' }, item('build_analytics')] },
       { step: 'forecast', done: false, accessible: false, items: [item('config/Malaria')] },
@@ -68,7 +73,7 @@ function forecastState(couple: string | null, items: Record<string, [string, boo
   }
   return state({
     current_step: 'forecast',
-    run: couple && { cycle: '202610', couple, state: 'open', disease_code: 'x', ou_level: '6', alert_name: null, opened_at: 't' },
+    run: couple && { pass_id: '3f9c1a2b', couple, state: 'open', disease_code: 'x', ou_level: '6', alert_name: null, opened_at: 't' },
     steps: [
       { step: 'data_import', done: true, accessible: true, items: [item('import_gee', 'success', true)] },
       { step: 'forecast', done: false, accessible: true, items: names.map(n => item(n, items[n]?.[0] ?? 'pending', items[n]?.[1] ?? false)) },
@@ -100,13 +105,15 @@ describe('Dashboard', () => {
 
     await wrapper.findAll('.mode-btn').find(b => b.text() === 'YES')!.trigger('click')
     await flushPromises()
-    expect(setMode).toHaveBeenCalledWith(true, false)
+    expect(setMode).toHaveBeenCalledWith(true)
     wrapper.unmount()
   })
 
   it('shows the cycle in a month input and sends the chosen one to the server', async () => {
     setCycle.mockResolvedValue(undefined)
+    getCheckpoints.mockResolvedValue(state({ pass: null })) // no active pass: the month can be chosen
     const wrapper = await mountPage()
+    expect(wrapper.text()).toContain('not started: the first launch starts it')
 
     const input = wrapper.find<HTMLInputElement>('input[type="month"]')
     expect(input.element.value).toBe('2026-10')
@@ -120,11 +127,36 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
-  it('locks the cycle while a run is open', async () => {
-    getCheckpoints.mockResolvedValue(forecastState('COM/Malaria'))
+  it('locks the month while a pass is active, and pauses or abandons it from the bottom of the page', async () => {
+    pausePass.mockResolvedValue({})
+    abandonPass.mockResolvedValue({})
     const wrapper = await mountPage()
 
     expect(wrapper.find('input[type="month"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('started by jdoe')
+    const html = wrapper.html()
+    expect(html.indexOf('Pause the cycle')).toBeGreaterThan(html.indexOf('System Update'))
+
+    await wrapper.findAll('button').find(b => b.text() === 'Pause the cycle')!.trigger('click')
+    await flushPromises()
+    expect(pausePass).toHaveBeenCalledTimes(1)
+
+    await wrapper.findAll('button').find(b => b.text() === 'Abandon the cycle')!.trigger('click')
+    await flushPromises()
+    expect(abandonPass).not.toHaveBeenCalled() // a confirmation first
+    await wrapper.findAll('button').find(b => b.text() === 'Abandon')!.trigger('click')
+    await flushPromises()
+    expect(abandonPass).toHaveBeenCalledWith('3f9c1a2b')
+    wrapper.unmount()
+  })
+
+  it('sends a paused cycle to the Journal, without the pass buttons', async () => {
+    getCheckpoints.mockResolvedValue(state({ pass: { id: '3f9c1a2b', cycle: '202610', state: 'paused', started_at: 't', started_by: 'jdoe' } }))
+    const wrapper = await mountPage()
+
+    expect(wrapper.text()).toContain('paused: resume it from the Journal')
+    expect(wrapper.text()).not.toContain('Pause the cycle')
+    expect(wrapper.find('input[type="month"]').attributes('disabled')).toBeUndefined()
     wrapper.unmount()
   })
 

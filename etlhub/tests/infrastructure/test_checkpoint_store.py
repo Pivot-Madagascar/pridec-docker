@@ -90,7 +90,6 @@ def test_a_new_cycle_starts_at_data_import(checkpoint_store):
     state = checkpoint_store.progress()
 
     assert state["current_step"] == "data_import"
-    assert state["cycle_state"] == "open"
     assert [s["accessible"] for s in state["steps"]] == [True, False, False]
     assert state["run"] is None and state["lock"] is None
 
@@ -156,9 +155,15 @@ def test_a_failed_step_1_relaunch_blocks_the_forecast_step_but_keeps_its_success
 # --- runs (R6) ----------------------------------------------------------------------------
 
 def test_a_run_needs_data_import_and_only_one_is_open(checkpoint_store):
+    with pytest.raises(PipelineBlockedError, match="No active pass"):
+        checkpoint_store.open_run("COM/Malaria")
+    _pass(checkpoint_store, "import_gee")  # starts the pass
     with pytest.raises(PipelineBlockedError, match="data_import done first"):
         checkpoint_store.open_run("COM/Malaria")
-    _import(checkpoint_store)
+    for task in ("import_pivot_csb", "import_pivot_com"):
+        _pass(checkpoint_store, task)
+    checkpoint_store.decide_imports("approve")
+    _pass(checkpoint_store, "build_analytics")
 
     checkpoint_store.open_run("COM/Malaria")
 
@@ -233,9 +238,10 @@ def test_closing_a_run_archives_its_report(checkpoint_store, tmp_path):
 
     checkpoint_store.open_run("ADJ/Malaria")  # empties output/
 
-    cycle = checkpoint_store.progress()["cycle"]
-    assert checkpoint_store.report(cycle, "COM/Malaria").read_text() == "<p>COM Malaria</p>"
-    assert checkpoint_store.report(cycle, "ADJ/Malaria") is None
+    pass_id = checkpoint_store.progress()["pass"]["id"]
+    assert checkpoint_store.report(pass_id, "COM/Malaria").read_text() == "<p>COM Malaria</p>"
+    assert checkpoint_store.report(None, "COM/Malaria") == checkpoint_store.report(pass_id, "COM/Malaria")
+    assert checkpoint_store.report(pass_id, "ADJ/Malaria") is None
 
 
 def test_abandoning_a_run_resets_its_items(checkpoint_store):
@@ -434,68 +440,122 @@ def test_build_analytics_fills_its_two_slots_in_order(checkpoint_store):
         checkpoint_store.start("build_analytics", "third")
 
 
-def test_the_whole_cycle_completes_then_closes_until_next_month(checkpoint_store, month):
+def test_a_complete_pass_is_frozen_and_its_month_is_redone_in_a_new_pass_with_confirm(checkpoint_store, month):
     _all_runs(checkpoint_store)
     for task in ("build_analytics", "update_key"):
         _pass(checkpoint_store, task)
+    first = checkpoint_store.progress()
+    assert (first["current_step"], first["pass"]["state"]) == (None, "complete")
 
-    state = checkpoint_store.progress()
-    assert (state["current_step"], state["cycle_state"]) == (None, "closed")
-    with pytest.raises(PipelineBlockedError, match="202610 is complete"):
+    with pytest.raises(ConfirmationRequiredError, match="202610 is complete") as refused:
         checkpoint_store.start("import_gee", "again")
+    assert refused.value.impact == {"cycle": "202610", "complete_pass": first["pass"]["id"]}
+    _pass(checkpoint_store, "import_gee", confirm=True)
 
-    month("202611")
-    checkpoint_store.start("import_gee", "next_cycle")
-    assert checkpoint_store.progress()["cycle"] == "202611"
+    second = checkpoint_store.progress()
+    assert second["pass"]["id"] != first["pass"]["id"] and second["pass"]["state"] == "active"
+    assert second["current_step"] == "data_import"  # from zero
+    assert checkpoint_store.progress(first["pass"]["id"])["current_step"] is None  # untouched
+    started = checkpoint_store.journal(second["pass"]["id"])[0]
+    assert (started["event"], started["detail"]) == ("pass_started", {"cause": "redo"})
+    assert checkpoint_store.journal(first["pass"]["id"])[-1]["event"] == "cycle_closed"  # nothing after it
 
 
-def test_a_new_month_starts_a_new_cycle_and_abandons_the_open_run(checkpoint_store, month):
+def test_a_month_change_pauses_the_calendar_pass_with_its_run_open(checkpoint_store, month):
     _import(checkpoint_store)
     checkpoint_store.open_run("COM/Malaria")
+    old = checkpoint_store.progress()["pass"]
     month("202611")
 
-    _pass(checkpoint_store, "import_gee")  # no confirmation: the switch is automatic
+    state = checkpoint_store.progress()  # the first request of the month
+    assert (state["cycle"], state["pass"], state["run"]) == ("202611", None, None)
+    paused = checkpoint_store.progress(old["id"])
+    assert (paused["pass"]["state"], paused["run"]["couple"]) == ("paused", "COM/Malaria")  # kept, to resume
+    last = checkpoint_store.journal(old["id"])[-1]
+    assert (last["event"], last["actor"], last["detail"]) == ("paused", "system", {"cause": "month_change"})
 
-    state = checkpoint_store.progress()
-    assert (state["cycle"], state["run"]) == ("202611", None)
-    old = checkpoint_store.progress("202610")
-    assert old["cycle_state"] == "open"  # unfinished, kept as history
-    assert old["run"] is None  # COM/Malaria was abandoned, not left open
-    assert _step(old, "data_import")["done"] is True
+    _pass(checkpoint_store, "import_gee")  # 202611 starts its own pass
+    assert checkpoint_store.progress()["pass"]["cycle"] == "202611"
 
 
-def test_a_chosen_cycle_takes_the_launches_until_set_back_to_the_calendar_month(checkpoint_store, month):
+def test_a_chosen_month_takes_the_next_pass_and_is_not_paused_by_the_calendar(checkpoint_store, month):
     with pytest.raises(PipelineBlockedError, match="future"):
         checkpoint_store.set_cycle("202611")
 
     assert checkpoint_store.set_cycle("202609") == {"cycle": "202609"}
     _import(checkpoint_store)
     checkpoint_store.open_run("COM/Malaria")
-    assert checkpoint_store.progress()["cycle"] == "202609"
-    assert _step(checkpoint_store.progress("202610"), "data_import")["done"] is False
-    with pytest.raises(PipelineBlockedError, match="COM/Malaria is open"):
+    assert checkpoint_store.progress()["pass"]["cycle"] == "202609"
+    with pytest.raises(PipelineBlockedError, match=r"\(202609\) is active: pause or abandon it first"):
         checkpoint_store.set_cycle(None)
 
-    month("202611")  # a chosen cycle does not follow the calendar: its run stays open
+    month("202611")  # a chosen month does not follow the calendar: its pass stays active
     assert checkpoint_store.progress()["run"]["couple"] == "COM/Malaria"
 
-    checkpoint_store.abandon_run()
-    assert checkpoint_store.set_cycle("202611") == {"cycle": "202611"}  # the calendar month: follow it again
-    month("202612")
-    assert checkpoint_store.progress()["cycle"] == "202612"
+
+def test_pause_then_resume_from_the_journal_continues_where_it_stopped(checkpoint_store, month):
+    _import(checkpoint_store)
+    checkpoint_store.open_run("COM/Malaria")
+    _pass(checkpoint_store, "fetch_disease")
+    p = checkpoint_store.pause()
+
+    assert checkpoint_store.progress()["pass"]["state"] == "paused"
+    with pytest.raises(PipelineBlockedError, match=f"Pass {p['id']} of cycle 202610 is paused"):
+        checkpoint_store.start("fetch_climate", "while_paused")
+
+    checkpoint_store.resume(p["id"])
+    state = checkpoint_store.progress()
+    assert (state["pass"]["state"], state["run"]["couple"]) == ("active", "COM/Malaria")
+    assert _status(state, "forecast", "COM/Malaria:fetch_disease") == "success"  # nothing redone
+    _pass(checkpoint_store, "fetch_climate")
+    assert [e["event"] for e in checkpoint_store.journal(p["id"]) if e["event"] in ("paused", "resumed")] == [
+        "paused", "resumed"]
 
 
-def test_a_complete_cycle_can_be_chosen_but_takes_no_launch(checkpoint_store, month):
-    _all_runs(checkpoint_store)
-    for task in ("build_analytics", "update_key"):
-        _pass(checkpoint_store, task)
-    month("202611")
+def test_pause_is_refused_while_a_job_runs(checkpoint_store):
+    checkpoint_store.start("import_gee", "busy")
 
+    with pytest.raises(PipelineBlockedError, match="one job at a time"):
+        checkpoint_store.pause()
+
+
+def test_two_months_in_turn_one_active_pass_at_a_time(checkpoint_store, month, tmp_path):
+    checkpoint_store.set_cycle("202609")
+    _import(checkpoint_store)
+    checkpoint_store.open_run("COM/Malaria")
+    _upload(checkpoint_store, content='{"m": "09"}')
+    _pass(checkpoint_store, "fetch_disease")
+    first = checkpoint_store.pause()
     checkpoint_store.set_cycle("202610")
+    _import(checkpoint_store)
+    checkpoint_store.open_run("ADJ/Malaria")  # empties input/
 
-    assert checkpoint_store.progress()["cycle_state"] == "closed"
-    with pytest.raises(PipelineBlockedError, match="202610 is complete"):
-        checkpoint_store.start("import_gee", "again")
+    with pytest.raises(PipelineBlockedError, match=r"\(202610\) is active: pause or abandon it first"):
+        checkpoint_store.resume(first["id"])
+    checkpoint_store.pause()
+    checkpoint_store.resume(first["id"])
+
+    state = checkpoint_store.progress()
+    assert (state["cycle"], state["run"]["couple"]) == ("202609", "COM/Malaria")
+    # Another run emptied input/ meanwhile: the run starts again from its fetches, its config is restored
+    assert _status(state, "forecast", "COM/Malaria:fetch_disease") == "pending"
+    assert _status(state, "forecast", "config/Malaria") == "success"
+    assert (tmp_path / "input" / "config.json").read_text() == '{"m": "09"}'
+
+
+def test_an_abandoned_pass_cannot_be_resumed_and_its_month_starts_again(checkpoint_store, month):
+    _import(checkpoint_store)
+    checkpoint_store.open_run("CSB/Malaria")
+    p = checkpoint_store.pause()
+
+    checkpoint_store.abandon(p["id"])  # a paused pass, from the journal
+
+    with pytest.raises(PipelineBlockedError, match="is abandoned: it cannot be resumed"):
+        checkpoint_store.resume(p["id"])
+    assert [e["event"] for e in checkpoint_store.journal(p["id"])][-2:] == ["run_abandoned", "abandoned"]
+    assert checkpoint_store.progress(p["id"])["run"] is None
+    _pass(checkpoint_store, "import_gee")  # no confirmation: the month was not complete
+    assert checkpoint_store.progress()["pass"]["id"] != p["id"]
 
 
 # --- files shared between runs ----------------------------------------------------------
@@ -561,26 +621,23 @@ def test_test_mode_keeps_checkpoints_in_redis_only(checkpoint_store, tmp_path):
     assert rows == [("import_gee",)]  # nothing written to the SQLite file in test mode
 
 
-def test_leaving_test_mode_needs_confirm_and_discards_the_test_data_but_its_journal(checkpoint_store):
+def test_leaving_test_mode_pauses_the_test_pass_and_keeps_its_state(checkpoint_store):
     _pass(checkpoint_store, "import_gee")
     checkpoint_store.set_mode(True)
     _import(checkpoint_store)
     checkpoint_store.open_run("CSB/Malaria")
+    test_pass = checkpoint_store.progress()["pass"]
 
-    with pytest.raises(ConfirmationRequiredError) as refused:
-        checkpoint_store.set_mode(False)
-    assert refused.value.impact["open_run"] == "CSB/Malaria"
-    assert checkpoint_store.progress()["test_mode"] is True
+    assert checkpoint_store.set_mode(False) == {"test_mode": False}  # nothing discarded: no confirmation
 
-    assert checkpoint_store.set_mode(False, confirm=True) == {"test_mode": False}
-    import sqlite3
-    blob = sqlite3.connect(":memory:")
-    blob.deserialize(checkpoint_store._blob.data)  # test data stays in Redis only: the journal, nothing else
-    assert [blob.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in ("checkpoints", "forecast_runs")] == [0, 0]
-    assert blob.execute("SELECT count(*) FROM pipeline_events").fetchone()[0] > 0
     state = checkpoint_store.progress()
     assert (state["test_mode"], state["run"]) == (False, None)
     assert _status(state, "data_import", "import_gee") == "success"  # production untouched
+    with pytest.raises(PipelineBlockedError, match=f"No pass {test_pass['id']} in production mode"):
+        checkpoint_store.resume(test_pass["id"])
+    checkpoint_store.set_mode(True)
+    checkpoint_store.resume(test_pass["id"])
+    assert checkpoint_store.progress()["run"]["couple"] == "CSB/Malaria"
 
 
 def test_switching_mode_is_refused_while_a_job_runs(checkpoint_store):
@@ -598,8 +655,13 @@ def test_leaving_an_empty_test_mode_needs_no_confirmation(checkpoint_store):
 
 # --- journal ------------------------------------------------------------------------------
 
-def _events(store, cycle="202610", **match):
-    return [(e["event"], e["item"]) for e in store.journal(cycle) if all(e[k] == v for k, v in match.items())]
+def _journal(store):
+    """The journal of the pass the Dashboard shows."""
+    return store.journal(store.progress()["pass"]["id"])
+
+
+def _events(store, **match):
+    return [(e["event"], e["item"]) for e in _journal(store) if all(e[k] == v for k, v in match.items())]
 
 
 def test_the_journal_keeps_every_attempt_and_what_a_relaunch_reset(checkpoint_store, month):
@@ -611,7 +673,7 @@ def test_the_journal_keeps_every_attempt_and_what_a_relaunch_reset(checkpoint_st
         _pass(checkpoint_store, task)
     _pass(checkpoint_store, "fetch_disease", confirm=True)
 
-    journal = checkpoint_store.journal("202610")
+    journal = _journal(checkpoint_store)
     assert [e["event"] for e in journal if e["item"] == "ADJ/Malaria:fetch_disease"] == [
         "launched", "succeeded", "launched", "succeeded"]
     relaunch = [e for e in journal if e["item"] == "ADJ/Malaria:fetch_disease" and e["event"] == "launched"][-1]
@@ -621,19 +683,19 @@ def test_the_journal_keeps_every_attempt_and_what_a_relaunch_reset(checkpoint_st
     assert ("decided", "approve_imports") in _events(checkpoint_store)
     assert ("uploaded", "config/Malaria") in _events(checkpoint_store)
     assert {e["actor"] for e in journal} == {"worker"}  # no HTTP request in these calls
-    assert {e["mode"] for e in journal} == {"production"}
+    assert {(e["mode"], e["cycle"]) for e in journal} == {("production", "202610")}
 
 
 def test_a_refusal_writes_no_event(checkpoint_store, month):
     _pass(checkpoint_store, "import_gee")
-    before = checkpoint_store.journal("202610")
+    before = _journal(checkpoint_store)
 
     with pytest.raises(PipelineBlockedError):
         checkpoint_store.start("build_analytics", "too_early")
     with pytest.raises(ConfirmationRequiredError):
         checkpoint_store.start("import_gee", "again")
 
-    assert checkpoint_store.journal("202610") == before
+    assert _journal(checkpoint_store) == before
 
 
 def test_events_carry_the_actor_and_the_request_and_flag_it(checkpoint_store, month):
@@ -646,10 +708,33 @@ def test_events_carry_the_actor_and_the_request_and_flag_it(checkpoint_store, mo
         request_context.reset(token)
     checkpoint_store.finish("import_gee_1", "success")  # the worker: no request
 
-    launched, succeeded = checkpoint_store.journal("202610")
-    assert (launched["actor"], launched["request_id"]) == ("jdoe", "req-1")
+    started, launched, succeeded = _journal(checkpoint_store)
+    assert checkpoint_store.progress()["pass"]["started_by"] == "jdoe"
+    assert (started["actor"], launched["actor"], launched["request_id"]) == ("jdoe", "jdoe", "req-1")
     assert (succeeded["actor"], succeeded["request_id"]) == ("worker", None)
     assert context["pipeline"] is True and context["journal"] is True  # tracked, kept out of the purge
+
+
+def test_each_action_keeps_its_own_user_whoever_started_the_pass(checkpoint_store, month):
+    from etlhub.core.request_context import request_context
+
+    def as_user(name, action):
+        token = request_context.set({"request_id": f"req-{name}", "actor": name})
+        try:
+            return action()
+        finally:
+            request_context.reset(token)
+
+    as_user("alice", lambda: checkpoint_store.start("import_gee", "a"))
+    checkpoint_store.finish("a", "success")
+    as_user("bob", lambda: checkpoint_store.start("import_pivot_com", "b"))
+    checkpoint_store.finish("b", "success")
+    p = as_user("bob", checkpoint_store.pause)
+    as_user("carol", lambda: checkpoint_store.resume(p["id"]))
+
+    assert p["started_by"] == "alice"
+    assert [(e["event"], e["actor"]) for e in checkpoint_store.journal(p["id"]) if e["event"] != "succeeded"] == [
+        ("pass_started", "alice"), ("launched", "alice"), ("launched", "bob"), ("paused", "bob"), ("resumed", "carol")]
 
 
 def test_a_job_that_ends_after_its_checkpoint_moved_on_is_journaled_on_its_item(checkpoint_store, month):
@@ -663,16 +748,6 @@ def test_a_job_that_ends_after_its_checkpoint_moved_on_is_journaled_on_its_item(
         ("launched", "import_gee"), ("lock_released", "import_gee"), ("succeeded", "import_gee")]
 
 
-def test_a_month_change_abandon_is_journaled_in_the_old_cycle(checkpoint_store, month):
-    _import(checkpoint_store)
-    checkpoint_store.open_run("COM/Malaria")
-    month("202611")
-    _pass(checkpoint_store, "import_gee")
-
-    abandoned = next(e for e in checkpoint_store.journal("202610") if e["event"] == "run_abandoned")
-    assert (abandoned["actor"], abandoned["detail"]) == ("system", {"couple": "COM/Malaria", "by": "month_change"})
-
-
 def test_closing_the_cycle_is_journaled_once(checkpoint_store, month):
     _all_runs(checkpoint_store)
     for task in ("build_analytics", "update_key"):
@@ -682,56 +757,98 @@ def test_closing_the_cycle_is_journaled_once(checkpoint_store, month):
     assert _events(checkpoint_store)[-1] == ("cycle_closed", None)
 
 
-def test_the_test_journal_stays_in_redis_and_is_read_with_production(checkpoint_store, month, tmp_path):
+def test_the_test_journal_stays_in_redis_and_production_never_sees_its_events(checkpoint_store, month, tmp_path):
     _pass(checkpoint_store, "import_gee")
+    production = checkpoint_store.progress()["pass"]["id"]
     checkpoint_store.set_mode(True)
     _pass(checkpoint_store, "import_pivot_com")
-    checkpoint_store.set_mode(False, confirm=True)
+    test = checkpoint_store.progress()["pass"]["id"]
+    checkpoint_store.set_mode(False)
 
-    journal = checkpoint_store.journal("202610")
-    assert [(e["mode"], e["event"], e["item"]) for e in journal] == [
-        ("production", "launched", "import_gee"), ("production", "succeeded", "import_gee"),
-        ("production", "mode_changed", None),
-        ("test", "launched", "import_pivot_com"), ("test", "succeeded", "import_pivot_com"),
-        ("production", "mode_changed", None),
-    ]
+    assert [(e["mode"], e["event"]) for e in checkpoint_store.journal(production)] == [
+        ("production", "pass_started"), ("production", "launched"), ("production", "succeeded"),
+        ("production", "mode_changed"), ("production", "mode_changed")]
+    assert [(e["mode"], e["event"], e["item"]) for e in checkpoint_store.journal(test)] == [
+        ("test", "pass_started", None), ("test", "launched", "import_pivot_com"),
+        ("test", "succeeded", "import_pivot_com"), ("test", "paused", None)]
     import sqlite3
     items = sqlite3.connect(tmp_path / "etlhub.db").execute("SELECT DISTINCT item FROM pipeline_events").fetchall()
     assert ("import_pivot_com",) not in items  # never in the SQLite file
 
-    checkpoint_store._blob.delete()  # Redis flushed: production only, no error
-    assert {e["mode"] for e in checkpoint_store.journal("202610")} == {"production"}
+    checkpoint_store._blob.delete()  # Redis flushed: the test pass is gone, no error
+    assert checkpoint_store.journal(test) == []
 
 
-def test_cycles_lists_every_cycle_with_its_state_and_activity(checkpoint_store, month):
+def test_cycles_lists_months_with_their_passes(checkpoint_store, month):
     _all_runs(checkpoint_store)
     for task in ("build_analytics", "update_key"):
-        _pass(checkpoint_store, task)  # 202610 complete
+        _pass(checkpoint_store, task)  # 202610: a complete pass
+    _pass(checkpoint_store, "import_gee", confirm=True)  # 202610 again: a second pass
+    checkpoint_store.pause()
     month("202611")
     checkpoint_store.set_mode(True)
-    _pass(checkpoint_store, "import_gee")  # 202611: test events only
-    checkpoint_store.set_mode(False, confirm=True)
-    month("202612")  # the target: no history yet
+    _pass(checkpoint_store, "import_gee")  # 202611: a test pass
+    checkpoint_store.set_mode(False)
+    month("202612")  # the target: no pass yet
 
     cycles = {c["cycle"]: c for c in checkpoint_store.cycles()}
 
     assert list(cycles) == ["202612", "202611", "202610"]
-    assert (cycles["202612"]["target"], cycles["202612"]["events"], cycles["202612"]["last_at"]) == (True, 0, None)
-    assert (cycles["202611"]["test_events"], cycles["202611"]["state"]) == (2, "open")
-    assert cycles["202611"]["events"] == 0  # mode_changed in and out are not counted
-    assert cycles["202611"]["test_state"] is None  # test checkpoints discarded when test mode was left
-    assert cycles["202610"]["state"] == "closed" and cycles["202610"]["events"] > 0 and cycles["202610"]["last_at"]
+    assert (cycles["202612"]["target"], cycles["202612"]["passes"]) == (True, [])
+    (test,) = cycles["202611"]["passes"]
+    assert (test["mode"], test["state"], test["events"]) == ("test", "paused", 4)  # started, launched, succeeded, paused
+    second, first = cycles["202610"]["passes"]  # newest first
+    assert (second["state"], first["state"], first["started_by"]) == ("paused", "complete", "worker")
+    assert first["events"] > second["events"] > 0 and first["last_at"]
 
 
+_LEGACY_SCHEMA = """
+CREATE TABLE checkpoints (cycle TEXT NOT NULL, step TEXT NOT NULL, item TEXT NOT NULL, job_id TEXT,
+    status TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (cycle, step, item));
+CREATE TABLE pipeline_lock (id INTEGER PRIMARY KEY CHECK (id = 1), job_id TEXT NOT NULL, task TEXT NOT NULL,
+    acquired_at TEXT NOT NULL);
+CREATE TABLE forecast_runs (cycle TEXT NOT NULL, couple TEXT NOT NULL, state TEXT NOT NULL, disease_code TEXT NOT NULL,
+    ou_level TEXT NOT NULL, alert_name TEXT, opened_at TEXT NOT NULL, closed_at TEXT, PRIMARY KEY (cycle, couple, opened_at));
+CREATE UNIQUE INDEX one_open_run ON forecast_runs(state) WHERE state = 'open';
+CREATE TABLE pipeline_cycle (id INTEGER PRIMARY KEY CHECK (id = 1), cycle TEXT NOT NULL);
+CREATE TABLE pipeline_events (id INTEGER PRIMARY KEY AUTOINCREMENT, cycle TEXT NOT NULL, at TEXT NOT NULL, step TEXT,
+    item TEXT, event TEXT NOT NULL, job_id TEXT, actor TEXT, request_id TEXT, detail TEXT);
+CREATE INDEX ix_pipeline_events_cycle ON pipeline_events(cycle, id);
+INSERT INTO pipeline_cycle VALUES (1, '202504');
+INSERT INTO pipeline_events (cycle, at, step, item, event, actor) VALUES
+    ('202504', '2026-10-20T10:00:00.000000', 'data_import', 'import_gee', 'launched', 'alice'),
+    ('202504', '2026-10-20T11:00:00.000000', NULL, NULL, 'cycle_closed', 'alice'),
+    ('202504', '2026-10-20T12:00:00.000000', NULL, NULL, 'mode_changed', 'alice'),
+    ('202504', '2026-10-20T13:00:00.000000', NULL, NULL, 'cycle_chosen', 'bob'),
+    ('202504', '2026-10-20T14:00:00.000000', 'data_import', 'import_gee', 'launched', 'bob');
+INSERT INTO checkpoints VALUES ('202504', 'data_import', 'import_gee', 'j2', 'success', '2026-10-20T14:01:00');
+INSERT INTO forecast_runs VALUES
+    ('202504', 'ADJ/Malaria', 'closed', 'x', '6', NULL, '2026-10-20T10:30:00.000000', '2026-10-20T10:40:00'),
+    ('202504', 'COM/Malaria', 'open', 'x', '6', NULL, '2026-10-20T15:00:00.000000', NULL);
+"""
 
-def test_cycles_shows_the_test_state_while_test_mode_has_checkpoints(checkpoint_store, month):
-    _pass(checkpoint_store, "import_gee")
-    checkpoint_store.set_mode(True)
-    _pass(checkpoint_store, "import_pivot_com")
 
-    (cycle,) = checkpoint_store.cycles()
+def test_a_store_keyed_by_month_is_split_into_passes_at_each_cycle_closed(checkpoint_store, month, tmp_path):
+    import sqlite3
+    legacy = sqlite3.connect(tmp_path / "etlhub.db")
+    legacy.executescript(_LEGACY_SCHEMA)
+    legacy.close()
+    (tmp_path / "uploads" / "202504").mkdir(parents=True)
+    (tmp_path / "uploads" / "202504" / "config_Malaria.json").write_text("{}")
 
-    assert (cycle["state"], cycle["test_state"], cycle["events"], cycle["test_events"]) == ("open", "open", 2, 2)
+    (cycle,) = [c for c in checkpoint_store.cycles() if c["cycle"] == "202504"]
+
+    second, first = cycle["passes"]
+    assert (first["state"], first["started_by"], second["state"], second["started_by"]) == (
+        "complete", "alice", "active", "bob")
+    assert [e["event"] for e in checkpoint_store.journal(first["id"])] == [
+        "launched", "cycle_closed", "mode_changed", "cycle_chosen"]
+    assert [e["event"] for e in checkpoint_store.journal(second["id"])] == ["launched"]
+    state = checkpoint_store.progress()
+    assert (state["pass"]["id"], state["run"]["couple"]) == (second["id"], "COM/Malaria")
+    assert _status(state, "data_import", "import_gee") == "success"
+    assert (tmp_path / "uploads" / "202504" / second["id"] / "config_Malaria.json").is_file()
+    assert checkpoint_store.cycles() == [cycle]  # migrated once: the ids stay
 
 
 def test_test_mode_starts_from_the_old_dryrun_once_then_leaves_dryrun_to_env(monkeypatch):

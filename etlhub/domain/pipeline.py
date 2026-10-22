@@ -97,12 +97,6 @@ def status(rows: Rows, step: str, item: str) -> str:
     return rows.get((step, item), {}).get("status", "pending")
 
 
-def require_open_cycle(cycle: str, rows: Rows) -> None:
-    """A complete cycle takes no more launches: a month runs only once."""
-    if progress(rows)["current_step"] is None:
-        raise PipelineBlockedError(f"Cycle {cycle} is complete: choose another cycle or wait for the next month")
-
-
 def accessible_steps(rows: Rows) -> set[str]:
     """R4: a step is accessible when every step before it is done."""
     accessible, previous_done = set(), True

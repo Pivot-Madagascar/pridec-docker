@@ -315,7 +315,6 @@ etlui builds the impact dialog **only** from `impact`, requires the checkbox
 ```json
 {
   "cycle": "202610",
-  "cycle_state": "open",
   "current_step": "forecast",
   "run": {"cycle": "202610", "couple": "CSB/Malaria", "state": "open",
           "disease_code": "pridec_historic_CSBMalaria", "ou_level": "5", "alert_name": "CSBMalariaVigilance",

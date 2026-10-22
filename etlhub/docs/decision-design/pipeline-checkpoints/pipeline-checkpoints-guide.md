@@ -160,7 +160,7 @@ The etlui **"Test mode" (test = YES)** button switches etlhub to test mode.
 
 | Method | Route | Role |
 |---|---|---|
-| GET | `/pipeline/checkpoints?cycle=YYYYMM` | State of the cycle: `current_step`, `cycle_state`, `run`, `lock`, steps (`done`, `accessible`) and items (`status`, `launchable`) |
+| GET | `/pipeline/checkpoints?pass_id=<id>` | State of the cycle: `current_step`, `pass`, `run`, `lock`, steps (`done`, `accessible`) and items (`status`, `launchable`) |
 | POST | `/pipeline/runs` | Opens the run of a pair |
 | DELETE | `/pipeline/runs/current` | Abandons the open run (administrators only) |
 | GET | `/pipeline/runs/{source}/{disease}/report` | Report of a closed run, kept when it closed (404 if none) |

@@ -3,6 +3,11 @@
 > **Status: implemented on 2026-10-19.** Decisions in [§ 9](#9-decisions). § 4 to § 6 describe what was built.
 > Against the first proposal, the link to the request and the actor go through a per-request context
 > (`core/request_context.py`, § 4.4) instead of new ids and new method arguments, and the server has no filters (§ 5.1).
+>
+> **Since 2026-10-22 the journal is per pass** (one run of a cycle): events carry a `pass_id`, the routes are
+> `GET /pipeline/passes/{pass_id}/journal(.csv)`, `GET /pipeline/cycles` lists months with their passes, `cycle_chosen`
+> is no longer written, and leaving test mode pauses the test pass instead of emptying the test tables (§ 6.3 and Q6
+> superseded). See [../cycle-passes/cycle-passes.md](../cycle-passes/cycle-passes.md).
 
 A cycle (one month of pipeline, see [../pipeline-checkpoints/pipeline-checkpoints-summary.md](../pipeline-checkpoints/pipeline-checkpoints-summary.md#the-cycle))
 is made of 3 steps and about 80 items, each launched, finished, relaunched, reset or decided by a person.

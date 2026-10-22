@@ -47,13 +47,13 @@ export async function decideImports(decision: 'approve' | 'reject'): Promise<voi
   await api.post('/pipeline/imports/approve', { decision })
 }
 
-// PUT /pipeline/mode: TEST_MODE, the test cycle kept apart (DRYRUN stays the .env's); leaving it discards the test checkpoints (confirm when there are any).
-export async function setMode(testMode: boolean, confirm = false): Promise<boolean> {
-  const response = await api.put<{ test_mode: boolean }>('/pipeline/mode', { test_mode: testMode }, withConfirm(confirm))
+// PUT /pipeline/mode: TEST_MODE, the test passes kept apart (DRYRUN stays the .env's); leaving it pauses the active test pass.
+export async function setMode(testMode: boolean): Promise<boolean> {
+  const response = await api.put<{ test_mode: boolean }>('/pipeline/mode', { test_mode: testMode })
   return response.data.test_mode
 }
 
-// PUT /pipeline/cycle: the cycle (YYYYMM) launches go to; null = follow the calendar month.
+// PUT /pipeline/cycle: the month (YYYYMM) the next pass starts on; null = follow the calendar month.
 export async function setCycle(cycle: string | null): Promise<void> {
   await api.put('/pipeline/cycle', { cycle })
 }
@@ -64,17 +64,32 @@ export async function releaseLock(): Promise<string | null> {
   return response.data.released
 }
 
-// GET /pipeline/cycles: the cycles that have a history, newest first.
+// POST /pipeline/passes/current/pause: stop for now; the pass is resumed from the journal.
+export async function pausePass(): Promise<void> {
+  await api.post('/pipeline/passes/current/pause')
+}
+
+// POST /pipeline/passes/{id}/resume: a paused pass of the current mode becomes active again.
+export async function resumePass(passId: string): Promise<void> {
+  await api.post(`/pipeline/passes/${passId}/resume`)
+}
+
+// POST /pipeline/passes/{id}/abandon: for good; the month can be run again in a new pass.
+export async function abandonPass(passId: string): Promise<void> {
+  await api.post(`/pipeline/passes/${passId}/abandon`)
+}
+
+// GET /pipeline/cycles: months with their passes, newest first.
 export async function getCycles(): Promise<JournalCycle[]> {
   const response = await api.get<JournalCycle[]>('/pipeline/cycles')
   return response.data
 }
 
-// GET /pipeline/cycles/{cycle}/journal: every change of the cycle, both modes, with the request that caused it.
-export async function getJournal(cycle: string): Promise<JournalEvent[]> {
-  const response = await api.get<JournalEvent[]>(`/pipeline/cycles/${cycle}/journal`)
+// GET /pipeline/passes/{id}/journal: every change of the pass, with the request that caused it.
+export async function getJournal(passId: string): Promise<JournalEvent[]> {
+  const response = await api.get<JournalEvent[]>(`/pipeline/passes/${passId}/journal`)
   return response.data
 }
 
-// GET /pipeline/cycles/{cycle}/journal.csv (administrators): for a native <a download>, which sends the session cookie.
-export const journalCsvUrl = (cycle: string): string => api.getUri({ url: `/pipeline/cycles/${cycle}/journal.csv` })
+// GET /pipeline/passes/{id}/journal.csv (administrators): for a native <a download>, which sends the session cookie.
+export const journalCsvUrl = (passId: string): string => api.getUri({ url: `/pipeline/passes/${passId}/journal.csv` })

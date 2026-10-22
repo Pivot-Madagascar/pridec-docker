@@ -20,7 +20,7 @@ export interface PipelineStep {
 }
 
 export interface ForecastRun {
-  cycle: string
+  pass_id: string
   couple: string // 'CSB/Malaria'
   state: 'open' | 'closed' | 'abandoned'
   disease_code: string
@@ -35,9 +35,19 @@ export interface PipelineLock {
   acquired_at: string
 }
 
+// One run of a cycle (etlhub/docs/decision-design/cycle-passes/cycle-passes.md).
+export type PassState = 'active' | 'paused' | 'complete' | 'abandoned'
+export interface Pass {
+  id: string // 8 hex characters
+  cycle: string // YYYYMM
+  state: PassState
+  started_at: string
+  started_by: string | null // DHIS2 username, 'worker' or 'system'
+}
+
 export interface Checkpoints {
   cycle: string
-  cycle_state: 'open' | 'closed'
+  pass: Pass | null // the active pass, else the last one of the target month; null before its first launch
   current_step: StepName | null
   run: ForecastRun | null
   lock: PipelineLock | null
@@ -58,14 +68,15 @@ export const DISEASES = ['Malaria', 'Diarrhea', 'Respinf'] as const
 export type Source = (typeof SOURCES)[number]
 export type Disease = (typeof DISEASES)[number]
 
-// GET /pipeline/cycles/{cycle}/journal (etlhub/docs/decision-design/cycle-journal/cycle-journal.md).
+// GET /pipeline/passes/{pass_id}/journal (etlhub/docs/decision-design/cycle-journal/cycle-journal.md).
 export interface JournalEvent {
   cycle: string
+  pass_id: string | null
   at: string // local ISO time, microseconds
   step: StepName | null
   item: string | null
-  // launched, succeeded, failed, reset, uploaded, removed, decided, skipped, run_opened, run_closed,
-  // run_abandoned, cycle_chosen, lock_released, mode_changed, cycle_closed
+  // pass_started, launched, succeeded, failed, reset, uploaded, removed, decided, skipped, run_opened, run_closed,
+  // run_abandoned, lock_released, mode_changed, paused, resumed, abandoned, cycle_closed
   event: string
   job_id: string | null
   actor: string | null // DHIS2 username, 'worker' or 'system'
@@ -75,13 +86,14 @@ export interface JournalEvent {
   request: RequestLog | null // the HTTP request that caused it, or null
 }
 
-// GET /pipeline/cycles: cycles with a history (and the target one), newest first.
+// GET /pipeline/cycles: months with passes (and the target one), newest first, each with its passes, newest first.
+export interface JournalPass extends Pass {
+  mode: 'production' | 'test' // test passes: kept in Redis only
+  events: number // mode_changed left out (as last_at)
+  last_at: string | null
+}
 export interface JournalCycle {
   cycle: string // YYYYMM
-  state: 'open' | 'closed' // production state
-  test_state: 'open' | 'closed' | null // the test checkpoints still in Redis, null without any
   target: boolean // launches go to it
-  events: number // production events, mode_changed left out (as test_events and last_at)
-  test_events: number // kept in Redis only
-  last_at: string | null
+  passes: JournalPass[]
 }
