@@ -1,5 +1,5 @@
 def print_help():
-    from etl.scripts.config import get_gee_variables
+    from .config import get_gee_variables
     available = get_gee_variables()
     print(f"""
 Task: import_gee
@@ -23,7 +23,7 @@ def parse_args():
     return parser.parse_args()
 
 def import_gee():
-    from etl.scripts.config import get_dhis_url, get_dhis_token, get_parent_ou, get_dry_run, GEE_SERVICE_ACCOUNT, get_gee_variables, setup_logging, check_envvars
+    from .config import get_dhis_url, get_dhis_token, get_parent_ou, get_dry_run, GEE_SERVICE_ACCOUNT, get_gee_variables, setup_logging, check_envvars
 
     DHIS_URL = get_dhis_url()
     DHIS_TOKEN = get_dhis_token()

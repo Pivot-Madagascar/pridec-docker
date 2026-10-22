@@ -24,7 +24,7 @@ def parse_args():
     return parser.parse_args()
 
 def import_pivot_csb():
-    from etl.scripts.config import get_dhis_url, get_dhis_token, get_dry_run, PIVOT_URL, PIVOT_TOKEN, setup_logging, check_envvars
+    from .config import get_dhis_url, get_dhis_token, get_dry_run, PIVOT_URL, PIVOT_TOKEN, setup_logging, check_envvars
 
     DHIS_URL = get_dhis_url()
     DHIS_TOKEN = get_dhis_token()

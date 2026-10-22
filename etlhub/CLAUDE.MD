@@ -14,7 +14,7 @@ FastAPI service (port 8111) that exposes the PRIDE-C ETL scripts (`etl/scripts/*
 - `tests/` — `api/` and `infrastructure/`
 
 Siblings in the repo:
-- `etl/scripts/` is **imported in-process** by etlhub, and `etl/scripts/config.py` imports `etlhub.infrastructure.config_store` back (two-way coupling).
+- `etl/scripts/` is **imported in-process** by etlhub, `etl/scripts/config.py` is the CLI version (env / `.env` only) and must never import `etlhub`; `etlhub/script_config.py` (imported by `etlhub/__init__.py`) replaces its `_get` / `_dhis2_credential` with Redis and the login.
 - `forecast/` (R) runs through `docker run` from the worker. Files are exchanged through `input/` (ro) and `output/` (rw).
 - `etlui/` consumes the REST API and the WebSocket (see contracts below).
 
@@ -35,7 +35,7 @@ Siblings in the repo:
 - A Celery task must **re-raise** after writing the "error" status, or Celery reports success.
 - `_update_task_status` merges with the existing record. Do not overwrite `started` or `logs`.
 - `/post_forecast` and `/update_key` are **synchronous**: they block the event loop and redirect the global `stdout`. All other launch endpoints go through Celery (202).
-- Dynamic config (`app:config:dynamic`: `DHIS_URL`, `DHIS_TOKEN`, `PARENT_OU`, `OU_LEVEL`, `DISEASE_CODE`) is read by the forecast container **and** by `etl/scripts/config.py` (also `DRYRUN`, `LOG_LEVEL`). The old `ARCHITECTURE.md` says otherwise: it is wrong.
+- Editable config (`app:config:dynamic`, `config_store.EDITABLE_KEYS`: `PARENT_OU`, `OU_LEVEL`, `DISEASE_CODE`, `DRYRUN`, `LOG_LEVEL`, `GEE_VARIABLES`) is copied from etlhub's `.env` (`ENV_FILE`) at each API start (`main.py` lifespan, overwriting; a key missing from `.env` is removed; the API refuses to start if Redis fails) and by `PUT /api/config/reload`; `PUT /api/config` edits all but `DRYRUN`. Under etlhub the ETL scripts read these keys from Redis only (`etlhub/script_config.py`; absent = default, Redis error = job fails); the forecast container gets them through its env file. The CLI never reads Redis.
 - `JobStore`, `RequestTracker` and event publishing use `except Exception: pass`. A job missing from Redis does not mean it failed, and Redis being down leaves no trace.
 - On a job failure, `_run_task` appends the traceback to the job log (file and Redis).
 - The WebSocket closes with `4004` only for an unknown job; jobs are `pending` from the 202 on, so the socket stays open for them. Forecast logs are written only at the end: during a forecast the socket carries status updates only.

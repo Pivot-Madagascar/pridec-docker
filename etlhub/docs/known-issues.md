@@ -99,7 +99,7 @@ Fixed: `etlui/CLAUDE.md` now describes etlui Â· `.env.example` writes `DRYRUN` Â
 
 ## 7. Open questions
 
-- Does a rebuilt `mvevans89/pridec_etl` image still work? `etl/scripts/config.py` imports `etlhub` (`ConfigStore`, `auth_store`), but `etl/Dockerfile` only copies `scripts/` and `etl/requirements.txt` has no `redis`. The CLI `.env` fallback (`DHIS_ENV_FALLBACK` in `compose.yaml`) depends on it.
+- A rebuilt `mvevans89/pridec_etl` image was not built or run. Since 2026-10-22 `etl/scripts/config.py` no longer imports `etlhub` or `redis`, and the scripts import it relatively (`from .config`); checked by `tests/infrastructure/test_dhis2_credential.py` and by running each `cli.sh` command's `--help` in the image layout (`/app/scripts` only).
 - Login during a running job (1.4) and roles (1.5): which behaviour do we want?
 - Celery pool and concurrency in production (default prefork)? How is etlhub deployed, and over http or https (`COOKIE_SECURE`)?
 - Front/back mismatch on JSON bodies for `/fetch_disease` and `/validate_inputs`: fix the front or the back?

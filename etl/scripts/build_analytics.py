@@ -20,7 +20,7 @@ def parse_args():
     return parser.parse_args()
 
 def build_analytics():
-    from etl.scripts.config import get_dhis_token, get_dhis_url, get_dry_run, setup_logging
+    from .config import get_dhis_token, get_dhis_url, get_dry_run, setup_logging
 
     DHIS_TOKEN = get_dhis_token()
     DHIS_URL = get_dhis_url()

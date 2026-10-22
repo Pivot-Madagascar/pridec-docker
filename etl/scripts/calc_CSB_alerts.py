@@ -22,7 +22,7 @@ def parse_args():
     return parser.parse_args()
 
 def calc_csb_alerts():
-    from etl.scripts.config import get_dhis_token, get_dhis_url, get_dry_run, setup_logging, check_envvars
+    from .config import get_dhis_token, get_dhis_url, get_dry_run, setup_logging, check_envvars
 
     DHIS_TOKEN = get_dhis_token()
     DHIS_URL = get_dhis_url()

@@ -24,7 +24,7 @@ def parse_args():
     return parser.parse_args()
 
 def fetch_disease():
-    from etl.scripts.config import get_dhis_token, get_dhis_url, get_parent_ou, get_ou_level, get_disease_code, setup_logging, check_envvars
+    from .config import get_dhis_token, get_dhis_url, get_parent_ou, get_ou_level, get_disease_code, setup_logging, check_envvars
 
     DHIS_TOKEN = get_dhis_token()
     DHIS_URL = get_dhis_url()
