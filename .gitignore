@@ -17,12 +17,15 @@
 .venv/
 venv/
 */.env*
-*/.venv/
 */venv/
 **/__pycache__/
 test-venv/
-**__pychache__/
+etlhub_env/
+__pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
 client_secret.json
 .gee-private-key.json
 */.gee-private-key.json
@@ -39,8 +42,26 @@ build.log
 #output of docker workflow
 output/
 input/
+uploads/
+.output_sig
 */output/
 */input/
 logs/
 
+# Node modules
 */node_modules
+
+# Redis Database backup
+dump.rdb
+
+etlui/dist/
+local-docs/
+
+# local graphify knowledge graph
+graphify/
+graphify-out/
+# Redis (see redis.conf)
+redis-data/
+redis-secret.conf
+.claude/
+.claude/

@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+body {
+  margin: 0;
+  padding: 0;
+}
+
+#app {
+  min-height: 100vh;
+  background-color: var(--color-gray-900);
+}
+
+/* Background Colors (light + dark) */
+.bg-gray-50 {
+  @apply bg-gray-50 dark:bg-gray-800;
+}
+
+.bg-blue-50 {
+  @apply bg-blue-50 dark:bg-blue-900/20;
+}
+
+.bg-red-50 {
+  @apply bg-red-50 dark:bg-red-900/20;
+}
+
+/* Component Styles */
+
+/* Section Header */
+.section-header {
+  @apply text-2xl font-bold text-[#131921] dark:text-white mb-4;
+}
+
+/* Heading Styles */
+.heading-primary {
+  @apply text-3xl font-bold text-[#131921] dark:text-white;
+}
+
+.card {
+  @apply bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden;
+}
+
+.card-padded {
+  @apply p-6;
+}
+
+/* Form Elements */
+.form-input {
+  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-400 focus:border-transparent;
+}
+
+/* Buttons */
+.btn-primary {
+  @apply w-full md:w-auto px-6 py-3 from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center;
+}
+
+.btn-primary svg {
+  @apply h-5 w-5;
+}
+
+.btn-primary svg.animate-spin {
+  @apply -ml-1 mr-3;
+}
+
+/* Icon Sizes */
+.icon-md {
+  @apply h-6 w-6;
+}
+
+/* Recent Activity */
+.activity-section {
+  @apply bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden;
+}
+
+.activity-divide {
+  @apply divide-y divide-gray-100 dark:divide-gray-800;
+}
+
+.activity-item {
+  @apply px-6 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors;
+}
+
+.activity-icon {
+  @apply w-2 h-2 rounded-full;
+}
+
+.activity-icon-success {
+  @apply bg-green-500;
+}
+
+.activity-icon-error {
+  @apply bg-red-500;
+}
+
+.activity-action {
+  @apply text-sm font-medium text-gray-900 dark:text-gray-100;
+}
+
+.activity-message {
+  @apply text-xs text-gray-500 dark:text-gray-400;
+}
+
+.activity-time {
+  @apply text-xs text-gray-400 dark:text-gray-500;
+}
+
+/* Flex Layouts */
+.flex-row-center-between {
+  @apply flex items-center justify-between;
+}
+
+.flex-row-center {
+  @apply flex items-center;
+}
+
+/* Button/Link Utilities */
+.btn-link-secondary {
+  @apply px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors;
+}

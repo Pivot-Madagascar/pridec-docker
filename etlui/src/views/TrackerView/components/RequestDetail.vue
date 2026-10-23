@@ -1,0 +1,38 @@
+<template>
+  <table class="w-full table-fixed text-sm">
+    <thead class="text-left text-xs text-gray-500">
+      <tr>
+        <th class="w-20 px-3 py-2 font-normal">Method</th>
+        <th class="w-20 px-3 py-2 font-normal">Status</th>
+        <th class="px-3 py-2 font-normal">URL</th>
+        <th class="w-28 px-3 py-2 font-normal">Duration</th>
+        <th class="w-48 px-3 py-2 font-normal">Job ID</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="border-t border-gray-700 text-gray-200">
+        <td class="px-3 py-2">{{ request.method }}</td>
+        <td class="px-3 py-2">
+          <span class="rounded px-2 py-0.5 text-xs font-semibold" :class="statusColor(request.status_code)">{{ request.status_code }}</span>
+        </td>
+        <td class="px-3 py-2 font-mono text-xs break-all">{{ request.url }}</td>
+        <td class="px-3 py-2">{{ request.duration_ms.toFixed(2) }} ms</td>
+        <td class="px-3 py-2 font-mono text-xs break-all">{{ request.job_id ?? '-' }}</td>
+      </tr>
+      <tr v-if="request.reason" class="text-yellow-300">
+        <td colspan="5" class="px-3 py-2 text-xs">
+          Refused by the pipeline<template v-if="request.code"> ({{ request.code }})</template>: {{ request.reason }}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</template>
+
+<script setup lang="ts">
+import type { RequestLog } from '@/services/api'
+import { statusColor } from '@/utils/status'
+
+defineProps<{
+  request: RequestLog
+}>()
+</script>

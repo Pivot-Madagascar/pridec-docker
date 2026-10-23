@@ -1,0 +1,155 @@
+<template>
+  <!-- Native <dialog> (BaseDialog): opened from the run's "Steps" dialog, it goes above it in the top layer. -->
+  <BaseDialog :open="modelValue" class="report-dialog" @dismiss="closeModal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h2 class="modal-title">Forecast Report</h2>
+        <div class="flex items-center gap-2">
+          <button class="modal-refresh" @click="fetchReport" :disabled="loading">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" :class="{ 'animate-spin': loading }">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5M20 20v-5h-5M4 4l5 5m11 11l-5-5" />
+            </svg>
+            <span>Refresh</span>
+          </button>
+          <!-- Native download: the browser sends the session cookie and saves the zip itself. New tab so an
+               error page (404, expired session) does not replace the app. Open run only: a closed run's files left input/. -->
+          <a v-if="!run" class="modal-refresh" :href="archiveUrl" target="_blank" rel="noopener" download>
+            <Icon :path="ICONS.download" width="16" height="16" stroke-width="2" />
+            <span>Download Forecast Data</span>
+          </a>
+          <button class="modal-close" @click="closeModal">
+            <Icon :path="ICONS.close" width="20" height="20" stroke-width="2" />
+          </button>
+        </div>
+      </div>
+
+      <div class="modal-body">
+        <iframe
+          v-if="reportContent"
+          :srcdoc="reportContent"
+          class="report-iframe"
+          title="Forecast Report"
+        ></iframe>
+        <div v-else-if="loading" class="report-loading">
+          <span class="spinner-lg animate-spin" aria-hidden="true"></span>
+          <p>Loading report...</p>
+        </div>
+        <div v-else class="report-error">
+          <p>{{ errorMessage }}</p>
+        </div>
+      </div>
+      <!-- Approve / Reject when the report is opened to decide on it -->
+      <div v-if="$slots.footer" class="modal-footer"><slot name="footer" /></div>
+    </div>
+  </BaseDialog>
+</template>
+
+<script setup lang="ts">
+import { ref, watch } from 'vue'
+import api from '@/services/api'
+import Icon, { ICONS } from '@/components/Icons'
+import BaseDialog from './BaseDialog.vue'
+
+const props = defineProps<{
+  modelValue: boolean
+  // A closed run: its archived report. Otherwise the report of the open run, in output/.
+  run?: { source: string; disease: string } | null
+}>()
+
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+}>()
+
+const archiveUrl = api.getUri({ url: '/output/archive' })
+const reportContent = ref('')
+const loading = ref(false)
+const errorMessage = ref('')
+
+const closeModal = () => {
+  emit('update:modelValue', false)
+}
+
+const fetchReport = async () => {
+  loading.value = true
+  reportContent.value = ''
+  errorMessage.value = ''
+  
+  try {
+    const url = props.run ? `/pipeline/runs/${props.run.source}/${props.run.disease}/report` : '/output/forecast_report.html'
+    const response = await api.get(url, { responseType: 'text' })
+    reportContent.value = response.data
+  } catch (err: any) {
+    if (err.response?.status === 404) {
+      errorMessage.value = 'Forecast report not found. Run the forecast step first.'
+    } else {
+      errorMessage.value = 'Failed to load report. Please try again.'
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+// Read again at each opening: the report changes with the run.
+watch(() => props.modelValue, open => open && fetchReport(), { immediate: true })
+</script>
+
+<style scoped>
+@reference "tailwindcss";
+
+/* Full screen: overrides BaseDialog's centred box. */
+.report-dialog {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #0f172a;
+}
+
+.modal-container {
+  @apply w-full h-full flex flex-col;
+}
+
+.modal-header {
+  @apply flex items-center justify-between p-4 border-b border-white/10 bg-[#1e293b];
+}
+
+.modal-title {
+  @apply text-2xl font-bold text-white;
+}
+
+.modal-close {
+  @apply p-2 rounded-lg bg-white/5 border border-white/10 text-white hover:text-white hover:bg-white/20 transition-colors;
+}
+
+.modal-refresh {
+  @apply p-2 rounded-lg bg-white/5 border border-white/10 text-white hover:text-white hover:bg-white/20 transition-colors flex items-center gap-2;
+}
+
+.modal-body {
+  @apply flex-1 overflow-hidden min-h-0;
+}
+
+.modal-footer {
+  @apply flex justify-end gap-3 p-4 border-t border-white/10 bg-[#1e293b];
+}
+
+.report-iframe {
+  @apply w-full h-full border-none bg-white;
+}
+
+.report-loading {
+  @apply flex flex-col items-center justify-center h-full text-white;
+}
+
+.spinner-lg {
+  @apply w-12 h-12 mb-4 rounded-full border-4 border-white/25 border-t-white;
+}
+
+.report-error {
+  @apply flex items-center justify-center h-full text-red-400;
+}
+</style>

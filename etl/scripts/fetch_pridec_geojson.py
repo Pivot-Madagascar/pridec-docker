@@ -1,4 +1,8 @@
-import argparse
+import logging
+import json
+import os
+
+from pridec_gee import get_dhis_geojson
 
 def print_help():
     print(f"""
@@ -12,44 +16,56 @@ Notes:
     Fokontany = 6. CSB = 5.
 """)
 
-parser = argparse.ArgumentParser(add_help=False)  # disable default help
-parser.add_argument("--help", "-h", action="store_true")
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False) # disable default help
+    parser.add_argument("--help", "-h", action="store_true")
+    return parser.parse_args()
 
-args = parser.parse_args()
+def fetch_geojson():
+    from .config import get_dhis_token, get_dhis_url, get_ou_level, get_parent_ou, setup_logging, check_envvars
 
-if args.help:
-    print_help()
-    exit(0)
+    DHIS_TOKEN = get_dhis_token()
+    DHIS_URL = get_dhis_url()
+    OU_LEVEL = get_ou_level()
+    PARENT_OU = get_parent_ou()
 
-from config import DHIS_TOKEN, DHIS_URL, OU_LEVEL, PARENT_OU, setup_logging, check_envvars
-from requests.auth import HTTPBasicAuth
-import logging
-import json
+    setup_logging()
 
-from pridec_gee import get_dhis_geojson
+    logger = logging.getLogger("fetch_pridec_geojson")
 
-setup_logging()
+    check_envvars(required_vars = {
+                'DHIS_TOKEN': DHIS_TOKEN,
+                'DHIS_URL': DHIS_URL,
+                'PARENT_OU': PARENT_OU,
+                'OU_LEVEL': OU_LEVEL,
+            }
+    )
 
-logger = logging.getLogger("fetch_pridec_geojson")
+    input_dir = os.path.join(os.getcwd(), 'input')
+    os.makedirs(input_dir, exist_ok=True)
 
+    try:
+        os.chmod(input_dir, 0o755)
+    except PermissionError:
+        pass
 
-check_envvars(required_vars = {
-            'DHIS_TOKEN': DHIS_TOKEN,
-            'DHIS_URL': DHIS_URL,
-            'PARENT_OU': PARENT_OU,
-            'OU_LEVEL': OU_LEVEL,
-        }
-)
+    logger.info("Fetching Geojson for orgUnit level %s under parent %s", OU_LEVEL, PARENT_OU)
 
-logger.info("Fetching Geojson for orgUnit level %s under parent %s", OU_LEVEL, PARENT_OU)
+    org_units = get_dhis_geojson(parent_ou = PARENT_OU,
+                                 ou_level = OU_LEVEL,
+                                 dhis_url = DHIS_URL,
+                                 dhis_token = DHIS_TOKEN)
 
-org_units = get_dhis_geojson(parent_ou = PARENT_OU,
-                             ou_level = OU_LEVEL,
-                             dhis_url = DHIS_URL,
-                             dhis_token = DHIS_TOKEN)
+    output_path = os.path.join(input_dir, "orgUnit_poly.geojson")
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(org_units, f, ensure_ascii=False)
 
-with open("input/orgUnit_poly.geojson", "w", encoding="utf‑8") as f:
-    json.dump(org_units, f, ensure_ascii=False)
+    logger.info("Saved geojson polygons to %s", output_path)
 
-logger.info("Saved geojson polygons to input/orgUnit_poly.geojson")
-
+if __name__ == "__main__":
+    args = parse_args()
+    if args.help:
+        print_help()
+        exit(0)
+    fetch_geojson()
