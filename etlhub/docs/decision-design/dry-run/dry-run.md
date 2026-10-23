@@ -118,7 +118,8 @@ Not concerned: `/api/auth/*`, `/api/tracking/*`, `/api/config/*`, `/output/*`, `
 |---|---|---|
 | `PUT /pipeline/mode` | **writes** it (section 2) | — |
 | `GET /pipeline/checkpoints` | `test_mode` + the state of that mode's store | `dry_run`, read only |
-| `GET /pipeline/cycles`, `GET /pipeline/cycles/{cycle}/journal`, `…/journal.csv` | read that mode's store | — |
+| `GET /pipeline/cycles`, `GET /pipeline/passes/{pass_id}/journal`, `…/journal.csv` | read both stores | — |
+| `POST /pipeline/passes/current/pause`, `…/{pass_id}/resume`, `…/{pass_id}/abandon` | that mode's store | — |
 | `POST /pipeline/runs`, `DELETE /pipeline/runs/current`, `GET /pipeline/runs/{source}/{disease}/report` | that mode's store; report under its uploads dir | — |
 | `POST /pipeline/runs/current/approve`, `…/skip_alerts`, `POST /pipeline/imports/approve` | that mode's store | — |
 | `PUT /pipeline/cycle`, `DELETE /pipeline/lock` | that mode's store | — |

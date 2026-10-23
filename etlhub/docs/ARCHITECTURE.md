@@ -67,7 +67,7 @@ Worth knowing:
 | Job status | Redis `job:{id}` | 24 h TTL |
 | Job logs | Redis `etl_logs:{id}` + `logs/{id}.log`, `logs/{id}.json` (forecast) | 24 h TTL; files are never purged |
 | HTTP requests | SQLite `logs/etlhub.db`, table `request_log` | 30 days, purged on each insert. Unhandled errors recorded as 500 with `error`; `/api/tracking` never recorded |
-| Dynamic config | Redis, hash `app:config:dynamic` | no TTL |
+| Dynamic config | Redis, hash `app:config:dynamic` | no TTL; `config_store.EDITABLE_KEYS` overwritten from `.env` at each API start (lifespan) and by `PUT /api/config/reload` |
 | ETL data | `input/`, `output/` | never purged |
 | Default input files | Files of `assets/`, read on each request, no table (`docs/decision-design/default-input-files/default-input-files.md`); etlhub must reach `assets/` in production too | not stored |
 
