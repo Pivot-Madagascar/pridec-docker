@@ -13,7 +13,20 @@
         {{ jobLogsLoading ? 'Loading...' : 'Refresh logs' }}
       </button>
     </div>
-    <JobLogs :logs="displayedLogs" :loading="jobLogsLoading" :error="jobLogsError" />
+    <div v-if="jobLogsError" class="rounded-lg border border-red-900 bg-red-950 p-3 text-sm text-red-300">
+      {{ jobLogsError }}
+    </div>
+    <template v-else-if="displayedLogs">
+      <div class="flex flex-wrap items-center gap-3 text-sm">
+        <span class="text-gray-500">Status</span>
+        <span class="rounded px-2 py-0.5 text-xs font-semibold" :class="statusColor(displayedLogs.status)">
+          {{ displayedLogs.status ?? 'unknown (record expired)' }}
+        </span>
+        <span v-if="displayedLogs.message" class="text-gray-300">{{ displayedLogs.message }}</span>
+      </div>
+      <pre class="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-lg border border-gray-700 bg-black/40 p-3 font-mono text-xs text-gray-200">{{ displayedLogs.logs || 'No logs yet.' }}</pre>
+    </template>
+    <p v-else-if="jobLogsLoading" class="text-sm text-gray-400">Loading logs...</p>
   </section>
 </template>
 
@@ -21,8 +34,8 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useTrackingStore } from '@/stores/useTrackingStore'
-import type { JobLogs as JobLogsData } from '@/services/api'
-import JobLogs from './JobLogs.vue'
+import type { JobLogs } from '@/services/api'
+import { statusColor } from '@/utils/status'
 import { useWebSocketLogger } from '@/composables/useWebSocketLogger'
 
 const props = defineProps<{ jobId: string }>()
@@ -63,7 +76,7 @@ watch(ws.isCompleted, (done) => {
 })
 
 // While live, the WebSocket's history + new entries and status replace the HTTP snapshot.
-const displayedLogs = computed<JobLogsData | null>(() => {
+const displayedLogs = computed<JobLogs | null>(() => {
   if (!jobLogs.value) return null
   if (!live.value) return jobLogs.value
   return {

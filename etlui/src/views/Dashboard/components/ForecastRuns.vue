@@ -22,18 +22,6 @@
         :key="disease"
         :disease="disease"
         :next="DISEASES[(i + 1) % DISEASES.length]"
-        :state="state"
-        :busy="busy"
-        :server-files="serverFiles"
-        :defaults="defaults"
-        :upload-file="uploadFile"
-        @open="(source, d) => emit('open', source, d)"
-        @launch="item => emit('launch', item)"
-        @validate="emit('validate')"
-        @report="(source, d) => emit('report', source, d)"
-        @delete="name => emit('delete', name)"
-        @preview="(name, from) => emit('preview', name, from)"
-        @use-default="name => emit('use-default', name)"
       />
     </div>
 
@@ -50,32 +38,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, provide, ref } from 'vue'
 import DiseaseCard from '@/views/Dashboard/components/DiseaseCard.vue'
 import { DISEASE_NAMES, ITEM_NAMES, coupleName, jobOf, labelOf, openLevel, step } from '@/config/pipeline'
-import { DISEASES, type Checkpoints, type Disease, type Source } from '@/types/pipeline'
-import type { DefaultFile, InputName, PreviewFrom, ServerFile } from '@/types/inputs'
+import { DISEASES } from '@/types/pipeline'
+import { RUNS, type RunsEmit, type RunsProps } from './runs'
 
-const props = defineProps<{
-  state: Checkpoints | null
-  busy: boolean
-  isAdmin: boolean
-  serverFiles: Partial<Record<InputName, ServerFile>>
-  defaults: Record<string, DefaultFile>
-  uploadFile: (name: InputName, file: File) => Promise<boolean>
-}>()
-
-const emit = defineEmits<{
-  open: [source: Source, disease: Disease]
-  launch: [item: string]
-  validate: []
-  report: [source: Source, disease: Disease]
-  delete: [name: InputName]
-  preview: [name: InputName, from: PreviewFrom]
-  'use-default': [name: InputName]
-  abandon: []
-  release: []
-}>()
+const props = defineProps<RunsProps & { isAdmin: boolean }>()
+const emit = defineEmits<RunsEmit & { (e: 'abandon' | 'release'): void }>()
+provide(RUNS, { props, emit })
 
 // Index of the disease card on screen: each card is 100% of the carousel width.
 const shown = ref(0)

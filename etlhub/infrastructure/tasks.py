@@ -8,18 +8,17 @@ from etlhub.application.use_cases.etl_use_cases import ETL_JOBS, notify_webhook,
 from etlhub.infrastructure.forecast_runner import run_rscript
 from etlhub.infrastructure.job_store import JobStore
 from etlhub.infrastructure.checkpoint_store import get_checkpoint_store
+from etlhub.infrastructure import etl_events
 
 logger = logging.getLogger(__name__)
 
 
-def _update_task_status(job_store: JobStore, job_id: str, status: str, message: str = None, logs: str = None):
+def _update_task_status(job_store: JobStore, job_id: str, status: str, message: str = None):
     task_status = job_store.get(job_id) or {"job_id": job_id}
     task_status.setdefault("started", datetime.now().isoformat())  # set when the worker starts, not at launch
     task_status["status"] = status
     if message:
         task_status["message"] = message
-    if logs:
-        task_status["logs"] = logs
     job_store.set(job_id, task_status)
     if status in ("success", "error"):
         try:
@@ -28,8 +27,7 @@ def _update_task_status(job_store: JobStore, job_id: str, status: str, message: 
             # The lock stays taken until DELETE /pipeline/lock frees it.
             logger.exception("Could not record the end of %s in the pipeline checkpoints", job_id)
     try:
-        from etlhub.api.etl_events import get_etl_event_manager
-        get_etl_event_manager().publish_status(job_id, status, message)
+        etl_events.publish_status(job_id, status, message)
     except Exception:
         pass
 
@@ -43,13 +41,9 @@ def _run_task(job_id: str, task_name: str, run_fn, webhook_url: str | None = Non
         notify_webhook(webhook_url, job_id, "success", f"{task_name} completed")
     except Exception as e:
         tb = traceback.format_exc()
-        try:  # after the job's own output (a forecast's R logs), not instead of it
-            job_store.save_logs(job_id, (job_store.get_logs(job_id) or "") + tb)
-        except Exception:
-            pass
+        job_store.append_logs(job_id, tb)  # after the job's own output (a forecast's R logs), not instead of it
         try:
-            from etlhub.api.etl_events import get_etl_event_manager
-            get_etl_event_manager().publish_log(job_id, "ERROR", tb)
+            etl_events.publish_log(job_id, "ERROR", tb)
         except Exception:
             pass
         _update_task_status(job_store, job_id, "error", str(e))
@@ -61,7 +55,7 @@ def _run_task(job_id: str, task_name: str, run_fn, webhook_url: str | None = Non
 def task_etl(task_type: str, job_id: str, webhook_url: str | None = None, **kwargs):
     """Every ETL_JOBS entry; kwargs go to the job function (validate_inputs paths)."""
     _run_task(job_id, ETL_JOBS[task_type][1],
-              lambda job_store, job_id: run_etl_job(task_type, job_store, job_id, **kwargs), webhook_url)
+              lambda job_store, job_id: run_etl_job(task_type, job_store, job_id, etl_events, **kwargs), webhook_url)
 
 
 def _forecast(job_store, job_id: str, params: dict) -> None:

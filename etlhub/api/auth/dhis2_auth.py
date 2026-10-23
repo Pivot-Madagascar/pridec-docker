@@ -13,9 +13,9 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import HTTPConnection
 
 from etlhub.api.middleware import is_allowed_origin
-from etlhub.core.config import get_settings
+from etlhub.core.config import get_settings, split_csv
 from etlhub.core.request_context import request_context
-from etlhub.infrastructure import auth_store
+from etlhub.core.dependencies import get_auth_store
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class DHIS2Error(Exception):
 
 def allowed_hosts() -> list[str]:
     """DHIS2_ALLOWED_HOSTS as lowercase host[:port], in order."""
-    return [h.strip().lower() for h in get_settings().dhis2_allowed_hosts.split(",") if h.strip()]
+    return [h.lower() for h in split_csv(get_settings().dhis2_allowed_hosts)]
 
 
 def normalize_dhis2_url(url: str) -> str | None:
@@ -127,8 +127,8 @@ def revoke_pat(client: httpx.Client, url: str, uid: str, *, auth: tuple | None =
 def user_from_cookies(cookies) -> dict | None:
     """User of the session cookie, valid only while it belongs to the active DHIS2 token."""
     session_id = cookies.get(SESSION_COOKIE)
-    session = auth_store.get_session(session_id) if session_id else None
-    credential = auth_store.get_credential() if session else None
+    session = get_auth_store().get_session(session_id) if session_id else None
+    credential = get_auth_store().get_credential() if session else None
     if not session or not credential or credential["pat_uid"] != session["pat_uid"]:
         return None
     return session["user"]

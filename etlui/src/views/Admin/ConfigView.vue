@@ -48,27 +48,23 @@ const handleSave = async () => {
     // '' is sent as is: it means all GEE variables
     gee_variables: form.value.gee_variables.trim()
   }
-  try {
-    await configStore.updateConfig(payload)
-    showSuccess.value = true
-    setTimeout(() => showSuccess.value = false, 3000)
-  } catch (e) {
-    console.error('Failed to update config:', e)
-  }
+  await configStore.updateConfig(payload)
+  flashSuccess()
+}
+
+const flashSuccess = () => {
+  if (configStore.error) return
+  showSuccess.value = true
+  setTimeout(() => showSuccess.value = false, 3000)
 }
 
 const handleReload = async () => {
   if (!window.confirm('This will overwrite all current values with those from .env. Continue?')) {
     return
   }
-  try {
-    await configStore.reloadConfig()
-    fillForm()
-    showSuccess.value = true
-    setTimeout(() => showSuccess.value = false, 3000)
-  } catch (e) {
-    console.error('Failed to reload config:', e)
-  }
+  await configStore.reloadConfig()
+  fillForm()
+  flashSuccess()
 }
 </script>
 

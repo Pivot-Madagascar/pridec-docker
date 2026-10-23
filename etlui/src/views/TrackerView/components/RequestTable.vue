@@ -43,7 +43,7 @@
           <td class="px-4 py-2">
             <span
               class="inline-block rounded px-2 py-0.5 text-xs font-semibold"
-              :class="req.job_status ? JOB_STATUS_COLORS[req.job_status] : statusColor(req.status_code)"
+              :class="statusColor(req.job_status ?? req.status_code)"
             >
               <!-- A job launch shows its job's end, not its 202 -->
               {{ req.job_status ?? req.status_code }}
@@ -94,12 +94,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { RequestLog } from '@/services/api'
+import { statusColor } from '@/utils/status'
 
+const PAGE_SIZE = 10
 const props = defineProps<{
   requests: RequestLog[]
   selectedId?: string | null
-  page?: number
-  pageSize?: number
+  page: number
 }>()
 
 const hasDetail = (req: RequestLog) => req.job_id != null || req.reason != null
@@ -109,18 +110,9 @@ defineEmits<{
   (e: 'update:page', page: number): void
 }>()
 
-const page = computed({
-  get: () => props.page ?? 0,
-  set: (v: number) => emit('update:page', v),
-})
-const pageSize = props.pageSize ?? 10
+const paginated = computed(() => props.requests.slice(props.page * PAGE_SIZE, (props.page + 1) * PAGE_SIZE))
 
-const paginated = computed(() => {
-  const start = page.value * pageSize
-  return props.requests.slice(start, start + pageSize)
-})
-
-const totalPages = computed(() => Math.max(1, Math.ceil(props.requests.length / pageSize)))
+const totalPages = computed(() => Math.max(1, Math.ceil(props.requests.length / PAGE_SIZE)))
 
 function shortRequestId(requestId: string) {
   return requestId.length > 12 ? requestId.slice(0, 12) + '...' : requestId
@@ -152,23 +144,5 @@ function methodColor(method: string) {
     default:
       return 'bg-gray-700 text-gray-300'
   }
-}
-
-const JOB_STATUS_COLORS: Record<string, string> = {
-  success: 'bg-green-900 text-green-300',
-  error: 'bg-red-900 text-red-300',
-}
-
-function statusColor(statusCode: number) {
-  if (statusCode >= 200 && statusCode < 300) {
-    return 'bg-green-900 text-green-300'
-  }
-  if (statusCode >= 400 && statusCode < 500) {
-    return 'bg-yellow-900 text-yellow-300'
-  }
-  if (statusCode >= 500) {
-    return 'bg-red-900 text-red-300'
-  }
-  return 'bg-gray-700 text-gray-300'
 }
 </script>

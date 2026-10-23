@@ -44,7 +44,7 @@ def test_every_route_requires_a_session(anon_app):
 def test_the_guard_actually_sees_the_routes(anon_app):
     routes = set(_routes(anon_app))
     assert ("POST", "/import_gee") in routes
-    assert ("DELETE", "/output/reset") in routes
+    assert ("DELETE", "/pipeline/lock") in routes
     assert len(routes) >= 25
 
 

@@ -14,15 +14,11 @@
           <!-- Native download: the browser sends the session cookie and saves the zip itself. New tab so an
                error page (404, expired session) does not replace the app. Open run only: a closed run's files left input/. -->
           <a v-if="!run" class="modal-refresh" :href="archiveUrl" target="_blank" rel="noopener" download>
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
-            </svg>
+            <Icon :path="ICONS.download" width="16" height="16" stroke-width="2" />
             <span>Download Forecast Data</span>
           </a>
           <button class="modal-close" @click="closeModal">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <Icon :path="ICONS.close" width="20" height="20" stroke-width="2" />
           </button>
         </div>
       </div>
@@ -35,10 +31,7 @@
           title="Forecast Report"
         ></iframe>
         <div v-else-if="loading" class="report-loading">
-          <svg class="spinner-lg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
+          <span class="spinner-lg animate-spin" aria-hidden="true"></span>
           <p>Loading report...</p>
         </div>
         <div v-else class="report-error">
@@ -54,6 +47,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import api from '@/services/api'
+import Icon, { ICONS } from '@/components/Icons'
 import BaseDialog from './BaseDialog.vue'
 
 const props = defineProps<{
@@ -152,7 +146,7 @@ watch(() => props.modelValue, open => open && fetchReport(), { immediate: true }
 }
 
 .spinner-lg {
-  @apply w-12 h-12 animate-spin mb-4;
+  @apply w-12 h-12 mb-4 rounded-full border-4 border-white/25 border-t-white;
 }
 
 .report-error {

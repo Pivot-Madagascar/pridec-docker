@@ -19,11 +19,8 @@ const CARDS: Record<string, { label: string; icon: string; iconClass: string }> 
 
 const STATUS_TEXT = { pending: 'Waiting', running: 'Running…', success: '✓ Done', error: '✗ Failed: relaunch' }
 
-/** 'CSB/Malaria:forecast' -> 'forecast' */
-const nameOf = (item: string) => item.split(':').pop()!
-
 /** The job a checkpoint launches: its name ('CSB/Malaria:forecast' -> 'forecast'). */
-export const jobOf = nameOf
+export const jobOf = (item: string) => item.split(':').pop()!
 
 /** config.json file expected for each disease (shown next to the upload). */
 export const CONFIG_FILES: Record<string, string> = {
@@ -44,7 +41,7 @@ export function openLevel(state: Checkpoints | null) {
 
 /** Card label of a checkpoint, also used for notifications and the activity log. */
 export function labelOf(item: string): string {
-  const name = nameOf(item)
+  const name = jobOf(item)
   return CARDS[name]?.label ?? name
 }
 
@@ -54,7 +51,7 @@ export const lastUpdate = (item: PipelineItem) =>
 
 /** ActionCard props for one checkpoint. Disabled when etlhub says it cannot start, or while any job runs. */
 export function toCard(item: PipelineItem, state: Checkpoints | null, busy: boolean) {
-  const card = CARDS[nameOf(item.item)] ?? { label: labelOf(item.item), icon: ICONS.lightning, iconClass: 'icon-slate' }
+  const card = CARDS[jobOf(item.item)] ?? { label: labelOf(item.item), icon: ICONS.lightning, iconClass: 'icon-slate' }
   return {
     key: item.item,
     ...card,
@@ -63,9 +60,7 @@ export function toCard(item: PipelineItem, state: Checkpoints | null, busy: bool
     success: item.status === 'success',
     inactive: busy || !item.launchable || (state?.lock != null && item.status !== 'running'),
     statusText: STATUS_TEXT[item.status],
-    statusClass: item.status === 'error' ? 'status-error' : 'status-pending',
-    loadingText: 'Running…',
-    successText: '✓ Done'
+    statusClass: item.status === 'error' ? 'status-error' : 'status-pending'
   }
 }
 

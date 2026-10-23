@@ -23,9 +23,9 @@
         I have read the impact and I approve this update
       </label>
     </div>
-    <div class="impact-actions">
-      <button type="button" class="impact-btn" :disabled="busy" autofocus @click="emit('cancel')">Cancel</button>
-      <button type="button" class="impact-btn impact-btn-primary" :disabled="busy || !approved" @click="emit('confirm')">
+    <div class="dialog-actions">
+      <button type="button" class="dialog-btn" :disabled="busy" autofocus @click="emit('cancel')">Cancel</button>
+      <button type="button" class="dialog-btn dialog-btn-primary" :disabled="busy || !approved" @click="emit('confirm')">
         Confirm
       </button>
     </div>
@@ -139,32 +139,9 @@ watch(
   color: #f1f5f9;
 }
 
-.impact-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  margin-top: 1.5rem;
-}
-
-.impact-btn {
-  padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  cursor: pointer;
-}
-
-.impact-btn-primary {
+.dialog-btn-primary {
   color: #fff;
   background: #d97706;
   border-color: #d97706;
-}
-
-.impact-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 </style>

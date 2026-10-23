@@ -1,16 +1,13 @@
 import json
 import logging
 import sqlite3
-import threading
 from contextlib import closing
+from functools import lru_cache
 from pathlib import Path
 
 from etlhub.core.config import get_settings
 
 logger = logging.getLogger(__name__)
-
-_request_tracker = None
-_lock = threading.Lock()
 
 # Older entries are deleted on each save (indexed on created_at, so cheap), except those a production pipeline
 # journal event refers to (`journal` flag): a cycle's journal keeps its requests.
@@ -83,10 +80,6 @@ class RequestTracker:
         return [json.loads(r[0]) for r in rows]
 
 
+@lru_cache
 def get_request_tracker() -> RequestTracker:
-    global _request_tracker
-    if _request_tracker is None:
-        with _lock:
-            if _request_tracker is None:
-                _request_tracker = RequestTracker()
-    return _request_tracker
+    return RequestTracker()

@@ -1,6 +1,5 @@
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
-@runtime_checkable
 class RequestTrackerProtocol(Protocol):
     def save(self, log: dict) -> None: ...
     def get(self, request_id: str) -> dict | None: ...

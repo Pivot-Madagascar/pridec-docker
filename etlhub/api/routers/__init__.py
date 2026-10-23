@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 from fastapi import Query
 from pydantic import AfterValidator
 
-from etlhub.core.config import get_settings
+from etlhub.core.config import get_settings, split_csv
 
 CONFIRM_RELAUNCH = Query(False, description="Required to relaunch an item already in success (409 confirmation_required otherwise)")
 CONFIRM_OVERWRITE = Query(False, description="Required once a forecast of the cycle is in success: this job overwrites its input files (409 confirmation_required otherwise)")
@@ -13,7 +13,7 @@ CONFIRM_OVERWRITE = Query(False, description="Required once a forecast of the cy
 def _allowed_webhook(url: str) -> str:
     """https to a host of WEBHOOK_ALLOWED_HOSTS only: the worker POSTs to it from the host network."""
     parsed = urlparse(url)
-    allowed = {h.strip().lower() for h in get_settings().webhook_allowed_hosts.split(",") if h.strip()}
+    allowed = {h.lower() for h in split_csv(get_settings().webhook_allowed_hosts)}
     if parsed.scheme != "https" or parsed.hostname not in allowed:  # hostname: lowercase or None
         raise ValueError("webhook_url must be https to a host of WEBHOOK_ALLOWED_HOSTS")
     return url

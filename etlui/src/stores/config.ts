@@ -9,20 +9,20 @@ export const useConfigStore = defineStore('config', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  async function run(call: () => Promise<ConfigResponse>, fallback: string, rethrow = true) {
+  // Never throws: a failure is in `error`.
+  async function run(call: () => Promise<ConfigResponse>, fallback: string) {
     loading.value = true
     error.value = null
     try {
       config.value = await call()
     } catch (e) {
       error.value = errorMessage(e, fallback)
-      if (rethrow) throw e
     } finally {
       loading.value = false
     }
   }
 
-  const fetchConfig = () => run(() => configService.get(), 'Failed to load config', false)
+  const fetchConfig = () => run(() => configService.get(), 'Failed to load config')
   const updateConfig = (payload: ConfigUpdate) => run(() => configService.update(payload), 'Failed to update config')
   const reloadConfig = () => run(() => configService.reload(), 'Failed to reload config')
 

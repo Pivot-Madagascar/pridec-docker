@@ -68,3 +68,42 @@ dialog[open] {
   }
 }
 </style>
+
+<style>
+/* Not scoped: the action buttons of the dialogs built on this one (ConfirmDialog, ImpactDialog). */
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.dialog-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+}
+
+.dialog-btn:not(:disabled):hover {
+  filter: brightness(1.2);
+}
+
+.dialog-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-btn-danger {
+  color: #fff;
+  background: #dc2626;
+  border-color: #dc2626;
+}
+</style>

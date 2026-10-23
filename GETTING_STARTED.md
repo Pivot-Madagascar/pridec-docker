@@ -169,13 +169,13 @@ Check that Redis is not already running on port 6379:
 lsof -i :6379
 ```
 
-### `output/` owned by root (reset fails with "belong to another user")
+### `output/` owned by root (opening a run cannot empty it)
 Forecasts used to run as root, so older files in `output/` belong to root. Forecasts now run as your user, but those old files must be given back once. No password needed, only the Docker access the worker already has (run from the project root):
 ```bash
 docker run --rm --user 0 --entrypoint chown -v "$PWD/output:/app/output" \
   mvevans89/pridec_forecast:0.1.0 -R "$(id -u):$(id -g)" /app/output
 ```
-After that, `DELETE /output/reset` (the "reset" button in etlui) deletes `output/` normally.
+After that, opening a run (`POST /pipeline/runs`) empties `output/` normally.
 
 ### Celery worker can't connect to Redis
 Verify that Redis is running:

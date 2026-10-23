@@ -1,9 +1,8 @@
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 
-@runtime_checkable
 class PipelineGate(Protocol):
     """One job at a time, in pipeline order, one forecast run at a time. Raises PipelineBlockedError otherwise."""
 

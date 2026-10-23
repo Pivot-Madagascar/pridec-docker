@@ -11,9 +11,9 @@
           <Icon :path="ICONS.eye" class="btn-icon" />
           Preview
         </button>
-        <button type="button" class="btn btn-sm btn-danger" :disabled="deleting" :aria-label="`Delete ${label} from the server`" @click="emit('delete')">
+        <button type="button" class="btn btn-sm btn-danger" :disabled="busy" :aria-label="`Delete ${label} from the server`" @click="emit('delete')">
           <Icon :path="ICONS.reset" class="btn-icon" />
-          {{ deleting ? 'Deleting…' : 'Delete' }}
+          {{ busy ? 'Deleting…' : 'Delete' }}
         </button>
       </template>
       <span v-else class="status-text">Not on server</span>
@@ -53,19 +53,19 @@
           <Icon :path="ICONS.eye" class="btn-icon" />
           Preview
         </button>
-        <label :for="inputId" class="btn" :class="{ 'is-disabled': uploading }">Replace</label>
-        <button type="button" class="btn btn-danger" :disabled="uploading" @click="clear">Remove</button>
+        <label :for="inputId" class="btn" :class="{ 'is-disabled': busy }">Replace</label>
+        <button type="button" class="btn btn-danger" :disabled="busy" @click="clear">Remove</button>
         <button
           type="button"
           class="btn btn-upload"
-          :disabled="uploading || disabled"
-          :aria-busy="uploading"
+          :disabled="busy || disabled"
+          :aria-busy="busy"
           :aria-label="`Upload ${label} to the server`"
           @click="emit('upload', modelValue)"
         >
-          <span v-if="uploading" class="btn-spinner animate-spin" aria-hidden="true"></span>
+          <span v-if="busy" class="btn-spinner animate-spin" aria-hidden="true"></span>
           <Icon v-else :path="ICONS.upload" class="btn-icon" />
-          {{ uploading ? 'Uploading…' : 'Upload' }}
+          {{ busy ? 'Uploading…' : 'Upload' }}
         </button>
       </div>
 
@@ -82,7 +82,7 @@
       <button
         type="button"
         class="btn btn-sm btn-preview"
-        :disabled="disabled || uploading"
+        :disabled="disabled || busy"
         :aria-label="`Use the default ${label}`"
         @click="emit('use-default')"
       >
@@ -104,8 +104,7 @@ const props = defineProps<{
   accept: string
   serverFile?: ServerFile
   defaultFile?: DefaultFile
-  deleting?: boolean
-  uploading?: boolean
+  busy?: boolean
   // Nothing can be selected, dropped or uploaded (the server would refuse it now).
   disabled?: boolean
 }>()

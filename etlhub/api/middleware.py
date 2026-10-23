@@ -10,8 +10,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, Response
 
-from etlhub.infrastructure.request_tracker import get_request_tracker
-from etlhub.core.config import get_settings
+from etlhub.core.dependencies import get_request_tracker_repo
+from etlhub.core.config import get_settings, split_csv
 from etlhub.core.request_context import request_context
 
 
@@ -19,7 +19,7 @@ def _should_track_request(path: str) -> bool:
     # Reading the tracking must not fill the tracking: never record /api/tracking, filter or not.
     if path.startswith("/api/tracking"):
         return False
-    tracked = [e.strip() for e in get_settings().tracked_endpoints.split(",") if e.strip()]
+    tracked = split_csv(get_settings().tracked_endpoints)
     return not tracked or any(path.startswith(ep) for ep in tracked)
 
 
@@ -120,7 +120,7 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
                     **{k: context[k] for k in ("reason", "code", "journal") if k in context},
                 }
                 # SQLite write off the event loop.
-                await run_in_threadpool(get_request_tracker().save, log)
+                await run_in_threadpool(get_request_tracker_repo().save, log)
 
         response.headers["X-Request-ID"] = request_id
         return response

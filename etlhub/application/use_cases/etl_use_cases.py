@@ -1,11 +1,11 @@
 import contextlib
 import io
-from pathlib import Path
 
 import httpx
 
-from etlhub.core.config import get_settings
 from etlhub.domain.exceptions import ETLException
+from etlhub.domain.interfaces.event_publisher import EventPublisher
+from etlhub.domain.interfaces.job_repository import JobRepository
 from etlhub.application.use_cases.validation_use_cases import validate_input_files
 from etl.scripts.import_gee import import_gee
 from etl.scripts.import_pivot_COM import import_pivot_com
@@ -33,24 +33,17 @@ SYNC_JOBS = {"post_forecast": post_forecast, "update_key": update_key}
 
 
 class _JobLogger(io.StringIO):
-    """Job stdout/stderr: kept in memory, appended to logs/{job_id}.log and published live."""
+    """Job stdout/stderr: appended to the job logs (Redis and logs/{job_id}.log) and published live."""
 
-    def __init__(self, job_id: str):
+    def __init__(self, job_store: JobRepository, job_id: str, events: EventPublisher):
         super().__init__()
+        self.job_store = job_store
         self.job_id = job_id
-        log_dir = Path(get_settings().logs_dir)
-        log_dir.mkdir(parents=True, exist_ok=True)
-        self._file_path = log_dir / f"{job_id}.log"
+        self.events = events
 
     def write(self, text: str) -> int:
-        super().write(text)
+        self.job_store.append_logs(self.job_id, text)  # history first: a client connecting now loses nothing
         try:
-            with open(self._file_path, 'a') as f:
-                f.write(text)
-        except Exception:
-            pass
-        try:
-            from etlhub.api.etl_events import get_etl_event_manager
             level = "INFO"
             upper = text.upper()
             if "ERROR" in upper:
@@ -59,25 +52,23 @@ class _JobLogger(io.StringIO):
                 level = "WARNING"
             elif "DEBUG" in upper:
                 level = "DEBUG"
-            get_etl_event_manager().publish_log(self.job_id, level, text)
+            self.events.publish_log(self.job_id, level, text)
         except Exception:
             pass
         return len(text)
 
 
-def _execute_etl_job(fn, job_store, job_id: str, name: str, **kwargs) -> None:
-    buf = _JobLogger(job_id)
-    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+def _execute_etl_job(fn, log: _JobLogger, name: str, **kwargs) -> None:
+    with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
         try:
             fn(**kwargs)
         except Exception as e:
             raise ETLException(f"{name} failed: {e}") from e
-    job_store.save_logs(job_id, buf.getvalue())
 
 
-def run_etl_job(task_type: str, job_store, job_id: str, **kwargs) -> None:
+def run_etl_job(task_type: str, job_store: JobRepository, job_id: str, events: EventPublisher, **kwargs) -> None:
     fn = SYNC_JOBS[task_type] if task_type in SYNC_JOBS else ETL_JOBS[task_type][0]
-    _execute_etl_job(fn, job_store, job_id, task_type, **kwargs)
+    _execute_etl_job(fn, _JobLogger(job_store, job_id, events), task_type, **kwargs)
 
 
 def notify_webhook(webhook_url: str | None, job_id: str, status: str, message: str) -> None:

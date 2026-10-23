@@ -25,9 +25,9 @@
 ### Clean architecture
 
 - The domain imports only `typing` and `pydantic`.
-- 4 ports exist. `JobRepository`, `TaskLauncher`, `PipelineGate` and `RequestTrackerProtocol` are injected but also bypassed (`JobStore()` in `tasks.py`, `get_request_tracker()`). Webhooks and events have no port.
-- Imports that cross the written rule: `application` → `api` (deferred, `etl_use_cases.py:40`), `infrastructure` → `api` (deferred, `tasks.py:52,79`, `forecast_runner.py:172,177`), `api` → `infrastructure` without injection (`middleware.py:12`, `config_router.py:9`), `api` → `etl.scripts`, `application` → `etl.scripts` (11 imports). Widespread but not covered by the written rule: `api` → `domain` (5 files), `infrastructure` → `core` (4), `application` → `core` (2); `core/dependencies.py` is the composition root.
-- SOLID, as visible in the code. **S**: one service per functional area, but `tasks.py` mixes Celery tasks, webhooks, status and events, and `run_rscript` is 104 lines. **O**: a Celery job is one entry in `ETL_JOBS` plus one row in the `ingest_router.py` table. **I**: ports are small, except `JobRepository.load_from_file`. **D**: services depend on `Protocol`s, with the bypasses above. **L**: no violation shown.
+- 5 ports in `domain/interfaces/` (`JobRepository`, `TaskLauncher`, `PipelineGate`, `RequestTrackerProtocol`, `DefaultFileSource`), bound to their adapters in `core/dependencies.py` (restored on 2026-10-23 after a short removal). Bypassed inside `infrastructure/tasks.py` (`JobStore()`, `get_checkpoint_store()`). Since 2026-10-23 also `EventPublisher`, `AuthStore` and `ConfigRepository`. No type checker runs, so the ports and the test fakes (`FakeJobStore`, `OpenGate`) are not checked against each other. Webhooks have no port.
+- Imports that cross the written rule: none since 2026-10-23, checked by `tests/test_architecture.py`. Tolerated and not checked: `application` → `etl.scripts` (11 imports), `infrastructure` → `etl.scripts.config`. Widespread and allowed: `api` → `domain`, `infrastructure` and `application` → `core`; `core/dependencies.py` is the composition root.
+- SOLID, as visible in the code. **S**: one service per functional area, but `tasks.py` mixes Celery tasks, webhooks, status and events, and `run_rscript` is 104 lines. **O**: a Celery job is one entry in `ETL_JOBS` plus one row in the `ingest_router.py` table. **I**: ports are small, except `PipelineGate` (20 methods) and `JobRepository.load_from_file`. **D**: services depend on `Protocol`s, with the bypasses above. **L**: no violation shown.
 
 ### Clean code
 

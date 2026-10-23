@@ -22,8 +22,7 @@ from etlhub.api.auth.dhis2_auth import (
 )
 from etlhub.api.routers import NOT_AUTHENTICATED, error_doc
 from etlhub.core.config import get_settings
-from etlhub.infrastructure import auth_store
-from etlhub.infrastructure.config_store import ConfigStore
+from etlhub.core.dependencies import get_auth_store, get_config_store
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +55,7 @@ def _set_session_cookie(response: Response, session_id: str) -> None:
 
 def _revoke_previous(client: httpx.Client, url: str, basic: tuple) -> None:
     """Revoke the token etlhub created at the previous login, and only that one."""
-    previous = auth_store.get_credential()
+    previous = get_auth_store().get_credential()
     if not previous:
         return
     revoked = revoke_pat(client, previous["url"], previous["pat_uid"], token=previous["token"])
@@ -64,15 +63,15 @@ def _revoke_previous(client: httpx.Client, url: str, basic: tuple) -> None:
         revoke_pat(client, url, previous["pat_uid"], auth=basic)
     # Never leave a revoked token where jobs and sessions would still use it,
     # even if creating the new one fails below.
-    auth_store.delete_credential()
+    get_auth_store().delete_credential()
 
 
 def _rollback(client: httpx.Client, url: str, uid: str, basic: tuple) -> None:
     revoke_pat(client, url, uid, auth=basic)
     try:
-        current = auth_store.get_credential()
+        current = get_auth_store().get_credential()
         if current and current["pat_uid"] == uid:
-            auth_store.delete_credential()
+            get_auth_store().delete_credential()
     except redis.RedisError as e:
         logger.error("Could not remove the revoked DHIS2 credential from Redis: %s", e)
 
@@ -121,16 +120,16 @@ def login(body: LoginRequest, request: Request, response: Response):
 
     ip = request.client.host if request.client else "unknown"
     try:
-        if auth_store.failed_logins(ip, body.username) >= MAX_FAILED_LOGINS:
+        if get_auth_store().failed_logins(ip, body.username) >= MAX_FAILED_LOGINS:
             raise HTTPException(status_code=429, detail="Too many failed attempts, try again later")
 
         basic = (body.username, body.password.get_secret_value())
         with dhis2_client() as client:
             user = fetch_me(client, url, auth=basic)
             if user is None:
-                auth_store.record_failed_login(ip, body.username, FAILED_LOGIN_WINDOW_SECONDS)
+                get_auth_store().record_failed_login(ip, body.username, FAILED_LOGIN_WINDOW_SECONDS)
                 raise HTTPException(status_code=401, detail="Invalid DHIS2 username or password")
-            auth_store.clear_failed_logins(ip, body.username)
+            get_auth_store().clear_failed_logins(ip, body.username)
 
             _revoke_previous(client, url, basic)
             expires_at = int(time.time()) + TOKEN_LIFETIME_SECONDS
@@ -138,13 +137,13 @@ def login(body: LoginRequest, request: Request, response: Response):
             try:
                 if fetch_me(client, url, token=key) is None:
                     raise DHIS2Error("DHIS2 rejected the token it just created")
-                auth_store.set_credential(
+                get_auth_store().set_credential(
                     {"url": url, "token": key, "pat_uid": uid, "username": user["username"], "expires_at": expires_at},
                     ttl=TOKEN_LIFETIME_SECONDS,
                 )
-                session_id = auth_store.create_session(user, uid, TOKEN_LIFETIME_SECONDS)
+                session_id = get_auth_store().create_session(user, uid, TOKEN_LIFETIME_SECONDS)
                 # Values written by the old config form; nothing reads them any more.
-                ConfigStore().delete_keys(["DHIS_URL", "DHIS_TOKEN"])
+                get_config_store().delete_keys(["DHIS_URL", "DHIS_TOKEN"])
             except Exception:
                 _rollback(client, url, uid, basic)
                 raise
@@ -164,14 +163,14 @@ def login(body: LoginRequest, request: Request, response: Response):
 def logout(request: Request):
     """End the session and revoke its DHIS2 token. Always clears the cookie."""
     session_id = request.cookies.get(SESSION_COOKIE)
-    session = auth_store.get_session(session_id) if session_id else None
+    session = get_auth_store().get_session(session_id) if session_id else None
     if session:
-        auth_store.delete_session(session_id)
-        credential = auth_store.get_credential()
+        get_auth_store().delete_session(session_id)
+        credential = get_auth_store().get_credential()
         if credential and credential["pat_uid"] == session["pat_uid"]:
             with dhis2_client() as client:
                 revoke_pat(client, credential["url"], credential["pat_uid"], token=credential["token"])
-            auth_store.delete_credential()
+            get_auth_store().delete_credential()
         logger.info("DHIS2 logout: user=%s", session["user"].get("username"))
 
     response = Response(status_code=204)

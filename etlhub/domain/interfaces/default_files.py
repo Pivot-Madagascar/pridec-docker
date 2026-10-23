@@ -1,8 +1,7 @@
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 
-@runtime_checkable
 class DefaultFileSource(Protocol):
     """Default config.json / external_data.csv per item (config/<disease>, external_data/<level>) and mode."""
 

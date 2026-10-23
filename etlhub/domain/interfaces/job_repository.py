@@ -1,6 +1,5 @@
-from typing import Protocol, runtime_checkable, Any, Optional
+from typing import Protocol, Any, Optional
 
-@runtime_checkable
 class JobRepository(Protocol):
     def get(self, job_id: str) -> Optional[dict[str, Any]]:
         ...
@@ -8,7 +7,7 @@ class JobRepository(Protocol):
     def set(self, job_id: str, data: dict[str, Any]) -> None:
         ...
 
-    def save_logs(self, job_id: str, logs: str) -> None:
+    def append_logs(self, job_id: str, text: str) -> None:
         ...
 
     def get_logs(self, job_id: str) -> Optional[str]:

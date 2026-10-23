@@ -35,7 +35,7 @@ Problems this migration fixes:
    `bg-red-50`).
 6. **No scale.** Font sizes `0.8125rem` ×15, `0.875rem` ×14, `0.9375rem`…; radii `4px`, `8px`, `0.375rem`,
    `0.5rem`, `0.625rem`, `0.75rem`, `1rem`.
-7. **Dead code.** `src/views/JobStatus.vue` is neither routed nor imported.
+7. **Dead code.** `src/views/JobStatus.vue` was neither routed nor imported (deleted 2026-10-23, with its `base.css` classes and `.fade-*`).
 
 ## 2. Decisions
 
@@ -226,7 +226,7 @@ One phase = one commit (or one PR), app working at every step. Before and after 
 | Phase | Content | Visual change |
 |---|---|---|
 | **1. Test hooks** | Add `data-test` / `aria-current` / `aria-disabled` / `data-state` to the components of § 3.5, rewrite the specs to use them. Styling classes untouched. | none |
-| **2. Foundation** | `base.css`: tokens, dark override, `@custom-variant dark`, component classes (§ 3.3), delete the dead classes. `index.html` script, toggle in `App.vue`. `#app` background → `bg-canvas`. Delete `JobStatus.vue`. | header, global background, every page using a deleted `base.css` class (fix them in this phase) |
+| **2. Foundation** | `base.css`: tokens, dark override, `@custom-variant dark`, component classes (§ 3.3), delete the dead classes. `index.html` script, toggle in `App.vue`. `#app` background → `bg-canvas`. (`JobStatus.vue` already deleted, 2026-10-23.) | header, global background, every page using a deleted `base.css` class (fix them in this phase) |
 | **3. Shell and simple pages** | `App`, `Drawer`, `LoginForm`, `ParametersPage`, `ConfigView`, `LogsStreamPage`, `TrackerView/*` (replace raw `gray-*` utilities with tokens). | small |
 | **4. Dialogs** | `BaseDialog` (box + backdrop stay CSS, colors → tokens), `ConfirmDialog`, `ImpactDialog`, `PreviewDialog`, `ConfigPreview`, `CsvPreview`, `ForecastReportModal`. | small |
 | **5. Dashboard, steps 1 and 3** | `Dashboard`, `Accordion`, `ActionCard`, `ModeToggle`, `RecentActivity`, `FileDropzone`. | medium |
@@ -248,5 +248,4 @@ One phase = one commit (or one PR), app working at every step. Before and after 
 - No new dependency (no headless UI kit, no icon pack, no `tailwind-merge`).
 - The Google Fonts `Inter` link in `index.html` stays as it is.
 - Contrast: check WCAG AA on `text-muted` over `bg-surface-2` in both themes during phase 2 (not measured).
-- `etlui/package-lock.json` is tracked by git although the project is yarn-only (`etlui/CLAUDE.md`): unrelated to
-  styling, delete it separately.
+- `etlui/package-lock.json`, once tracked by git although the project is yarn-only, was deleted on 2026-10-23.

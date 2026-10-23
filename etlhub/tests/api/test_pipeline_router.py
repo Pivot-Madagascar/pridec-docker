@@ -4,14 +4,12 @@ from fastapi.testclient import TestClient
 
 from etlhub.infrastructure import tasks
 from tests.infrastructure.test_checkpoint_store import _import, _prepare
-from tests.infrastructure.test_forecast_task import InMemoryJobStore
 
 
 @pytest.fixture
-def queue(monkeypatch):
+def queue(monkeypatch, job_store):
     """Celery replaced: records the queued jobs."""
-    InMemoryJobStore.records = {}
-    monkeypatch.setattr(tasks, "JobStore", InMemoryJobStore)
+    monkeypatch.setattr(tasks, "JobStore", lambda: job_store)
     queued = []
     monkeypatch.setattr(tasks.task_etl, "delay", lambda task_type, *a, **k: queued.append((a, k)))
     return queued
@@ -142,16 +140,16 @@ def test_calc_orgunit_alerts_is_not_implemented(client):
     assert "not implemented" in response.json()["message"]
 
 
-def test_release_lock(app, client, checkpoint_store):
+def test_release_lock(app, client, checkpoint_store, job_store):
     from etlhub.core.dependencies import get_job_repository
-    InMemoryJobStore.records = {"dead": {"job_id": "dead", "status": "running"}}
-    app.dependency_overrides[get_job_repository] = InMemoryJobStore
+    job_store.set("dead", {"job_id": "dead", "status": "running"})
+    app.dependency_overrides[get_job_repository] = lambda: job_store
     checkpoint_store.start("import_gee", "dead")
 
     assert client.delete("/pipeline/lock").json() == {"released": "dead"}
     assert client.get("/pipeline/checkpoints").json()["lock"] is None
     # Its end is seen by the toast and the tracking: no job left "running" for 24 h
-    assert InMemoryJobStore.records["dead"]["status"] == "error"
+    assert job_store.get("dead")["status"] == "error"
     app.dependency_overrides.pop(get_job_repository)
 
 
@@ -179,8 +177,8 @@ def test_a_failed_task_records_error_and_frees_the_lock(checkpoint_store, queue)
     assert state["lock"] is None
 
 
-def test_a_queueing_failure_frees_the_lock(checkpoint_store, monkeypatch):
-    monkeypatch.setattr(tasks, "JobStore", InMemoryJobStore)
+def test_a_queueing_failure_frees_the_lock(checkpoint_store, monkeypatch, job_store):
+    monkeypatch.setattr(tasks, "JobStore", lambda: job_store)
 
     def broker_down(*args, **kwargs):
         raise ConnectionError("broker down")
@@ -242,12 +240,8 @@ def test_the_report_of_a_closed_run(client, checkpoint_store, tmp_path):
 
 @pytest.fixture
 def journal_client(app):
-    """The journal reads request_log from the temporary db, not logs/etlhub.db."""
-    from etlhub.core.dependencies import get_request_tracker_repo
-    from etlhub.infrastructure.request_tracker import get_request_tracker
-    app.dependency_overrides[get_request_tracker_repo] = get_request_tracker
-    yield TestClient(app)
-    app.dependency_overrides.pop(get_request_tracker_repo)
+    """The journal reads request_log from the temporary db (conftest `_request_log_db`), not logs/etlhub.db."""
+    return TestClient(app)
 
 
 def test_the_journal_lists_events_with_the_request_that_caused_them(journal_client, queue):

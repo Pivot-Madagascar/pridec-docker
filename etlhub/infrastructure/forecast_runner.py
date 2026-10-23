@@ -8,19 +8,14 @@ from datetime import datetime
 from etlhub.core.config import get_settings
 from etlhub.infrastructure.job_store import JobStore
 from etlhub.infrastructure.config_store import ConfigStore
-
-
-def _get_output_dir() -> str:
-    """Get the output directory path."""
-    settings = get_settings()
-    return os.path.join(settings.data_dir, "output")
+from etlhub.infrastructure import etl_events
 
 
 def _container_user() -> list[str]:
     """Run the container as the worker's user, not root.
 
-    Files the forecast writes in output/ then belong to the etlhub user, so
-    DELETE /output/reset can remove them without sudo. HOME points to a writable
+    Files the forecast writes in output/ then belong to the etlhub user, so opening
+    the next run can empty output/ without sudo. HOME points to a writable
     directory because the image has no home for that user.
     """
     if os.getuid() == 0:
@@ -61,35 +56,6 @@ def _build_dynamic_env_file(host_pwd: str, job_id: str) -> str:
     return env_path
 
 
-def generate_signature() -> str:
-    """Generate a unique signature for this server session."""
-    import secrets
-    settings = get_settings()
-    sig_file = os.path.join(settings.data_dir, ".output_sig")
-    
-    sig = secrets.token_hex(32)
-    with open(sig_file, 'w') as f:
-        f.write(sig)
-    
-    return sig
-
-
-def verify_signature() -> bool:
-    """Verify that the signature exists and is valid."""
-    settings = get_settings()
-    sig_file = os.path.join(settings.data_dir, ".output_sig")
-    
-    if not os.path.exists(sig_file):
-        return False
-    
-    # If we can read it, we're authorized
-    try:
-        with open(sig_file, 'r') as f:
-            return len(f.read().strip()) > 0
-    except Exception:
-        return False
-
-
 def run_rscript(job_id, params, job_store: JobStore):
     status = {
         "status": "running",
@@ -125,15 +91,13 @@ def run_rscript(job_id, params, job_store: JobStore):
         ]
         # R cli/message() output goes to stderr: merge it so the logs keep the order the R run printed.
         # Each line is stored then published as it comes: the log WebSocket follows the run live.
-        from etlhub.api.etl_events import get_etl_event_manager
-        events = get_etl_event_manager()
         lines = []
         with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as proc:
             for line in proc.stdout:
                 lines.append(line)
                 job_store.append_logs(job_id, line)  # history first: a client connecting now loses nothing
                 try:
-                    events.publish_log(job_id, "INFO", line.rstrip("\n"))
+                    etl_events.publish_log(job_id, "INFO", line.rstrip("\n"))
                 except Exception:
                     pass
         output = "".join(lines)
@@ -171,24 +135,6 @@ def run_rscript(job_id, params, job_store: JobStore):
             except OSError:
                 pass
 
-    # Generate signature and chown output directory to allow API deletion
-    try:
-        generate_signature()
-        output_dir = _get_output_dir()
-        if os.path.exists(output_dir):
-            # Get current user's uid/gid
-            uid = os.getuid()
-            gid = os.getgid()
-            # Recursively chown to current user
-            for root, dirs, files in os.walk(output_dir):
-                for d in dirs:
-                    os.chown(os.path.join(root, d), uid, gid)
-                for f in files:
-                    os.chown(os.path.join(root, f), uid, gid)
-            os.chown(output_dir, uid, gid)
-    except Exception as e:
-        print(f"Warning: Could not setup output permissions: {e}")
-
     try:
         settings = get_settings()
         logs_dir = Path(settings.logs_dir)
@@ -202,10 +148,9 @@ def run_rscript(job_id, params, job_store: JobStore):
     job_store.set(job_id, status)
 
     if not status.get("logs") and status.get("message"):  # nothing streamed: a failure to start
-        job_store.save_logs(job_id, status["message"])
+        job_store.append_logs(job_id, status["message"])
         try:
-            from etlhub.api.etl_events import get_etl_event_manager
-            get_etl_event_manager().publish_log(job_id, "ERROR", status["message"])
+            etl_events.publish_log(job_id, "ERROR", status["message"])
         except Exception:
             pass
 

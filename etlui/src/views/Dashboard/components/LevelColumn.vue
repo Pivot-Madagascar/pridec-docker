@@ -42,11 +42,10 @@
               :label="input.file"
               :description="input.description"
               :accept="input.accept"
-              :server-file="serverFiles[input.name]"
-              :default-file="defaults[input.item]"
+              :server-file="runs.serverFiles[input.name]"
+              :default-file="runs.defaults[input.item]"
               :disabled="!input.launchable"
-              :uploading="busy"
-              :deleting="busy"
+              :busy="runs.busy"
               @upload="f => upload(input.name, f)"
               @delete="emit('delete', input.name)"
               @preview-local="f => emit('preview', input.name, f)"
@@ -105,47 +104,30 @@
     </BaseDialog>
 
     <div class="level-action">
-      <button v-if="status.key === 'published'" type="button" class="btn" @click="emit('report')">View report</button>
+      <button v-if="status.key === 'published'" type="button" class="btn" @click="emit('report', source, disease)">View report</button>
       <button v-else-if="status.key === 'waiting'" type="button" class="btn btn-primary" :disabled="blocked" @click="emit('validate')">
         Read and approve
       </button>
       <template v-else-if="!isOpen">
-        <p v-if="state?.run" class="hint">Available once the open run is done</p>
-        <button v-else type="button" class="btn btn-primary" :disabled="blocked || !accessible" @click="emit('open')">Open</button>
+        <p v-if="runs.state?.run" class="hint">Available once the open run is done</p>
+        <button v-else type="button" class="btn btn-primary" :disabled="blocked || !accessible" @click="emit('open', source, disease)">Open</button>
       </template>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, useId, watch } from 'vue'
+import { computed, inject, reactive, ref, useId, watch } from 'vue'
 import BaseDialog from './BaseDialog.vue'
 import Icon, { ICONS } from '@/components/Icons'
 import FileDropzone from '@/views/Dashboard/components/FileDropzone.vue'
 import { CONFIG_FILES, DISEASE_NAMES, FILE_STATUS, ITEM_NAMES, LEVEL_NAMES, jobOf, lastUpdate, step } from '@/config/pipeline'
-import type { Checkpoints, Disease, PipelineItem, Source } from '@/types/pipeline'
-import type { DefaultFile, InputName, PreviewFrom, ServerFile } from '@/types/inputs'
+import type { Disease, PipelineItem, Source } from '@/types/pipeline'
+import type { InputName } from '@/types/inputs'
+import { RUNS } from './runs'
 
-const props = defineProps<{
-  source: Source
-  disease: Disease
-  state: Checkpoints | null
-  busy: boolean
-  serverFiles: Partial<Record<InputName, ServerFile>>
-  defaults: Record<string, DefaultFile>
-  // Returns true once uploaded: the selected file is then cleared.
-  uploadFile: (name: InputName, file: File) => Promise<boolean>
-}>()
-
-const emit = defineEmits<{
-  open: []
-  launch: [item: string]
-  validate: []
-  report: []
-  delete: [name: InputName]
-  preview: [name: InputName, from: PreviewFrom]
-  'use-default': [name: InputName]
-}>()
+const props = defineProps<{ source: Source; disease: Disease }>()
+const { props: runs, emit } = inject(RUNS)!
 
 type Look = 'success' | 'waiting' | 'running' | 'error' | 'pending'
 // Never the colour alone: every state also has its text.
@@ -161,13 +143,13 @@ const titleId = useId()
 const showSteps = ref(false)
 const couple = computed(() => `${props.source}/${props.disease}`)
 const items = computed<PipelineItem[]>(() =>
-  (step(props.state, 'forecast')?.items ?? []).filter(i => i.item.startsWith(`${couple.value}:`))
+  (step(runs.state, 'forecast')?.items ?? []).filter(i => i.item.startsWith(`${couple.value}:`))
 )
-const accessible = computed(() => step(props.state, 'forecast')?.accessible ?? false)
-const isOpen = computed(() => props.state?.run?.couple === couple.value)
-const blocked = computed(() => props.busy || props.state?.lock != null)
+const accessible = computed(() => step(runs.state, 'forecast')?.accessible ?? false)
+const isOpen = computed(() => runs.state?.run?.couple === couple.value)
+const blocked = computed(() => runs.busy || runs.state?.lock != null)
 const files = reactive<Partial<Record<InputName, File>>>({})
-const itemOf = (name: string) => step(props.state, 'forecast')?.items.find(i => i.item === name)
+const itemOf = (name: string) => step(runs.state, 'forecast')?.items.find(i => i.item === name)
 
 // config/<disease> and external_data/<fkt|csb>: the same items as the other runs of that disease or level.
 const inputs = computed(() => {
@@ -187,7 +169,7 @@ const inputs = computed(() => {
 })
 
 async function upload(name: InputName, selected: File) {
-  if (await props.uploadFile(name, selected)) files[name] = undefined
+  if (await runs.uploadFile(name, selected)) files[name] = undefined
 }
 
 const done = computed(() =>

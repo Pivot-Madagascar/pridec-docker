@@ -28,14 +28,7 @@ add_launch_route(
     ),
     response_description="Forecast published successfully to DHIS2.",
     responses={
-        500: {
-            "description": "Internal Server Error - publish failed",
-            "content": {
-                "application/json": {
-                    "example": {"message": "post_forecast failed: ..."}
-                }
-            },
-        },
+        500: error_doc("Internal Server Error - publish failed", {"message": "post_forecast failed: ..."}),
         **BLOCKED,
     },
 )
@@ -58,14 +51,7 @@ async def api_post_forecast(
     ),
     response_description="PRIDE-C key updated successfully.",
     responses={
-        500: {
-            "description": "Internal Server Error - update failed",
-            "content": {
-                "application/json": {
-                    "example": {"message": "update_key failed: ..."}
-                }
-            },
-        },
+        500: error_doc("Internal Server Error - update failed", {"message": "update_key failed: ..."}),
         **BLOCKED,
     },
 )

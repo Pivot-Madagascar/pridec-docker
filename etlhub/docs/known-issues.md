@@ -8,7 +8,6 @@ Priority scale: **P1** fix next (security or a broken feature), **P2** fix soon 
 
 | # | Priority | Issue | Section |
 |---|---|---|---|
-| 1 | P3 | `DELETE /output/reset`: "signature" is only "file exists" (sudo fallback removed) | 1.1 |
 | 5 | P1 | `/post_forecast`, `/update_key` block the event loop | 3 |
 | 6 | P2 | A login while a job runs revokes the token that job uses | 1.4 |
 | 7 | P2 | No roles: any DHIS2 user of an allowed host can log in and run anything | 1.5 |
@@ -21,11 +20,11 @@ Order of work suggested: 5 (it freezes the whole API), then 6 and 7 (they need a
 
 ## 1. Security
 
-1. **P3 — `DELETE /output/reset`** (`api/routers/forecast_report_router.py`). Behind the session; the "signature" only checks that `.output_sig` exists and is non-empty. The `sudo rm -rf` fallback is gone (2026-10-08): forecast containers run as the worker's user (`forecast_runner._container_user`), `output/` is created by the worker before `docker run`, and the endpoint deletes with `shutil.rmtree` only. Files left root-owned by older runs must be handed back once (`GETTING_STARTED.md`, "output/ owned by root"). *Unverified:* the `PRIDEC` R package (not in the repo) is assumed to write only under `output/` and `HOME` (`/tmp`); a forecast run as non-root has not been executed yet.
+1. *Removed (2026-10-23):* `DELETE /output/reset` and its `.output_sig` "signature" (no caller in etlui; opening a run empties `output/`). Forecast containers run as the worker's user (`forecast_runner._container_user`) and `output/` is created by the worker before `docker run`. Files left root-owned by older runs must be handed back once (`GETTING_STARTED.md`, "output/ owned by root"). *Unverified:* the `PRIDEC` R package (not in the repo) is assumed to write only under `output/` and `HOME` (`/tmp`); a forecast run as non-root has not been executed yet.
 2. *Fixed (2026-10-16):* SSRF through `webhook_url`. Every route takes the `WebhookUrl` type (`api/routers/__init__.py`): https to a host of `WEBHOOK_ALLOWED_HOSTS` only, 422 otherwise; empty list = every webhook refused. `notify_webhook` uses httpx, which does not follow redirects. *Unverified:* a DNS name of the allow-list that resolves to an internal address is still called.
 3. *Fixed (2026-10-16):* `/validate_inputs` free paths. Its paths and `input_dir` take the `InputPath` type shared with `ForecastParams` (file path under `input/`, no `..`, no leading `-`), and the use case resolves them against the repo root instead of the worker's cwd.
 4. **P2 — A login revokes the token of running jobs.** Scripts read the DHIS2 token once at start (`DHIS_TOKEN = get_dhis_token()`). A new login revokes it (`api/auth/router.py`, `_revoke_previous`), so a running import gets 401 from DHIS2 mid-way and stops half done. Same at logout and at the 24 h expiry. Decision needed: refuse login/logout while a DHIS2 job runs (409), or document it.
-5. **P2 — No roles.** Any user of a host in `DHIS2_ALLOWED_HOSTS` who can log in becomes the global DHIS2 identity for every job, and can call every endpoint (`DELETE /output/reset`, `/forecast/`, DHIS2 writes). Decision needed: require a DHIS2 authority or user group at login?
+5. **P2 — No roles.** Any user of a host in `DHIS2_ALLOWED_HOSTS` who can log in becomes the global DHIS2 identity for every job, and can call every endpoint (`/forecast/`, DHIS2 writes). Decision needed: require a DHIS2 authority or user group at login?
 6. **P2 — Request logs keep the full URL** (`api/middleware.py:94-107`, stored in SQLite `logs/etlhub.db`, 30 days). A secret in a query string (a `webhook_url` carrying a token) is stored. Bodies and headers are not logged, so the login password and cookies are not.
 7. *Fixed (2026-10-08):* a client `X-Request-ID` is kept only if it is a UUID (`api/middleware.py`, `_request_id`), so it can no longer overwrite another entry.
 8. **P3 — The DHIS2 token is in clear in Redis** (`dhis2:credential`) and in its AOF/RDB files. Accepted: `redis.conf` binds to localhost, requires a password, and the data directory must stay `chmod 700`. The token lives 24 h and is revoked at logout.
@@ -36,21 +35,17 @@ Fixed (2026-10-08): every router except `auth_router` requires the session, the 
 
 ## 2. Layering violations
 
-| Violation | Where |
-|---|---|
-| application → api | `application/use_cases/etl_use_cases.py` (`etlhub.api.etl_events`) |
-| infrastructure → api | `infrastructure/tasks.py`, `forecast_runner.py` (`get_etl_event_manager`) |
-| api → infrastructure without DI | `api/routers/config_router.py:9-10`, `api/middleware.py`, and since the login work `api/auth/dhis2_auth.py:17`, `api/auth/router.py:21-22` (`auth_store`, `ConfigStore`) |
-| etl scripts → etlhub infrastructure | `etl/scripts/config.py:3-4` (`ConfigStore`, `auth_store`) |
-| application → pandas/geopandas | `validation_use_cases.py` |
+None between etlhub layers since 2026-10-23, guarded by `tests/test_architecture.py` (`ALLOWED_DEBT` empty; rules in `CLAUDE.MD`, "Architecture").
 
-There is no event port. Proposed fix: move `ETLEventManager` to `infrastructure/` behind a port and inject it. The auth code follows the existing `config_router` pattern (direct infrastructure calls); whether that is tolerated is the same open decision as the other imports (see `DEVELOPMENT.md`).
+*Fixed (2026-10-23):* `application` and `infrastructure` → `api.etl_events` (moved to `infrastructure/etl_events.py` behind the `EventPublisher` port, injected into `run_etl_job` and `AnalyticsService`) · `api` → `infrastructure` without injection in `middleware.py`, `auth/dhis2_auth.py`, `auth/router.py`, `routers/config_router.py`, `etl_events.py` (they go through `core/dependencies.py`: `get_request_tracker_repo`, `get_auth_store`, `get_config_store`; ports `AuthStore`, `ConfigRepository`) · `etl/scripts/config.py` no longer imports etlhub (2026-10-22).
+
+Tolerated, not fixed (team decision pending, `CLAUDE.MD`): `application` → `etl.scripts` and pandas/geopandas (`validation_use_cases.py` reads the input files), `infrastructure/checkpoint_store.py` → `etl.scripts.config.get_dry_run`. Bypasses inside `infrastructure` (allowed by the rule): `tasks.py` builds `JobStore()` and calls `get_checkpoint_store()` directly.
 
 ## 3. Behaviour worth knowing
 
 - *Fixed (2026-10-08):* the log WebSocket no longer busy-waits (1 s `get_message` timeout, 0.3 % CPU measured while waiting), subscribes before reading history, re-checks the job status every 10 s, stops when the client leaves, and closes with `4004` only for an unknown job. Jobs are recorded `pending` at launch. The tracking page follows pending/running jobs live in its request detail modal.
 - **P1 — `/post_forecast` and `/update_key` run inline** in `async def` handlers (`analytics_router.py:56,109` → `analytics_service.py:22,38`): the whole API, login and WebSockets included, is frozen while they run.
-- **P2 — No timeout, no reconciliation, no lock.** No Celery time limit, no timeout on the forecast `subprocess.run` (`forecast_runner.py:111`). A killed worker leaves `job:{id}` at `running` until the 24 h TTL. Lock: fixed since 2026-10-08 (one job at a time, `docs/decision-design/pipeline-checkpoints/pipeline-checkpoints.md`); it never expires, so a killed worker blocks everything until `DELETE /pipeline/lock`. `DELETE /output/reset` still bypasses it. Imports resend the same `dataValueSets` each time.
+- **P2 — No timeout, no reconciliation, no lock.** No Celery time limit, no timeout on the forecast `subprocess.run` (`forecast_runner.py:111`). A killed worker leaves `job:{id}` at `running` until the 24 h TTL. Lock: fixed since 2026-10-08 (one job at a time, `docs/decision-design/pipeline-checkpoints/pipeline-checkpoints.md`); it never expires, so a killed worker blocks everything until `DELETE /pipeline/lock`. Imports resend the same `dataValueSets` each time.
 - *Fixed (2026-10-09):* `etlui` no longer marks a step `success` on the 202: `usePipeline.ts` only shows an "accepted" toast and reads every status from `GET /pipeline/checkpoints`.
 - ~~**P2 — Forecast logs are written only at the end**~~ Fixed 2026-10-21: `run_rscript` reads `docker run` line by line, appends each line to the history (`JobStore.append_logs`) then publishes it. Not yet checked on a real run: R may buffer `stdout` (`print`/`cat`) when writing to a pipe; `message()`/cli go to `stderr` and are unbuffered. If lines come in bursts, try `docker run -t`.
 - **P2 — Swallowed errors**: `JobStore` and pub/sub publishing catch every exception. So does the gate's `finish()` at the end of a job (logged, on purpose: the job keeps its real status, and the lock then needs `DELETE /pipeline/lock`).
@@ -69,10 +64,7 @@ Fixed: one shared Redis client per process (`infrastructure/redis_client.py`) re
 
 ## 4. Dead code and duplication
 
-- **P3** Dead: `get_request_tracker_repo` (`core/dependencies.py`), `verify_signature` (`forecast_runner.py`).
-- **P3** Duplicated: `_get_output_dir` and the signature check (`forecast_runner.py` and `forecast_report_router.py`), `__import__(...)` used 4 times in `forecast_runner.py` to call `get_settings`.
-
-Fixed: the five separate Redis clients.
+Fixed: the five separate Redis clients · (2026-10-23) `get_request_tracker_repo` (now returns the middleware's tracker, one per process), `verify_signature`, the duplicated `_get_output_dir` and signature check, the `__import__(...)` calls in `forecast_runner.py`.
 
 ## 5. Tests
 

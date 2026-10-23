@@ -257,7 +257,7 @@ _JOURNAL_DESCRIPTION = (
     "cycle_closed. Each event has its "
     "actor (DHIS2 username, `worker`, `system`), `mode` (`production`, or `test` while Redis keeps the test journal) and "
     "`request`: the HTTP request that caused it, or null. Refusals (409) are not events: see /api/tracking/requests. "
-    "Not seen: `DELETE /output/reset`, the `pridec` command line, build_analytics launched from DHIS2."
+    "Not seen: the `pridec` command line, build_analytics launched from DHIS2."
 )
 
 

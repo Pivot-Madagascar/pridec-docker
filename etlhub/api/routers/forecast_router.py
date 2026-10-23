@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 
-from etlhub.api.routers import BLOCKED, CONFIRM_RELAUNCH, WebhookUrl
+from etlhub.api.routers import BLOCKED, CONFIRM_RELAUNCH, WebhookUrl, error_doc
 from etlhub.application.use_cases.forecast_service import ForecastService
 from etlhub.domain.schemas import ETLResponse, ForecastParams, JobStatus
 from etlhub.core.dependencies import get_forecast_service
@@ -53,14 +53,7 @@ async def api_forecast(
     ),
     response_description="Current job status (running, success, or error).",
     responses={
-        404: {
-            "description": "Job not found - invalid or expired job ID",
-            "content": {
-                "application/json": {
-                    "example": {"message": "Job not found"}
-                }
-            },
-        }
+        404: error_doc("Job not found - invalid or expired job ID", {"message": "Job not found"}),
     },
 )
 async def forecast_status(

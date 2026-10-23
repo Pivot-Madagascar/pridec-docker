@@ -4,8 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from etlhub.api.routers import error_doc
-from etlhub.infrastructure.config_store import ConfigStore
-from etlhub.infrastructure.auth_store import get_credential
+from etlhub.core.dependencies import get_auth_store, get_config_store
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/config", tags=["Configuration"])
@@ -47,8 +46,8 @@ class ConfigResponse(BaseModel):
     ),
 )
 async def get_config():
-    data = ConfigStore().get_all()
-    credential = get_credential() or {}
+    data = get_config_store().get_all()
+    credential = get_auth_store().get_credential() or {}
     return ConfigResponse(
         dhis_url=credential.get("url"),
         has_dhis_token=bool(credential.get("token")),
@@ -69,7 +68,7 @@ async def get_config():
 )
 async def update_config(config: ConfigUpdate):
     updates = {k.upper(): v for k, v in config.model_dump(exclude_none=True).items()}
-    if updates and not ConfigStore().set_all(updates):
+    if updates and not get_config_store().set_all(updates):
         raise HTTPException(status_code=502, detail="Failed to write config to Redis")
     return await get_config()
 
@@ -83,6 +82,6 @@ async def reload_config():
     """Rereads the editable keys (config_store.EDITABLE_KEYS) from etlhub's .env and writes them to Redis,
     overwriting the current values, as the API does at each start. A key missing from .env is removed from Redis.
     Use it after editing .env by hand."""
-    if not ConfigStore().load_env():
+    if not get_config_store().load_env():
         raise HTTPException(status_code=502, detail="Failed to write config to Redis")
     return await get_config()

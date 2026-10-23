@@ -2,13 +2,13 @@ import asyncio
 import json
 import logging
 import time
-from pathlib import Path
 from typing import Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 import redis.asyncio as aioredis
 from etlhub.core.config import get_settings
+from etlhub.core.dependencies import get_job_repository
 
 logger = logging.getLogger(__name__)
 
@@ -26,43 +26,8 @@ async def get_redis_client() -> aioredis.Redis:
     return aioredis.Redis(connection_pool=redis_pool)
 
 
-async def _get_history(job_id: str) -> Optional[str]:
-    settings = get_settings()
-    log_file = Path(settings.logs_dir) / f"{job_id}.log"
-
-    try:
-        client = await get_redis_client()
-        data = await client.get(f"etl_logs:{job_id}")
-        if data:
-            return data
-    except aioredis.RedisError as e:
-        logger.warning(f"Redis error fetching history: {e}")
-    except Exception as e:
-        logger.error(f"Unexpected error fetching history: {e}")
-
-    if log_file.exists():
-        try:
-            return log_file.read_text()
-        except IOError as e:
-            logger.error(f"Error reading log file: {e}")
-    
-    return None
-
-
 async def _get_status(job_id: str) -> Optional[dict]:
-    try:
-        client = await get_redis_client()
-        data = await client.get(f"job:{job_id}")
-        if data:
-            return json.loads(data)
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in job status: {e}")
-    except aioredis.RedisError as e:
-        logger.warning(f"Redis error fetching status: {e}")
-    except Exception as e:
-        logger.error(f"Unexpected error fetching status: {e}")
-    
-    return None
+    return await asyncio.to_thread(get_job_repository().get, job_id)
 
 
 FINAL_STATUSES = ("success", "error")
@@ -101,7 +66,7 @@ async def handle_etl_logs_ws(websocket: WebSocket, job_id: str):
     try:
         # Subscribe before reading history and status: nothing published in between is lost.
         await pubsub.subscribe(f"etl_logs:{job_id}", f"etl_status:{job_id}")
-        history = await _get_history(job_id)
+        history = await asyncio.to_thread(get_job_repository().get_logs, job_id)
         status = await _get_status(job_id)
 
         if history is None and status is None:

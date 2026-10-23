@@ -3,11 +3,11 @@ import json
 import logging
 import shutil
 import sqlite3
-import threading
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import closing, contextmanager
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 from etlhub.core.config import get_settings
@@ -23,9 +23,6 @@ from etlhub.infrastructure.config_store import ConfigStore
 from etlhub.infrastructure.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
-
-_checkpoint_store = None
-_lock = threading.Lock()
 
 # Same db as request_log, but no retention: a cycle must stay readable.
 # A pass is one run of a cycle (month): its checkpoints, forecast runs and journal events carry its id
@@ -894,10 +891,6 @@ class CheckpointStore:
                 for r in rows]
 
 
+@lru_cache
 def get_checkpoint_store() -> CheckpointStore:
-    global _checkpoint_store
-    if _checkpoint_store is None:
-        with _lock:
-            if _checkpoint_store is None:
-                _checkpoint_store = CheckpointStore()
-    return _checkpoint_store
+    return CheckpointStore()

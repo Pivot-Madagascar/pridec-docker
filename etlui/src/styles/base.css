@@ -5,7 +5,6 @@
 }
 
 body {
-  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
   margin: 0;
   padding: 0;
 }
@@ -40,15 +39,6 @@ body {
   @apply text-3xl font-bold text-[#131921] dark:text-white;
 }
 
-/* Card/Container */
-.card-empty {
-  @apply text-center py-16 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800;
-}
-
-.icon-xl {
-  @apply h-16 w-16;
-}
-
 .card {
   @apply bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden;
 }
@@ -75,31 +65,9 @@ body {
   @apply -ml-1 mr-3;
 }
 
-/* Status Button (Job Status) */
-.btn-status {
-  @apply px-4 py-2 bg-[#f0c14b] hover:bg-[#f7dfa5] text-[#131921] font-semibold rounded-md border border-yellow-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
-}
-
-.btn-status svg {
-  @apply h-4 w-4;
-}
-
-.btn-status svg.animate-spin {
-  @apply -ml-1 mr-2;
-}
-
 /* Icon Sizes */
-.icon-sm {
-  @apply h-5 w-5;
-}
-
 .icon-md {
   @apply h-6 w-6;
-}
-
-/* Spinner Styles */
-.spinner-xs {
-  @apply animate-spin -ml-1 mr-2 h-4 w-4 inline;
 }
 
 /* Recent Activity */
@@ -139,11 +107,6 @@ body {
   @apply text-xs text-gray-400 dark:text-gray-500;
 }
 
-/* Grid Layouts */
-.grid-cols-2-md {
-  @apply grid-cols-1 md:grid-cols-2;
-}
-
 /* Flex Layouts */
 .flex-row-center-between {
   @apply flex items-center justify-between;
@@ -156,15 +119,4 @@ body {
 /* Button/Link Utilities */
 .btn-link-secondary {
   @apply px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors;
-}
-
-/* Transitions */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
 }

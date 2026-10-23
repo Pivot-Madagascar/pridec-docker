@@ -3,8 +3,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from etl.scripts import config
-from etlhub.api.routers import config_router
-from etlhub.infrastructure import config_store, redis_client
+from etlhub.infrastructure import auth_store, config_store, redis_client
 
 
 class FakeRedis(dict):
@@ -28,7 +27,7 @@ def redis(tmp_path, monkeypatch):
     fake = FakeRedis(PARENT_OU="ou_edited", DISEASE_CODE="old", GEE_VARIABLES="v1")
     monkeypatch.setattr(config_store, "get_redis", lambda: fake)
     monkeypatch.setattr(redis_client, "get_redis", lambda: fake)
-    monkeypatch.setattr(config_router, "get_credential", lambda: None)
+    monkeypatch.setattr(auth_store, "get_credential", lambda: None)
     env = tmp_path / ".env"
     env.write_text("PARENT_OU=ou_env\nOU_LEVEL='6'\nDRYRUN=True\nDHIS_TOKEN=d2pat_secret\n")
     monkeypatch.setattr(config_store, "ENV_FILE", str(env))

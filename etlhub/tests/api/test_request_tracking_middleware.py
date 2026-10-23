@@ -15,11 +15,14 @@ class Recorder:
     def save(self, log):
         self.logs.append(log)
 
+    def list_recent(self, limit=50, endpoint=None):  # GET /api/tracking/requests reads the same tracker
+        return []
+
 
 @pytest.fixture
-def recorded(monkeypatch):
+def recorded(monkeypatch, use_instance):
     recorder = Recorder()
-    monkeypatch.setattr(request_tracker, "_request_tracker", recorder)
+    use_instance(monkeypatch, request_tracker.get_request_tracker, request_tracker, "RequestTracker", recorder)
     monkeypatch.setattr(get_settings(), "tracked_endpoints", "")
     return recorder.logs
 

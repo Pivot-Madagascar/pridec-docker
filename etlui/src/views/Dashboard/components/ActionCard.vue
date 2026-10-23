@@ -2,7 +2,7 @@
   <button
     :disabled="disabled"
     class="action-card"
-    :class="[action.class, { 'card-success': action.success }]"
+    :class="{ 'card-success': action.success }"
     @click="handleClick"
   >
     <div class="card-icon" :class="action.iconClass">
@@ -14,9 +14,9 @@
       <span v-if="action.statusText" class="card-status" :class="action.statusClass">
         <span v-if="action.loading" class="status-running">
           <span class="spinner animate-spin"></span>
-          {{ action.loadingText }}
+          {{ action.statusText }}
         </span>
-        <span v-else-if="action.success" class="status-done">{{ action.successText }}</span>
+        <span v-else-if="action.success" class="status-done">{{ action.statusText }}</span>
         <span v-else class="status-pending">{{ action.statusText }}</span>
       </span>
     </div>
@@ -33,14 +33,11 @@ interface Action {
   subtitle?: string
   icon?: string
   iconClass?: string
-  class?: string
   inactive?: boolean
   loading?: boolean
   success?: boolean
   statusText?: string
   statusClass?: string
-  loadingText?: string
-  successText?: string
 }
 
 const props = defineProps<{

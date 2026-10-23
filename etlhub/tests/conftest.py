@@ -13,15 +13,36 @@ sys.modules['earthengine_api'] = MagicMock()
 sys.modules['geopandas'] = MagicMock()
 
 from contextlib import contextmanager
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
 
+def use_instance(monkeypatch, getter, module, cls_name, instance):
+    """Fills the lru_cache of a singleton getter with `instance` (callers imported the getter itself, so it cannot be patched).
+
+    The fixture using it clears the cache on teardown.
+    """
+    getter.cache_clear()
+    with monkeypatch.context() as m:
+        m.setattr(module, cls_name, lambda: instance)
+        getter()
+    return instance
+
+
+@pytest.fixture(name="use_instance")
+def use_instance_fixture():
+    return use_instance
+
+
 @pytest.fixture(autouse=True)
 def _request_log_db(tmp_path, monkeypatch):
     from etlhub.infrastructure import request_tracker
-    monkeypatch.setattr(request_tracker, "_request_tracker", request_tracker.RequestTracker(tmp_path / "etlhub.db"))
+    use_instance(monkeypatch, request_tracker.get_request_tracker, request_tracker, "RequestTracker",
+                 request_tracker.RequestTracker(tmp_path / "etlhub.db"))
+    yield
+    request_tracker.get_request_tracker.cache_clear()
 
 
 @pytest.fixture(autouse=True)
@@ -37,8 +58,9 @@ def checkpoint_store(tmp_path, monkeypatch):
     )
     store.contexts = []  # run contexts the jobs received (instead of Redis)
     store.mode = mode
-    monkeypatch.setattr(module, "_checkpoint_store", store)
-    return store
+    use_instance(monkeypatch, module.get_checkpoint_store, module, "CheckpointStore", store)
+    yield store
+    module.get_checkpoint_store.cache_clear()
 
 
 class FakeBlob:
@@ -118,16 +140,32 @@ def mock_task_launcher():
     return MockTaskLauncher()
 
 
+class FakeJobStore:
+    """JobStore in two dicts: job records and job logs."""
+
+    def __init__(self):
+        self.records, self.logs = {}, {}
+
+    def get(self, job_id):
+        record = self.records.get(job_id)
+        return dict(record) if record else None
+
+    def set(self, job_id, data):
+        self.records[job_id] = dict(data)
+
+    def append_logs(self, job_id, text):
+        self.logs[job_id] = self.logs.get(job_id, "") + text
+
+    def get_logs(self, job_id):
+        return self.logs.get(job_id)
+
+    def load_from_file(self, job_id, logs_dir):
+        return None
+
+
 @pytest.fixture
-def mock_job_repository():
-    class MockJobRepository:
-        def get(self, job_id: str):
-            return None
-        def load_from_file(self, job_id: str, logs_dir: str):
-            return None
-        def get_logs(self, job_id: str):
-            return None
-    return MockJobRepository()
+def job_store():
+    return FakeJobStore()
 
 
 @pytest.fixture
@@ -143,7 +181,7 @@ def mock_request_tracker():
 
 
 @pytest.fixture
-def override_dependencies(app, mock_task_launcher, mock_job_repository, mock_request_tracker):
+def override_dependencies(app, mock_task_launcher, job_store, mock_request_tracker):
     from etlhub.core.dependencies import get_ingestion_service, get_analytics_service, get_forecast_service, get_tracking_service
     from etlhub.application.use_cases.ingestion_service import IngestionService
     from etlhub.application.use_cases.analytics_service import AnalyticsService
@@ -154,13 +192,14 @@ def override_dependencies(app, mock_task_launcher, mock_job_repository, mock_req
         return IngestionService(mock_task_launcher)
     
     def get_mock_analytics_service():
-        return AnalyticsService(mock_job_repository, OpenGate())
+        return AnalyticsService(job_store, OpenGate(), SimpleNamespace(publish_log=lambda *a, **k: None,
+                                                                       publish_status=lambda *a, **k: None))
     
     def get_mock_forecast_service():
-        return ForecastService(mock_task_launcher, mock_job_repository)
+        return ForecastService(mock_task_launcher, job_store)
     
     def get_mock_tracking_service():
-        return TrackingService(mock_request_tracker, mock_job_repository)
+        return TrackingService(mock_request_tracker, job_store)
     
     app.dependency_overrides[get_ingestion_service] = get_mock_ingestion_service
     app.dependency_overrides[get_analytics_service] = get_mock_analytics_service
@@ -203,9 +242,6 @@ class FakeAsyncRedis:
         self.queue = []
         self.pubsubs = []
 
-    async def get(self, key):
-        return self.data.get(key)
-
     def pubsub(self):
         ps = FakePubSub(self)
         self.pubsubs.append(ps)
@@ -214,14 +250,16 @@ class FakeAsyncRedis:
 
 @pytest.fixture
 def fake_ws_redis(monkeypatch, tmp_path):
-    """Replaces the WebSocket's Redis client; job log files are looked up in tmp_path."""
+    """Replaces the WebSocket's pub/sub client and JobStore's Redis (both read `fake.data`); log files in tmp_path."""
     from types import SimpleNamespace
     from etlhub.api.websockets import etl_logs
+    from etlhub.infrastructure import job_store
     fake = FakeAsyncRedis()
 
     async def client():
         return fake
 
     monkeypatch.setattr(etl_logs, "get_redis_client", client)
-    monkeypatch.setattr(etl_logs, "get_settings", lambda: SimpleNamespace(logs_dir=str(tmp_path)))
+    monkeypatch.setattr(job_store, "get_redis", lambda: SimpleNamespace(get=fake.data.get))
+    monkeypatch.setattr(job_store, "get_settings", lambda: SimpleNamespace(logs_dir=str(tmp_path)))
     return fake

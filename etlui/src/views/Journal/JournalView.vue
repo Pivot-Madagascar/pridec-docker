@@ -75,7 +75,7 @@
 
       <p class="text-xs text-gray-500">
         Every change of the pass (one run of the cycle), oldest first. Refused actions (409) are not events: see Tracking.
-        Not seen: <code>DELETE /output/reset</code>, the <code>pridec</code> command line, build_analytics launched from DHIS2.
+        Not seen: the <code>pridec</code> command line, build_analytics launched from DHIS2.
         Test events stay in Redis only and disappear if Redis is flushed.
       </p>
 
@@ -124,24 +124,13 @@
       </div>
 
       <!-- Same detail as Tracking: the request, then the job logs. -->
-      <div
-        v-if="selected"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-        @click.self="selected = null"
-      >
-        <div class="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-lg border border-gray-700 bg-gray-900 shadow-xl">
-          <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-700 bg-gray-800 px-4 py-3">
-            <h2 class="text-base font-semibold text-gray-100">{{ selected.event }} · {{ selected.item ?? selected.cycle }}</h2>
-            <button class="rounded-md bg-gray-700 px-3 py-1 text-sm text-gray-300 hover:bg-gray-600" @click="selected = null">
-              Close
-            </button>
-          </div>
-          <div class="space-y-4 p-4">
-            <RequestDetail v-if="selected.request" :request="selected.request" />
-            <JobLogsPanel v-if="selected.job_id && JOB_EVENTS.has(selected.event)" :job-id="selected.job_id" />
-          </div>
-        </div>
-      </div>
+      <RequestDialog
+        :open="!!selected"
+        :title="selected ? `${selected.event} · ${selected.item ?? selected.cycle}` : ''"
+        :request="selected?.request"
+        :job-id="selected?.job_id && JOB_EVENTS.has(selected.event) ? selected.job_id : null"
+        @close="selected = null"
+      />
 
       <ConfirmDialog :open="abandoning" title="Abandon this cycle?" confirm-label="Abandon" @confirm="confirmAbandon" @cancel="abandoning = false">
         The pass {{ current?.id }} of {{ current ? monthName(current.cycle) : '' }} stops for good: it cannot be resumed, and its
@@ -157,8 +146,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useJournal } from '@/composables/useJournal'
 import type { JournalEvent, JournalPass, PassState } from '@/types/pipeline'
-import RequestDetail from '@/views/TrackerView/components/RequestDetail.vue'
-import JobLogsPanel from '@/views/TrackerView/components/JobLogsPanel.vue'
+import RequestDialog from '@/views/TrackerView/components/RequestDialog.vue'
 import ConfirmDialog from '@/views/Dashboard/components/ConfirmDialog.vue'
 
 const STEPS = ['data_import', 'forecast', 'system_update']

@@ -12,9 +12,4 @@ celery_app = Celery(
     include=["etlhub.infrastructure.tasks"],
 )
 
-celery_app.conf.update(
-    task_track_started=True,
-    task_serializer="json",
-    result_serializer="json",
-    accept_content=["json"],
-)
+celery_app.conf.update(task_track_started=True)

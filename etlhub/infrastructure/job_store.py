@@ -26,24 +26,6 @@ class JobStore:
         except Exception:
             pass
 
-    def save_logs(self, job_id: str, logs: str) -> None:
-        try:
-            redis_client = get_redis()
-            redis_client.setex(
-                f"etl_logs:{job_id}",
-                86400,
-                logs,
-            )
-        except Exception:
-            pass
-        try:
-            settings = get_settings()
-            logs_dir = Path(settings.logs_dir)
-            logs_dir.mkdir(parents=True, exist_ok=True)
-            (logs_dir / f"{job_id}.log").write_text(logs)
-        except Exception:
-            pass
-
     def append_logs(self, job_id: str, text: str) -> None:
         try:
             redis_client = get_redis()

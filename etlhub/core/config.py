@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
         env_file_encoding="utf-8",
-        extra="allow",
+        extra="ignore",
     )
 
     host_pwd: str = "."
@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     def redis_url(self) -> str:
         auth = f":{quote(self.redis_password, safe='')}@" if self.redis_password else ""
         return f"redis://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
+
+def split_csv(value: str) -> list[str]:
+    """A comma-separated setting as its non-empty, stripped items."""
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 @lru_cache

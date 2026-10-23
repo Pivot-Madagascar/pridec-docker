@@ -3,25 +3,11 @@ import pytest
 from etlhub.infrastructure import tasks
 
 
-class InMemoryJobStore:
-    records: dict = {}
-
-    def get(self, job_id):
-        record = self.records.get(job_id)
-        return dict(record) if record else None
-
-    def set(self, job_id, data):
-        self.records[job_id] = dict(data)
-
-    def save_logs(self, job_id, logs):
-        pass
-
-
 @pytest.fixture
-def job_store(monkeypatch):
-    InMemoryJobStore.records = {}
-    monkeypatch.setattr(tasks, "JobStore", InMemoryJobStore)
-    return InMemoryJobStore()
+def job_store(job_store, monkeypatch):
+    """conftest's job_store, also the one the tasks build with JobStore()."""
+    monkeypatch.setattr(tasks, "JobStore", lambda: job_store)
+    return job_store
 
 
 @pytest.fixture
@@ -73,30 +59,22 @@ def test_forecast_success_keeps_container_details(monkeypatch, job_store, webhoo
     assert webhooks[-1]["status"] == "success"
 
 
-def test_launch_records_the_job_as_pending_before_queueing(monkeypatch):
-    from etlhub.infrastructure import tasks
-
-    records, queued = {}, []
-
-    class Store:
-        def set(self, job_id, data):
-            records[job_id] = data
-
-    monkeypatch.setattr(tasks, "JobStore", Store)
-    monkeypatch.setattr(tasks.task_etl, "delay", lambda *a, **k: queued.append((a, records.copy())))
+def test_launch_records_the_job_as_pending_before_queueing(monkeypatch, job_store):
+    queued = []
+    monkeypatch.setattr(tasks.task_etl, "delay", lambda *a, **k: queued.append(job_store.get("import_gee_1234abcd")))
 
     tasks.CeleryTaskLauncher().launch("import_gee", "import_gee_1234abcd")
 
-    assert queued[0][1]["import_gee_1234abcd"]["status"] == "pending"
+    assert queued[0]["status"] == "pending"
 
 
 def test_generic_task_runs_the_job_with_its_kwargs(monkeypatch, job_store, webhooks):
     calls = []
-    monkeypatch.setattr(tasks, "run_etl_job", lambda task_type, store, job_id, **kw: calls.append((task_type, job_id, kw)))
+    monkeypatch.setattr(tasks, "run_etl_job", lambda task_type, store, job_id, events, **kw: calls.append((task_type, job_id, events, kw)))
 
     tasks.task_etl.run("validate_inputs", "validate_inputs_1", webhook_url="http://hook", input_dir="input/x")
 
-    assert calls == [("validate_inputs", "validate_inputs_1", {"input_dir": "input/x"})]
+    assert calls == [("validate_inputs", "validate_inputs_1", tasks.etl_events, {"input_dir": "input/x"})]
     assert job_store.get("validate_inputs_1")["message"] == "validate inputs completed"
     assert webhooks[-1]["status"] == "success"
 
@@ -113,3 +91,19 @@ def test_a_gate_error_at_the_end_does_not_turn_a_success_into_an_error(monkeypat
 
     assert job_store.get("forecast_ok")["status"] == "success"
     assert [w["status"] for w in webhooks] == ["success"]
+
+
+def test_etl_job_output_goes_to_the_job_logs_once_as_it_is_printed(job_store, monkeypatch):
+    from etlhub.infrastructure import etl_events
+    from etlhub.application.use_cases import etl_use_cases
+    published = []
+    monkeypatch.setattr(etl_events, "publish_log", lambda job_id, level, message: published.append(message))
+
+    def job():
+        print("step 1")
+        assert job_store.get_logs("import_gee_1") == "step 1\n"  # stored before the job ends
+
+    etl_use_cases._execute_etl_job(job, etl_use_cases._JobLogger(job_store, "import_gee_1", etl_events), "import_gee")
+
+    assert job_store.get_logs("import_gee_1") == "step 1\n"
+    assert "step 1" in published

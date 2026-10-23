@@ -23,7 +23,7 @@ def test_forecast_status_endpoint(override_dependencies):
     response = client.get("/forecast/status/test123")
     assert response.status_code in [200, 404]
 
-def test_forecast_launch_forwards_webhook_url(app, mock_job_repository, monkeypatch):
+def test_forecast_launch_forwards_webhook_url(app, job_store, monkeypatch):
     from fastapi.testclient import TestClient
     from etlhub.core.config import get_settings
     from etlhub.core.dependencies import get_forecast_service
@@ -36,7 +36,7 @@ def test_forecast_launch_forwards_webhook_url(app, mock_job_repository, monkeypa
             launched.append((task_type, webhook_url))
 
     monkeypatch.setattr(get_settings(), "webhook_allowed_hosts", "hook.example")
-    app.dependency_overrides[get_forecast_service] = lambda: ForecastService(SpyTaskLauncher(), mock_job_repository)
+    app.dependency_overrides[get_forecast_service] = lambda: ForecastService(SpyTaskLauncher(), job_store)
     try:
         response = TestClient(app).post("/forecast/?webhook_url=https://hook.example/cb", json={})
     finally:

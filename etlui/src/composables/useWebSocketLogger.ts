@@ -17,11 +17,7 @@ export interface LogEntry {
   logs?: string
 }
 
-export interface UseWebSocketLoggerOptions {
-  baseUrl?: string
-}
-
-export function useWebSocketLogger(options: UseWebSocketLoggerOptions = {}) {
+export function useWebSocketLogger(options: { baseUrl?: string } = {}) {
   // Defaults to the etlhub URL the axios client uses.
   const { baseUrl = api.defaults.baseURL ?? '' } = options
   const logs = ref<LogEntry[]>([])
@@ -34,20 +30,11 @@ export function useWebSocketLogger(options: UseWebSocketLoggerOptions = {}) {
   let ws: WebSocket | null = null
   let reconnectAttempts = 0
   const maxReconnectAttempts = 5
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  let currentJobId = ''
-
-  function clearTimers() {
-    if (reconnectTimer !== null) {
-      clearTimeout(reconnectTimer)
-      reconnectTimer = null
-    }
-  }
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined
 
   function connect(jobId: string) {
     disconnect()
     connectionError.value = ''
-    currentJobId = jobId
 
     // http → ws, https → wss
     const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/api/tracking/etl-logs/${encodeURIComponent(jobId)}`
@@ -71,9 +58,7 @@ export function useWebSocketLogger(options: UseWebSocketLoggerOptions = {}) {
             status.value = data.status || 'unknown'
             statusMessage.value = data.message || ''
             logs.value.push(data)
-          } else if (data.type === 'etl_log_entry') {
-            logs.value.push(data)
-          } else if (data.type === 'etl_log_complete') {
+          } else if (data.type === 'etl_log_entry' || data.type === 'etl_log_complete') {
             logs.value.push(data)
           }
         } catch (e) {
@@ -107,9 +92,8 @@ export function useWebSocketLogger(options: UseWebSocketLoggerOptions = {}) {
   }
 
   function disconnect() {
-    clearTimers()
+    clearTimeout(reconnectTimer)
     reconnectAttempts = 0
-    currentJobId = ''
     if (ws) {
       ws.onclose = null
       ws.onerror = null

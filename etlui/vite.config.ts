@@ -1,12 +1,8 @@
-import { webcrypto } from 'node:crypto'
+/// <reference types="vitest/config" />
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
-
-if (!globalThis.crypto) {
-  globalThis.crypto = webcrypto as Crypto
-}
 
 export default defineConfig({
   plugins: [
@@ -30,5 +26,10 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
+  },
+  test: {
+    environment: 'happy-dom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
   },
 })
