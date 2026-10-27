@@ -1,13 +1,52 @@
 <template>
-  <div class="space-y-0">
+  <SideLayout>
+    <!-- The side panel (SideLayout: fixed on the left, like the Journal's cycles). -->
+    <template #side>
+      <div data-test="activity-aside">
+        <RecentActivity :activityLog="activityLog" class="shadow-lg" />
+        <!-- Under Recent Activity: stop the cycle for now (resumed from the Journal), or for good. -->
+        <div v-if="active" class="pass-actions">
+          <Button variant="outline" :disabled="busy || state?.lock != null" @click="pause">Pause the cycle</Button>
+          <Button variant="destructive" :disabled="busy || state?.lock != null" @click="pendingAbandon = true">
+            Abandon the cycle
+          </Button>
+        </div>
+      </div>
+    </template>
+
     <section class="dashboard-section">
       <h2 class="section-header">ETL Pipeline</h2>
-      <p class="section-subtitle">
+      <div class="section-subtitle flex flex-wrap items-center gap-x-1">
         <template v-if="state">
           <!-- The month is chosen on Home (/), with the pass to start or resume. -->
           Cycle <strong class="cycle-value">{{ state.cycle }}</strong>
           <template v-if="state.pass">
-            · {{ state.pass.state === 'active' ? `current step: ${state.current_step}` : state.pass.state }}
+            ·
+            <!-- Where the active pass stands: step / (open run /) item, read from etlhub's statuses (position()). -->
+            <Breadcrumb v-if="state.pass.state === 'active'" data-test="position">
+              <BreadcrumbList class="text-sm">
+                <template v-for="(crumb, i) in crumbs" :key="i">
+                  <BreadcrumbSeparator v-if="i" />
+                  <BreadcrumbItem>
+                    <!-- The last one leads to the current item: its card, or the open run's steps (goToPosition). -->
+                    <BreadcrumbLink
+                      v-if="i === crumbs.length - 1 && target"
+                      as="button"
+                      type="button"
+                      aria-current="page"
+                      class="font-medium text-foreground underline-offset-4 hover:underline"
+                      data-test="position-link"
+                      @click="goToPosition"
+                    >
+                      {{ crumb }}
+                    </BreadcrumbLink>
+                    <BreadcrumbPage v-else-if="i === crumbs.length - 1">{{ crumb }}</BreadcrumbPage>
+                    <template v-else>{{ crumb }}</template>
+                  </BreadcrumbItem>
+                </template>
+              </BreadcrumbList>
+            </Breadcrumb>
+            <template v-else>{{ state.pass.state }}</template>
             · started by {{ state.pass.started_by ?? '-' }}
           </template>
           <template v-else> · not started: the first launch starts it</template>
@@ -15,7 +54,7 @@
           <span v-if="state.pass?.state === 'paused'" class="paused-note"> · paused: resume it from <RouterLink :to="{ name: 'Home' }" class="journal-link">Home</RouterLink> or the Journal</span>
         </template>
         <template v-else>Loading the pipeline state…</template>
-      </p>
+      </div>
 
       <!-- Before step 1: the mode applies to the whole cycle. -->
       <ModeToggle :test-mode="state?.test_mode" :dry-run="state?.dry_run" :disabled="busy || state?.lock != null" @change="setMode" />
@@ -24,7 +63,7 @@
         <span>Running: <strong>{{ state.lock.task }}</strong> ({{ state.lock.job_id }}) since {{ state.lock.acquired_at }}. One job at a time.</span>
       </div>
 
-      <Accordion :items="accordionItems" :default-open="['dataImport', 'forecast', 'systemUpdate']">
+      <Accordion v-model:open="openSteps" :items="accordionItems">
         <template #content-dataImport>
           <div class="action-grid">
             <ActionCard v-for="card in cards('data_import')" :key="card.key" :action="card" @action-click="launchItem" />
@@ -34,13 +73,14 @@
               Imports approval: <strong :class="`status-${approveImports?.status ?? 'pending'}`">{{ approveImports?.status ?? 'pending' }}</strong>
               · check the case counts first: COM &lt; 100, CSB under the limit, then approve or reject under the Details
             </span>
-            <Button variant="outline" @click="availability.show()">Details</Button>
+            <Button variant="outline" data-item="approve_imports" @click="availability.show()">Details</Button>
           </div>
         </template>
 
         <template #content-forecast>
           <ForecastRuns
             :state="state"
+            :focus="runFocus"
             :busy="busy"
             :is-admin="!!auth.user?.is_admin"
             :server-files="serverFiles"
@@ -64,17 +104,7 @@
           </div>
         </template>
       </Accordion>
-
-      <!-- After System Update: stop the cycle for now (resumed from the Journal), or for good. -->
-      <div v-if="active" class="pass-actions">
-        <Button variant="outline" :disabled="busy || state?.lock != null" @click="pause">Pause the cycle</Button>
-        <Button variant="destructive" :disabled="busy || state?.lock != null" @click="pendingAbandon = true">
-          Abandon the cycle
-        </Button>
-      </div>
     </section>
-
-    <RecentActivity :activityLog="activityLog" />
 
     <ForecastReportModal v-model="showReportModal" :run="reportRun">
       <template v-if="validating" #footer>
@@ -146,11 +176,15 @@
       Only when the worker of <strong>{{ state?.lock?.task }}</strong> is dead: the lock never expires on its own.
       The running item becomes "error" and can be relaunched.
     </ConfirmDialog>
-  </div>
+  </SideLayout>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
+import { pointTo } from '@/utils/attention'
+import type { RunFocus } from '@/views/Dashboard/components/runs'
+import SideLayout from '@/components/SideLayout.vue'
+import { computed, nextTick, ref, onMounted } from 'vue'
 
 import Accordion from '@/views/Dashboard/components/Accordion.vue'
 import ActionCard from '@/views/Dashboard/components/ActionCard.vue'
@@ -170,7 +204,7 @@ import { useActivityLog } from '@/composables/useActivityLog'
 import { useImportAvailability } from '@/composables/useImportAvailability'
 import { useInputPreview } from '@/composables/useInputPreview'
 import { usePipeline } from '@/composables/usePipeline'
-import { jobOf, labelOf, step, toCard } from '@/config/pipeline'
+import { jobOf, labelOf, position, positionItem, step, toCard } from '@/config/pipeline'
 import { useAuthStore } from '@/stores/auth'
 import type { InputName } from '@/types/inputs'
 import type { StepName } from '@/types/pipeline'
@@ -190,6 +224,27 @@ const {
   pause, abandonPass
 } = usePipeline(addActivity)
 const active = computed(() => state.value?.pass?.state === 'active')
+const crumbs = computed(() => (state.value ? position(state.value) : []))
+const target = computed(() => (state.value ? positionItem(state.value) : null))
+
+// The accordion's open steps: the breadcrumb's link reopens the one of the current item.
+const openSteps = ref(['dataImport', 'forecast', 'systemUpdate'])
+const SECTIONS: Record<StepName, string> = { data_import: 'dataImport', forecast: 'forecast', system_update: 'systemUpdate' }
+const runFocus = ref<RunFocus | null>(null)
+
+// Goes to the current item; it blinks orange only when no job runs (something to click now).
+async function goToPosition() {
+  if (!target.value) return
+  const { step: name, item } = target.value
+  const blink = !state.value?.lock
+  if (!openSteps.value.includes(SECTIONS[name])) openSteps.value = [...openSteps.value, SECTIONS[name]]
+  if (name === 'forecast') {
+    runFocus.value = { item: item.item, blink, at: Date.now() }
+    return
+  }
+  await nextTick()
+  pointTo(`[data-section="${SECTIONS[name]}"] [data-item="${item.item}"]`, blink) // approve_imports: its Details button
+}
 const availability = useImportAvailability() // "Details" of Data Import: is the imported data in DHIS2?
 
 const {
@@ -302,11 +357,7 @@ onMounted(refresh)
 
 
 .pass-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 1rem;
-  margin-top: 1.5rem;
+  @apply mt-3 flex flex-col gap-2;
 }
 
 .paused-note {

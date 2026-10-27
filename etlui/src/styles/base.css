@@ -38,36 +38,12 @@ body {
   @apply bg-card rounded-lg border overflow-hidden;
 }
 
-.activity-divide {
-  @apply divide-y;
+.activity-summary {
+  @apply cursor-pointer px-4 py-3 font-semibold text-foreground;
 }
 
-.activity-item {
-  @apply px-6 py-4 flex items-center justify-between hover:bg-muted/50 transition-colors;
-}
-
-.activity-icon {
-  @apply w-2 h-2 rounded-full;
-}
-
-.activity-icon-success {
-  @apply bg-success;
-}
-
-.activity-icon-error {
-  @apply bg-destructive;
-}
-
-.activity-action {
-  @apply text-sm font-medium text-foreground;
-}
-
-.activity-message {
-  @apply text-xs text-muted-foreground;
-}
-
-.activity-time {
-  @apply text-xs text-muted-foreground;
+.activity-empty {
+  @apply px-4 pb-3 text-sm text-muted-foreground;
 }
 
 /* Flex Layouts */
@@ -163,5 +139,24 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* The breadcrumb's "go to the current item" (utils/attention.ts): the button to click blinks orange 3 times.
+   Without motion: a steady orange ring for the same time. */
+[data-attention] {
+  animation: attention 0.8s ease-in-out 3;
+}
+
+@keyframes attention {
+  50% {
+    box-shadow: 0 0 0 4px var(--warning);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-attention] {
+    animation: none;
+    box-shadow: 0 0 0 3px var(--warning);
   }
 }

@@ -30,7 +30,7 @@
       <section v-for="tile in tiles" v-show="shown === tile.n" :key="tile.n" class="steps-tile" data-test="steps-tile" :aria-label="tile.title">
         <ol class="item-list">
           <!-- The run's input files: etlhub keeps one per disease (config) and one per level (external_data), shared by those runs. -->
-          <li v-for="input in tile.n === 1 ? inputs : []" :key="input.item" class="item item-input" data-test="item" :class="`item-${input.status}`">
+          <li v-for="input in tile.n === 1 ? inputs : []" :key="input.item" class="item item-input" data-test="item" :data-item="input.item" :class="`item-${input.status}`">
             <span class="item-dot" aria-hidden="true"></span>
             <span class="item-text">
               <span class="item-label">{{ input.label }}</span>
@@ -55,7 +55,7 @@
               @use-default="emit('use-default', input.name)"
             />
           </li>
-          <li v-for="row in tile.rows" :key="row.item" class="item" :class="[`item-${row.look}`, `job-${row.job}`]" data-test="item" :data-job="row.job">
+          <li v-for="row in tile.rows" :key="row.item" class="item" :class="[`item-${row.look}`, `job-${row.job}`]" data-test="item" :data-job="row.job" :data-item="row.item">
             <span class="item-dot" aria-hidden="true"></span>
             <span class="item-text">
               <span class="item-label">{{ row.label }}</span>
@@ -80,7 +80,7 @@
           </li>
         </ol>
         <!-- The data check is a button, not a card: it closes stage 1. -->
-        <div v-if="tile.n === 1 && check" class="data-check" data-test="data-check" :class="`item-${check.look}`">
+        <div v-if="tile.n === 1 && check" class="data-check" data-test="data-check" :data-item="check.item" :class="`item-${check.look}`">
           <span class="item-text">
             <span class="item-label">{{ check.label }}</span>
             <span class="item-state">
@@ -120,6 +120,7 @@ import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import FileDropzone from '@/views/Dashboard/components/FileDropzone.vue'
 import { CONFIG_FILES, DISEASE_NAMES, FILE_STATUS, ITEM_NAMES, LEVEL_NAMES, jobOf, lastUpdate, step } from '@/config/pipeline'
+import { pointTo } from '@/utils/attention'
 import type { Disease, PipelineItem, Source } from '@/types/pipeline'
 import type { InputName } from '@/types/inputs'
 import { RUNS } from './runs'
@@ -211,4 +212,13 @@ const tiles = computed(() => [
 // Follows the data check: stage 2 once it succeeds, back to stage 1 if it is reset (a new input file).
 const shown = ref(1)
 watch(checked, ok => { shown.value = ok ? 2 : 1 }, { immediate: true })
+
+// The breadcrumb's "go to the current item" (Dashboard): the open run opens its steps at the item's stage and points to it.
+const STAGE_ONE = [...PREPARE, 'validate_inputs']
+watch(() => runs.focus, focus => {
+  if (!focus || !isOpen.value) return
+  showSteps.value = true
+  shown.value = focus.item.includes(':') && !STAGE_ONE.includes(jobOf(focus.item)) ? 2 : 1 // input files: stage 1
+  pointTo(`[data-test="steps-dialog"] [data-item="${focus.item}"]`, focus.blink)
+})
 </script>

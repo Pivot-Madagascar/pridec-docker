@@ -97,12 +97,50 @@ describe('Dashboard', () => {
     apiGet.mockResolvedValue({ data: '<p>report</p>' })
   })
 
+  it('the last breadcrumb goes to the current item: scrolls to its card, blinks it orange when no job runs', async () => {
+    const wrapper = await mountPage()
+
+    await wrapper.find('[data-test="position-link"]').trigger('click')
+    await flushPromises()
+    const card = wrapper.find('[data-section="dataImport"] [data-item="build_analytics"]')
+    expect(card.attributes('data-attention')).toBeDefined()
+    expect(wrapper.find('[data-section="systemUpdate"] [data-attention]').exists()).toBe(false) // not its namesake of step ③
+    wrapper.unmount()
+
+    getCheckpoints.mockResolvedValue(state({ lock: { job_id: 'import_gee_1', task: 'import_gee', acquired_at: 't' } }))
+    const busy = await mountPage()
+    await busy.find('[data-test="position-link"]').trigger('click')
+    await flushPromises()
+    expect(busy.find('[data-attention]').exists()).toBe(false) // a job runs: nothing to click now
+    busy.unmount()
+  })
+
+  it('the last breadcrumb of a run opens its Steps dialog at the right stage and blinks the button to click', async () => {
+    getCheckpoints.mockResolvedValue(forecastState('COM/Malaria', {
+      'config/Malaria': ['success'], 'external_data/fkt': ['success'],
+      'COM/Malaria:fetch_disease': ['success', true], 'COM/Malaria:fetch_climate': ['pending', true]
+    }))
+    const wrapper = await mountPage()
+    expect(wrapper.find('[data-test="position"]').text()).toContain('Climate data')
+
+    await wrapper.find('[data-test="position-link"]').trigger('click')
+    await flushPromises()
+    const com = wrapper.find('#forecast-Malaria').findAll('[data-test="level-column"]')[1]
+    const tiles = com.findAll('[data-test="steps-tile"]')
+    expect(tiles.map(t => t.isVisible())).toEqual([true, false]) // stage 1: the fetches
+    const row = com.find('[data-test="steps-dialog"] [data-item="COM/Malaria:fetch_climate"]')
+    expect(row.find('button').text()).toBe('Launch')
+    expect(row.find('button').attributes('data-attention')).toBeDefined()
+    wrapper.unmount()
+  })
+
   it('shows the test mode before step 1 and switches it on the server', async () => {
     setMode.mockResolvedValue(true)
     const wrapper = await mountPage()
 
     const html = wrapper.html()
-    expect(html.indexOf('mode-toggle')).toBeLessThan(html.indexOf('Data Import'))
+    // The step's accordion title: the breadcrumb above the toggle also says 'Data Import'
+    expect(html.indexOf('mode-toggle')).toBeLessThan(html.lastIndexOf('Data Import'))
     expect(wrapper.text()).toContain('DHIS2: DRYRUN on (.env), nothing is written.') // read only, from GET /pipeline/checkpoints
 
     await wrapper.findAll('[data-test="mode-btn"]').find(b => b.text() === 'NO')!.trigger('click') // already active
@@ -124,14 +162,19 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
-  it('while a pass is active, pauses or abandons it from the bottom of the page', async () => {
+  it('while a pass is active, pauses or abandons it from the left panel, under Recent Activity', async () => {
     pausePass.mockResolvedValue({})
     abandonPass.mockResolvedValue({})
     const wrapper = await mountPage()
 
     expect(wrapper.text()).toContain('started by jdoe')
-    const html = wrapper.html()
-    expect(html.indexOf('Pause the cycle')).toBeGreaterThan(html.indexOf('System Update'))
+    // Where the pass stands, as a shadcn Breadcrumb next to the cycle: step / next item, the last one is the current page
+    const crumbs = wrapper.find('[data-test="position"]')
+    expect(crumbs.findAll('li[data-slot="breadcrumb-item"]').map(li => li.text())).toEqual(['Data Import', 'Build Analytics'])
+    expect(crumbs.find('[aria-current="page"]').text()).toBe('Build Analytics')
+    const aside = wrapper.find('[data-test="activity-aside"]')
+    expect(aside.text().indexOf('Pause the cycle')).toBeGreaterThan(aside.text().indexOf('Recent Activity'))
+    expect(aside.text()).toContain('Abandon the cycle')
 
     await wrapper.findAll('button').find(b => b.text() === 'Pause the cycle')!.trigger('click')
     await flushPromises()

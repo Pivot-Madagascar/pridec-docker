@@ -83,6 +83,61 @@ export const ITEM_NAMES: Record<string, string> = {
 /** Status of an uploaded input file (config/<disease>, external_data/<level>). */
 export const FILE_STATUS: Record<string, string> = { pending: 'to provide', running: 'running…', success: '✓ provided', error: '✗ failed' }
 
+/** What the open run may touch: its items, its disease's config, its level's external_data. */
+export function inOpenRun(state: Checkpoints, item: string): boolean {
+  const couple = state.run?.couple
+  return !!couple && (item.startsWith(`${couple}:`) || item === `config/${couple.split('/')[1]}` || item === openLevel(state))
+}
+
+/** The next item etlhub says can start in a step (in step ②, of the open run). */
+export function nextItem(state: Checkpoints, name: StepName): PipelineItem | undefined {
+  return step(state, name)?.items.find(i =>
+    i.launchable && i.status !== 'success' && (name !== 'forecast' || inOpenRun(state, i.item)))
+}
+
+const STEP_NAMES: Record<StepName, string> = { data_import: 'Data Import', forecast: 'Forecasts', system_update: 'System Update' }
+
+/** Plain name of any checkpoint: 'COM/Malaria:fetch_climate' -> 'Climate data', 'config/Malaria' -> 'Parameters (config.json)'. */
+export function itemName(item: string): string {
+  if (item.startsWith('config/')) return 'Parameters (config.json)'
+  if (item.startsWith('external_data/')) return 'External data'
+  if (item === 'approve_imports') return 'Imports approval'
+  return ITEM_NAMES[jobOf(item)] ?? labelOf(item)
+}
+
+/**
+ * Where the pass stands, for the breadcrumb of the Forecast page: step / (open run /) item. The item is the running one,
+ * else the next one etlhub says can start, else the first one not in success (waiting for its prerequisites).
+ * Read from etlhub's statuses and `launchable`: nothing is decided here.
+ */
+export function position(state: Checkpoints): string[] {
+  const name = positionStep(state)
+  if (!name) return ['Complete']
+  const crumbs = [STEP_NAMES[name]]
+  if (name === 'forecast') {
+    if (!state.run) return [...crumbs, 'No run open']
+    const [source, disease] = state.run.couple.split('/') as [Source, Disease]
+    crumbs.push(`${DISEASE_NAMES[disease]} (${source})`)
+  }
+  const current = positionItem(state)?.item
+  return current ? [...crumbs, itemName(current.item)] : crumbs
+}
+
+const running = (state: Checkpoints) =>
+  state.steps.flatMap(s => s.items.map(i => ({ step: s.step, item: i }))).find(r => r.item.status === 'running')
+const positionStep = (state: Checkpoints): StepName | null => running(state)?.step ?? state.current_step
+
+/** The item of position(): where its last breadcrumb leads (null: complete, or no run open in step ②). */
+export function positionItem(state: Checkpoints): { step: StepName; item: PipelineItem } | null {
+  const now = running(state)
+  if (now) return now
+  const name = positionStep(state)
+  if (!name || (name === 'forecast' && !state.run)) return null
+  const item = nextItem(state, name) ??
+    step(state, name)?.items.find(i => i.status !== 'success' && (name !== 'forecast' || inOpenRun(state, i.item)))
+  return item ? { step: name, item } : null
+}
+
 /** 'COM/Malaria' -> 'Malaria · Community sites (COM)' */
 export function coupleName(couple: string): string {
   const [source, disease] = couple.split('/') as [Source, Disease]
