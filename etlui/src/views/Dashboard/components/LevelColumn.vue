@@ -18,12 +18,13 @@
       <span v-if="isOpen" class="card-steps-hint">Click to see the steps</span>
     </p>
 
-    <BaseDialog v-if="isOpen" :open="showSteps" backdrop-close class="steps-dialog" :aria-label="`${LEVEL_NAMES[source]} · ${disease}`" @dismiss="showSteps = false">
-      <header class="steps-header">
-        <h5 class="level-title">{{ LEVEL_NAMES[source] }} <span class="level-code">{{ source }}</span> · {{ disease }}</h5>
-        <Button variant="ghost" size="icon-sm" data-test="steps-close" aria-label="Close the steps" @click="showSteps = false">
-          <Icon :path="ICONS.close" class="size-5" />
-        </Button>
+    <Dialog v-if="isOpen" :open="showSteps" @update:open="showSteps = $event">
+      <DialogContent class="flex max-h-[90vh] w-[min(96vw,1600px)] max-w-none flex-col sm:max-w-none" data-test="steps-dialog" :aria-describedby="undefined">
+      <!-- ponytail: ForecastRuns' global CSS is namespaced `.forecast-runs .steps-dialog`; the portal leaves that tree, so
+           these wrappers restore it. They go when ForecastRuns gets restyled (tailwind-migration phase 6). -->
+      <div class="forecast-runs min-h-0 overflow-y-auto"><div class="steps-dialog">
+      <header class="steps-header pr-10">
+        <DialogTitle as="h5" class="level-title">{{ LEVEL_NAMES[source] }} <span class="level-code">{{ source }}</span> · {{ disease }}</DialogTitle>
       </header>
       <!-- Two stages: preparing the data, then the forecast. Stage 2 opens once the data check succeeds (Next / Previous). -->
       <section v-for="tile in tiles" v-show="shown === tile.n" :key="tile.n" class="steps-tile" data-test="steps-tile" :aria-label="tile.title">
@@ -95,7 +96,9 @@
           <Button variant="outline" @click="shown = 1">← Previous</Button>
         </div>
       </section>
-    </BaseDialog>
+      </div></div>
+      </DialogContent>
+    </Dialog>
 
     <div class="level-action">
       <Button v-if="status.key === 'published'" variant="outline" class="w-full" @click="emit('report', source, disease)">View report</Button>
@@ -112,8 +115,7 @@
 
 <script setup lang="ts">
 import { computed, inject, reactive, ref, useId, watch } from 'vue'
-import BaseDialog from './BaseDialog.vue'
-import Icon, { ICONS } from '@/components/Icons'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import FileDropzone from '@/views/Dashboard/components/FileDropzone.vue'
 import { CONFIG_FILES, DISEASE_NAMES, FILE_STATUS, ITEM_NAMES, LEVEL_NAMES, jobOf, lastUpdate, step } from '@/config/pipeline'

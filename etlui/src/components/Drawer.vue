@@ -82,7 +82,7 @@ function close() {
   emit('update:modelValue', false)
 }
 
-// ponytail: Escape only, no focus trap (BaseDialog's showModal had one); add it if keyboard users get lost behind the overlay.
+// ponytail: Escape only, no focus trap; shadcn Sheet (lot 5) brings one.
 const onKey = (e: KeyboardEvent) => props.modelValue && e.key === 'Escape' && close()
 onMounted(() => window.addEventListener('keydown', onKey))
 onUnmounted(() => window.removeEventListener('keydown', onKey))

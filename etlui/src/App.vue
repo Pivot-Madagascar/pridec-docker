@@ -1,5 +1,5 @@
 <template>
-  <!-- A manual popover puts the toasts in the top layer, above native <dialog> modals (BaseDialog re-raises it). -->
+  <!-- A manual popover puts the toasts in the top layer, above the dialogs (portals with a z-index). -->
   <div ref="toasts" popover="manual" data-toasts class="toast-layer">
     <Toaster position="bottom-right" />
   </div>

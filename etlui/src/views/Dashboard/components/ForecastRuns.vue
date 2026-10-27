@@ -284,11 +284,7 @@ const todo = computed(() => {
   accent-color: #10b981;
 }
 
-.forecast-runs .steps-dialog {
-  width: min(96vw, 1600px); /* same as PreviewDialog */
-}
-
-/* Title, and the close button top right (same look as PreviewDialog's). */
+/* Title (shadcn's close cross sits top right). */
 .forecast-runs .steps-header {
   display: flex;
   align-items: center;

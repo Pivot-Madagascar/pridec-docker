@@ -1,6 +1,6 @@
 # UI components: migration to shadcn-vue
 
-> Status: **decided 2026-10-27, lots 1 to 3 implemented.** Replaces parts of
+> Status: **decided 2026-10-27, lots 1 to 4 implemented.** Replaces parts of
 > `../tailwind-migration/tailwind-migration.md` (see § 2).
 
 ## 1. What
@@ -52,24 +52,44 @@ touched pages with `yarn dev` (dark only until lot 6).
 | **1. Foundation + Button** | init, gray + indigo tokens, `.dark` class, `Button` in `LoginForm`, `HomeView`, `ConfigView`. | done |
 | **2. Test hooks** | tailwind-migration phase 1 (§ 3.5): `data-test` / `aria-*` instead of class selectors in specs. Needed before lot 4: shadcn components drop the classes the specs select. Names = the old class names; `confirm-btn` (ConfirmDialog), `data-job` on step items, `[aria-label="Not imported"]`; open run = `aria-current` on `level-column`. | done |
 | **3. Buttons, inputs, badges, cards** | `Button` everywhere else, `Input`, `Label`, `Badge`, `Card`; delete the matching `base.css` and scoped CSS. Mapping: primary → `default`, plain → `outline` (`secondary` on toolbars), danger → `destructive` (also `ImpactDialog` Confirm, amber before), icon → `ghost` + `icon-sm`, small → `size="sm"`, spinners → `LoaderCircle`. Left native on purpose: `ActionCard`, `card-steps` overlay, Journal pass list (not action buttons); `Accordion`, `ModeToggle`, `Drawer` (lot 5); radios (Home), checkbox (`ImpactDialog`), `<select>` (Config, Journal; shadcn `Select` uses a portal, lot 5). | done |
-| **4. Dialogs, all together** | `Dialog` for `BaseDialog` / `PreviewDialog` / `ForecastReportModal` / `RequestDialog` / Steps dialog, `AlertDialog` for `ConfirmDialog` / `ImpactDialog`. | todo |
+| **4. Dialogs, all together** | `Dialog` for `PreviewDialog` / `ForecastReportModal` / `RequestDialog` / Steps dialog, `AlertDialog` for `ConfirmDialog` / `ImpactDialog`; `BaseDialog` deleted. Owner's choices (2026-10-27): shadcn look, shadcn's close cross everywhere (the custom close buttons and RequestDialog's "Close" went), toasts usable over a modal, ImpactDialog Confirm in indigo. See § 4.1. | done |
 | **5. Other widgets** | `Accordion`, `Sheet` (`Drawer`), `Switch` (`ModeToggle`), `Table` (`RequestTable`, journal), `Progress`. | todo |
 | **6. Clean-up** | header theme toggle (D3), `Icon.vue` → `@lucide/vue`, dead `base.css` classes, `etlui/CLAUDE.md`. | todo |
 
-### Why the dialogs move together (lot 4)
+### 4.1 Dialogs (lot 4)
+
+Why together:
 
 Today's dialogs are native `<dialog>` + `showModal()`: they live in the browser's **top layer**. Reka dialogs are
 rendered in a portal under `<body>` with a `z-index`, which never reaches the top layer. A Reka dialog opened from a
 native one (a `ConfirmDialog` from the Steps dialog, the report from the Steps dialog) would sit **below** it,
 behind an inert page. Mixed, they break; so all of them switch in one lot.
 
-Also for lot 4:
-- Specs that look inside a dialog must search `document.body` (portal), not the component wrapper.
-- The `popover="manual"` toaster and `BaseDialog` re-showing it after `showModal()` exist only because of the top
-  layer. With Reka dialogs the toaster may no longer need the popover: check it, do not assume.
+What the switch changed, and the fixes it needed:
+- **Closed = unmounted.** A native `<dialog>` kept its content in the DOM; a Reka dialog renders it only while open, a
+  tick after `open` turns true. Safe here: the Steps dialog's state (`files`, `shown`) lives in `LevelColumn`. Lost
+  on close: a `FileDropzone`'s wrong-extension message.
+- **Tests.** `src/test/setup.ts` stubs `teleport` with a pass-through component (`teleport: true` stubbed Reka's own
+  `Teleport` and rendered nothing), so the content stays in the mounted wrapper. Specs `await flushPromises()` after
+  opening, select `[role="dialog"]` / `data-test` instead of `dialog`, and `exists()` instead of the `open` attribute.
+- **Stacking.** A portal's content sits where its `Teleport` was mounted, not where it was opened: the Dashboard's
+  dialogs (preview, confirmation, report) are mounted before a run's Steps dialog, so at an equal `z-50` the Steps
+  dialog covered them (seen in headless Chrome). `components/ui/dialog/openOrder.ts` gives each dialog the next
+  z-index when it opens (`DialogContent`, `AlertDialogContent`). Checked by `ui/dialog/__tests__/DialogContent.spec.ts`
+  and in the browser.
+- **Global CSS through the portal.** `ForecastRuns`' unscoped CSS is `.forecast-runs .steps-dialog …`; the Steps
+  content is wrapped in `<div class="forecast-runs"><div class="steps-dialog">` (`ponytail:` comment, goes with the
+  ForecastRuns restyle).
+- **Toasts.** The `popover="manual"` layer stays (top layer, above every dialog); `raiseToasts()` is gone. A click on a
+  toast is a click outside for Reka: `DialogContent.vue` cancels the dismiss when the target is in `[data-toasts]`.
+- **Scrolling.** The dialog body scrolls, not `DialogContent`, so shadcn's absolute close cross stays visible
+  (`RequestDialog`, Steps).
 
 ## 5. Open
 
 - Checked by eye after lot 3 (headless Chrome, 2026-10-27): Login, Home, Forecast, Tracking, Journal, Logs, Config.
-  Not opened: the dialogs (Steps, previews, report, confirmations) and `FileDropzone`.
+  After lot 4: the Steps dialog, a default-file preview opened from it (on top; Escape closes only the preview, then
+  the Steps dialog), the request detail of Tracking. Not opened in a browser: the report, `ImportAvailabilityDialog`
+  (its check reads DHIS2), `ConfirmDialog`, `ImpactDialog`.
+- Probably (read from Reka's `hideOthers`, not checked) the toasts are `aria-hidden` while a modal is open: not announced by screen readers then.
 - Contrast of `--muted-foreground` on `--muted` (WCAG AA) in both themes: not measured.

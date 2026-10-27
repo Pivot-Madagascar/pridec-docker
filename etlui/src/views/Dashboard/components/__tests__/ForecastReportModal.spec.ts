@@ -9,19 +9,23 @@ vi.mock('@/services/api', () => ({
   },
 }))
 
-const archiveLink = (run: { source: string; disease: string } | null) =>
-  mount(ForecastReportModal, { props: { modelValue: true, run } }).find('a[download]')
+// The dialog content renders a tick after mount (portal): wait for it before looking.
+const archiveLink = async (run: { source: string; disease: string } | null) => {
+  const wrapper = mount(ForecastReportModal, { props: { modelValue: true, run } })
+  await flushPromises()
+  expect(wrapper.find('iframe').exists()).toBe(true) // the content is there
+  return wrapper.find('a[download]')
+}
 
 describe('ForecastReportModal', () => {
   it('offers the input/ and output/ zip of the open run next to Refresh', async () => {
-    const link = archiveLink(null)
-    await flushPromises()
+    const link = await archiveLink(null)
 
     expect(link.attributes('href')).toBe('http://api/output/archive')
     expect(link.attributes('target')).toBe('_blank')
   })
 
-  it('hides it for a closed run, whose files are no longer in input/', () => {
-    expect(archiveLink({ source: 'csb', disease: 'Malaria' }).exists()).toBe(false)
+  it('hides it for a closed run, whose files are no longer in input/', async () => {
+    expect((await archiveLink({ source: 'csb', disease: 'Malaria' })).exists()).toBe(false)
   })
 })

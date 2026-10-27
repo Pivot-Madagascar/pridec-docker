@@ -252,14 +252,14 @@ describe('Dashboard', () => {
     expect(wrapper.find('[data-test="imports-approval"]').findAll('button').map(b => b.text())).toEqual(['Details']) // moved under the report
     await wrapper.find('[data-test="imports-approval"] button').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[data-test="availability-dialog"]').attributes('open')).toBeDefined()
+    expect(wrapper.find('[data-test="availability-dialog"]').exists()).toBe(true)
     const footer = wrapper.find('[data-test="availability-dialog"] [data-test="preview-footer"]')
     expect(footer.findAll('button').map(b => [b.text(), b.attributes('disabled') !== undefined])).toEqual([
       ['Reject', true], ['Approve imports', false]]) // nothing approved yet: nothing to reject
     await footer.findAll('button')[1].trigger('click')
     await flushPromises()
     expect(decideImports).toHaveBeenCalledWith('approve')
-    expect(wrapper.find('[data-test="availability-dialog"]').attributes('open')).toBeUndefined() // closed before the decision
+    expect(wrapper.find('[data-test="availability-dialog"]').exists()).toBe(false) // closed before the decision
     wrapper.unmount()
   })
 
@@ -286,15 +286,17 @@ describe('Dashboard', () => {
     const malaria = runs.find('#forecast-Malaria')
     expect(malaria.text()).toContain('1 of 3 levels published')
     // Only the open run has steps to show: its whole card opens them, highlighted.
-    expect(malaria.findAll('[data-test="dropzone"]').every(d => d.element.closest('dialog.steps-dialog'))).toBe(true)
+    expect(malaria.findAll('[data-test="dropzone"]')).toHaveLength(0) // the input files are in the steps dialog, closed
     const [adj, com, csb] = malaria.findAll('[data-test="level-column"]')
     expect(malaria.findAll('button').some(b => b.text() === 'Steps')).toBe(false)
     expect([adj, com, csb].map(l => l.attributes('aria-current') === 'true')).toEqual([false, true, false])
     expect([adj, com, csb].map(l => l.find('[data-test="card-steps"]').exists())).toEqual([false, true, false])
-    expect([adj, csb].map(l => l.find('dialog').exists())).toEqual([false, false])
+    expect([adj, csb].map(l => l.find('[data-test="steps-dialog"]').exists())).toEqual([false, false])
     await com.find('[data-test="card-steps"]').trigger('click')
-    expect(com.find('dialog [data-test="steps-close"]').attributes('aria-label')).toBe('Close the steps')
-    expect(com.find('dialog').findAll('button').some(b => b.text() === 'Close')).toBe(false)
+    await flushPromises()
+    const steps = com.find('[data-test="steps-dialog"]')
+    expect(steps.findAll('[data-test="dropzone"]')).toHaveLength(2)
+    expect(steps.findAll('button').filter(b => b.text() === 'Close')).toHaveLength(1) // shadcn's cross, the only close
     // The run's input files first, then its jobs.
     const inputs = com.findAll('[data-test="item"]').filter(i => i.find('[data-test="dropzone"]').exists())
     expect(inputs.map(i => i.find('[data-test="item-tech"]').text())).toEqual(['config/Malaria', 'external_data/fkt'])
@@ -326,7 +328,7 @@ describe('Dashboard', () => {
     expect(csb.text()).toContain('Available once the open run is done')
 
     expect(adj.find('progress').attributes()).toMatchObject({ value: '3', max: '9' }) // both shared files are provided
-    expect(com.find('dialog').text()).toContain('Disease data')
+    expect(com.find('[data-test="steps-dialog"]').text()).toContain('Disease data')
     const launchButtons = com.findAll('button').filter(b => b.text() === 'Launch')
     expect(launchButtons).toHaveLength(1) // only what etlhub marks launchable
     await launchButtons[0].trigger('click')
@@ -358,7 +360,7 @@ describe('Dashboard', () => {
     await next.trigger('click')
     expect(com.findAll('[data-test="steps-tile"]').map(t => t.isVisible())).toEqual([false, true])
     // Read and approve: on the card, and on the approval item of the dialog.
-    const approveItem = com.find('dialog [data-job="approve"]')
+    const approveItem = com.find('[data-test="steps-dialog"] [data-job="approve"]')
     expect(approveItem.find('button').text()).toBe('Read and approve')
     await approveItem.find('button').trigger('click')
     await flushPromises()
