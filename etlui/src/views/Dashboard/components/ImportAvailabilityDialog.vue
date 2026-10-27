@@ -31,21 +31,23 @@
           checked {{ new Date(imp.checked_at).toLocaleString() }}<template v-if="imp.checked_by"> by {{ imp.checked_by }}</template>
           <template v-if="imp.pass_id"> · pass {{ imp.pass_id }}</template>
         </p>
-        <div class="availability-scroll">
-          <table class="availability-table">
-            <thead>
-              <tr>
-                <th>Data element</th>
-                <th v-for="pe in imp.periods" :key="pe">{{ formatPeriod(pe) }}</th>
-                <th><span class="sr-only">Imported</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="el in imp.elements" :key="el.code" :data-code="el.code">
-                <th class="availability-code" scope="row">{{ el.code }}</th>
-                <td v-if="el.raw === null" :colspan="imp.periods.length" class="is-error">{{ el.error }}</td>
+        <!-- Table's own container scrolls sideways. The class is on the inner <table>, out of this scope's reach:
+             its box styles are utilities here, `.availability-table th/td` still match (TableHead/TableCell are roots). -->
+        <div>
+          <Table class="availability-table border-collapse text-[0.8125rem]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data element</TableHead>
+                <TableHead v-for="pe in imp.periods" :key="pe">{{ formatPeriod(pe) }}</TableHead>
+                <TableHead><span class="sr-only">Imported</span></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="el in imp.elements" :key="el.code" :data-code="el.code">
+                <TableHead class="availability-code" scope="row">{{ el.code }}</TableHead>
+                <TableCell v-if="el.raw === null" :colspan="imp.periods.length" class="is-error">{{ el.error }}</TableCell>
                 <template v-else>
-                  <td v-for="pe in imp.periods" :key="pe" :class="{ 'is-missing': !el.raw[pe] }">
+                  <TableCell v-for="pe in imp.periods" :key="pe" :class="{ 'is-missing': !el.raw[pe] }">
                     <template v-if="el.raw[pe]">
                       {{ el.raw[pe] }}
                       <span class="availability-analytics" :class="{ 'is-behind': el.analytics && el.analytics[pe] !== el.raw[pe] }">
@@ -53,15 +55,15 @@
                       </span>
                     </template>
                     <template v-else>N/A</template>
-                  </td>
+                  </TableCell>
                 </template>
-                <td class="availability-mark">
+                <TableCell class="availability-mark">
                   <span v-if="el.imported" class="is-ok" aria-label="Imported">✓</span>
                   <span v-else class="is-ko" aria-label="Not imported">✗</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </div>
         <p v-for="el in imp.elements.filter(e => e.raw && e.error)" :key="el.code" class="availability-note is-error">
           {{ el.code }}: analytics not checked ({{ el.error }})
@@ -76,6 +78,7 @@
 </template>
 
 <script setup lang="ts">
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { labelOf } from '@/config/pipeline'
 import type { ImportAvailabilityReport } from '@/types/pipeline'
 import { formatPeriod } from '@/utils/preview'
@@ -136,16 +139,6 @@ const emit = defineEmits<{
   font-weight: 600;
   color: #93c5fd;
   background: rgba(59, 130, 246, 0.12);
-}
-
-.availability-scroll {
-  overflow-x: auto;
-}
-
-.availability-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.8125rem;
 }
 
 .availability-table th,

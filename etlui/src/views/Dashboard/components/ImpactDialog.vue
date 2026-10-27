@@ -19,10 +19,10 @@
           <li>If the relaunch fails, the cycle stays at this step until all its items are in success.</li>
         </ul>
 
-        <label class="mt-4 flex items-start gap-2 font-semibold">
-          <input v-model="approved" type="checkbox" />
+        <Label class="mt-4 font-semibold">
+          <Checkbox v-model="approved" />
           I have read the impact and I approve this update
-        </label>
+        </Label>
       </div>
       <AlertDialogFooter>
         <Button variant="outline" :disabled="busy" @click="emit('cancel')">Cancel</Button>
@@ -37,6 +37,8 @@ import { computed, ref, watch } from 'vue'
 import type { PendingConfirmation } from '@/composables/usePipeline'
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 
 const props = defineProps<{
   pending: PendingConfirmation | null

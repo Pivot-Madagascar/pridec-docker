@@ -1,6 +1,6 @@
 # UI components: migration to shadcn-vue
 
-> Status: **decided 2026-10-27, lots 1 to 4 implemented.** Replaces parts of
+> Status: **decided 2026-10-27, lots 1 to 5 implemented.** Replaces parts of
 > `../tailwind-migration/tailwind-migration.md` (see § 2).
 
 ## 1. What
@@ -53,7 +53,7 @@ touched pages with `yarn dev` (dark only until lot 6).
 | **2. Test hooks** | tailwind-migration phase 1 (§ 3.5): `data-test` / `aria-*` instead of class selectors in specs. Needed before lot 4: shadcn components drop the classes the specs select. Names = the old class names; `confirm-btn` (ConfirmDialog), `data-job` on step items, `[aria-label="Not imported"]`; open run = `aria-current` on `level-column`. | done |
 | **3. Buttons, inputs, badges, cards** | `Button` everywhere else, `Input`, `Label`, `Badge`, `Card`; delete the matching `base.css` and scoped CSS. Mapping: primary → `default`, plain → `outline` (`secondary` on toolbars), danger → `destructive` (also `ImpactDialog` Confirm, amber before), icon → `ghost` + `icon-sm`, small → `size="sm"`, spinners → `LoaderCircle`. Left native on purpose: `ActionCard`, `card-steps` overlay, Journal pass list (not action buttons); `Accordion`, `ModeToggle`, `Drawer` (lot 5); radios (Home), checkbox (`ImpactDialog`), `<select>` (Config, Journal; shadcn `Select` uses a portal, lot 5). | done |
 | **4. Dialogs, all together** | `Dialog` for `PreviewDialog` / `ForecastReportModal` / `RequestDialog` / Steps dialog, `AlertDialog` for `ConfirmDialog` / `ImpactDialog`; `BaseDialog` deleted. Owner's choices (2026-10-27): shadcn look, shadcn's close cross everywhere (the custom close buttons and RequestDialog's "Close" went), toasts usable over a modal, ImpactDialog Confirm in indigo. See § 4.1. | done |
-| **5. Other widgets** | `Accordion`, `Sheet` (`Drawer`), `Switch` (`ModeToggle`), `Table` (`RequestTable`, journal), `Progress`. | todo |
+| **5. Other widgets** | `Accordion`, `Sheet` (`Drawer`), `ToggleGroup` NO / YES (`ModeToggle`, owner's choice over `Switch`: leaving test mode pauses the test pass), `Table` (all five tables, owner's choice), `Progress` (owner's choice), `Select` (Config, Journal), `RadioGroup` (Home), `Checkbox` (`ImpactDialog`). `<details>` (admin zone, Journal years) stay native. See § 4.2. | done |
 | **6. Clean-up** | header theme toggle (D3), `Icon.vue` → `@lucide/vue`, dead `base.css` classes, `etlui/CLAUDE.md`. | todo |
 
 ### 4.1 Dialogs (lot 4)
@@ -85,11 +85,35 @@ What the switch changed, and the fixes it needed:
 - **Scrolling.** The dialog body scrolls, not `DialogContent`, so shadcn's absolute close cross stays visible
   (`RequestDialog`, Steps).
 
+### 4.2 Widgets (lot 5)
+
+Local edits to the copied components, each marked `etlui:` in the file:
+- `table/TableCell.vue`: no `whitespace-nowrap` by default. With it, the Journal's event details stopped wrapping and
+  pushed Actor / Request out of view (seen in headless Chrome); cells that must not wrap say so.
+- `progress/Progress.vue`: the indicator divides by `max`; shadcn's assumed `max = 100` (a run's "3 of 9" drew 3 %).
+  Checked by `progress/__tests__/Progress.spec.ts`.
+
+In the views:
+- `Accordion` keeps closed sections mounted (`unmount-on-hide` off): collapsing Forecasts must not drop a file picked
+  but not uploaded.
+- `Select`: Reka refuses `''` as an item value; `'all'` (Journal) and `'default'` (Config `LOG_LEVEL`) stand for it.
+- `CsvPreview` keeps a native `<table>` with the shadcn parts inside: `Table` wraps the table in an `overflow-auto` div,
+  which would become the scroll container of its sticky header and columns. Checked in Chrome: the header stays at
+  the top after scrolling.
+- A scoped rule on a class passed to `Table` (`.availability-table { … }`) no longer matches (the class is on the inner
+  `<table>`, the scope attribute on the wrapper): its box styles are utilities now.
+- Specs: open a `Select` with Enter on the trigger and pick with Enter on the `[role="option"]`; click
+  `[role="checkbox"]`; radios are `[role="radio"]`; the progress bar is `[role="progressbar"]` (`aria-valuenow`,
+  `aria-valuemax`).
+
 ## 5. Open
 
 - Checked by eye after lot 3 (headless Chrome, 2026-10-27): Login, Home, Forecast, Tracking, Journal, Logs, Config.
   After lot 4: the Steps dialog, a default-file preview opened from it (on top; Escape closes only the preview, then
   the Steps dialog), the request detail of Tracking. Not opened in a browser: the report, `ImportAvailabilityDialog`
   (its check reads DHIS2), `ConfirmDialog`, `ImpactDialog`.
+- After lot 5 (Chrome): Forecast (accordion, ToggleGroup, progress bars), a server CSV preview from the Steps dialog
+  (sticky header kept), the Sheet menu, Config (closed Select), Tracking and Journal tables. Not seen open: a `Select`
+  list (covered by the Journal spec), Home's radios (the month had an active pass, so none were shown).
 - Probably (read from Reka's `hideOthers`, not checked) the toasts are `aria-hidden` while a modal is open: not announced by screen readers then.
 - Contrast of `--muted-foreground` on `--muted` (WCAG AA) in both themes: not measured.

@@ -12,7 +12,7 @@
     ></button>
     <h5 :id="titleId" class="level-title">{{ LEVEL_NAMES[source] }} <span class="level-code">{{ source }}</span></h5>
     <p class="level-status" :class="`status-${status.key}`">{{ status.text }}</p>
-    <progress class="level-bar" :value="done" :max="inputs.length + items.length"></progress>
+    <Progress :model-value="done" :max="inputs.length + items.length" />
     <p class="level-progress">
       {{ done }} of {{ inputs.length + items.length }} steps
       <span v-if="isOpen" class="card-steps-hint">Click to see the steps</span>
@@ -116,6 +116,7 @@
 <script setup lang="ts">
 import { computed, inject, reactive, ref, useId, watch } from 'vue'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import FileDropzone from '@/views/Dashboard/components/FileDropzone.vue'
 import { CONFIG_FILES, DISEASE_NAMES, FILE_STATUS, ITEM_NAMES, LEVEL_NAMES, jobOf, lastUpdate, step } from '@/config/pipeline'

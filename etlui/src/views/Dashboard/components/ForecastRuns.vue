@@ -278,12 +278,6 @@ const todo = computed(() => {
   align-items: center;
 }
 
-.forecast-runs .level-bar {
-  width: 100%;
-  height: 0.5rem;
-  accent-color: #10b981;
-}
-
 /* Title (shadcn's close cross sits top right). */
 .forecast-runs .steps-header {
   display: flex;

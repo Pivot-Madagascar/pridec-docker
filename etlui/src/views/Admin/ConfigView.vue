@@ -4,6 +4,7 @@ import { useConfigStore } from '@/stores/config'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { LOG_LEVELS, type ConfigUpdate } from '@/types/config'
 
@@ -134,10 +135,14 @@ const handleReload = async () => {
 
       <div class="form-group">
         <Label for="log_level">Log level</Label>
-        <select id="log_level" v-model="form.log_level">
-          <option value="">Default (INFO)</option>
-          <option v-for="level in LOG_LEVELS" :key="level" :value="level">{{ level }}</option>
-        </select>
+        <!-- Reka refuses '' as an item value: 'default' stands for no LOG_LEVEL (etlhub's INFO). -->
+        <Select :model-value="form.log_level || 'default'" @update:model-value="v => (form.log_level = v === 'default' ? '' : String(v))">
+          <SelectTrigger id="log_level" class="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">Default (INFO)</SelectItem>
+            <SelectItem v-for="level in LOG_LEVELS" :key="level" :value="level">{{ level }}</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div class="form-group">
@@ -178,11 +183,6 @@ const handleReload = async () => {
 
 .form-group {
   @apply flex flex-col gap-2 text-left;
-}
-
-/* ponytail: native <select> styled like Input; shadcn Select (Reka, portal) comes with lot 5 */
-.form-group select {
-  @apply h-9 w-full rounded-md border border-input bg-input/30 px-3 text-sm;
 }
 
 .form-group input[readonly] {
