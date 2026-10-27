@@ -16,7 +16,7 @@ Reka UI). shadcn-vue is not a library imported whole: its CLI **copies the sourc
 | S1 | Replace etlui's hand-made components by their shadcn-vue equivalent, **one lot at a time** (§ 4). | — |
 | S2 | **shadcn tokens** (`--background`, `--primary`, `--muted`, `--border`…) in `src/styles/base.css`, with Tailwind **gray** values and one **indigo** accent (`--primary`). Owner's choice (2026-10-27, lot 6a): the only other colours are `--success`, `--warning` and `--destructive` (added to shadcn's set); HTTP methods and step icons are neutral / indigo. | tailwind-migration D5 (`surface`, `accent`… tokens), § 3.1 |
 | S3 | Components are **Vue components** (`Button`, `Dialog`…) with `variant` / `size` props. | tailwind-migration D6 (`.btn`, `.card` classes), § 3.3 |
-| S4 | Dark theme = **`.dark` class on `<html>`** (shadcn convention, `@custom-variant dark (&:is(.dark *))`). Forced on by `main.ts` while hand-written surfaces are still dark hex (lots 3–5): shadcn tokens following a light OS would put white buttons on dark cards. Lot 6b follows the OS and adds the header toggle (D3), writing the same class: System / Light / Dark, remembered in the browser (owner's choice, 2026-10-27); the header follows the theme. | tailwind-migration `data-theme` attribute, § 3.2 |
+| S4 | Theme = **`.dark` class on `<html>`** (shadcn convention, `@custom-variant dark (&:is(.dark *))`), written by `@vueuse/core` `useColorMode` in `components/ThemeToggle.vue` (header): System (follows the OS live, default) / Light / Dark, remembered in `localStorage` `etlui-theme` (owner's choice, 2026-10-27, lot 6b). The header follows the theme. Forced dark during lots 1–6a. | tailwind-migration `data-theme` attribute, § 3.2 |
 | S5 | Icons: **`@lucide/vue`** (successor of the deprecated `lucide-vue-next`). `Icons/` deleted in lot 6a. | tailwind-migration § 6 "no icon pack" |
 | S6 | Toasts stay on `vue3-hot-toast` for now. | — |
 
@@ -45,7 +45,7 @@ never a styling class), § 3.4 (state through `aria-*` / `data-state`), D7 (CSS 
 ## 4. Lots
 
 One lot = one commit, app working after each. Before and after: `yarn vitest run`, `yarn build`, then look at the
-touched pages with `yarn dev` (dark only until lot 6).
+touched pages with `yarn dev`, in light and dark.
 
 | Lot | Content | Status |
 |---|---|---|
@@ -55,7 +55,7 @@ touched pages with `yarn dev` (dark only until lot 6).
 | **4. Dialogs, all together** | `Dialog` for `PreviewDialog` / `ForecastReportModal` / `RequestDialog` / Steps dialog, `AlertDialog` for `ConfirmDialog` / `ImpactDialog`; `BaseDialog` deleted. Owner's choices (2026-10-27): shadcn look, shadcn's close cross everywhere (the custom close buttons and RequestDialog's "Close" went), toasts usable over a modal, ImpactDialog Confirm in indigo. See § 4.1. | done |
 | **5. Other widgets** | `Accordion`, `Sheet` (`Drawer`), `ToggleGroup` NO / YES (`ModeToggle`, owner's choice over `Switch`: leaving test mode pauses the test pass), `Table` (all five tables, owner's choice), `Progress` (owner's choice), `Select` (Config, Journal), `RadioGroup` (Home), `Checkbox` (`ImpactDialog`). `<details>` (admin zone, Journal years) stay native. See § 4.2. | done |
 | **6a. Icons and colours** | `Icons/` → `@lucide/vue`; every hex, `rgba` and Tailwind palette class of `src/` (outside `components/ui/`) → tokens: utilities (`text-muted-foreground`, `bg-success/15`…) in templates, `var(--…)` and `color-mix()` in scoped CSS. Header, logo and badges on tokens (the amber went). Still dark only. Left on purpose: `JobToast` (the toast stays white, S6), the report iframe's white, black shadows. `base.css` classes still used stay, on tokens. | done |
-| **6b. Light theme** | follow the OS, header toggle System / Light / Dark (remembered), drop the forced `.dark`; check every page in light. | todo |
+| **6b. Light theme** | follow the OS, header toggle System / Light / Dark (remembered), drop the forced `.dark`; check every page in light. `ThemeToggle` = shadcn `ToggleGroup` + `useColorMode` (no new dependency), spec `components/__tests__/ThemeToggle.spec.ts`. | done |
 
 ### 4.1 Dialogs (lot 4)
 
@@ -116,7 +116,8 @@ In the views:
 - After lot 5 (Chrome): Forecast (accordion, ToggleGroup, progress bars), a server CSV preview from the Steps dialog
   (sticky header kept), the Sheet menu, Config (closed Select), Tracking and Journal tables. Not seen open: a `Select`
   list (covered by the Journal spec), Home's radios (the month had an active pass, so none were shown).
-- After lot 6a (Chrome, dark): every page; no light rendering checked yet (lot 6b).
+- After lot 6a (Chrome, dark): every page.
+- After lot 6b (Chrome, OS emulated light, System choice): every page, the Steps dialog, a preview from it, the menu, a request detail; Dark kept after reload; System back to the OS and following an OS switch live. Not checked: the report, `ImportAvailabilityDialog`, `ConfirmDialog`, `ImpactDialog` in light. A page loads in light for an instant before the stored Dark applies? Not observed, not measured.
 - The `.forecast-runs` / `.steps-dialog` wrappers of the Steps dialog stay: `ForecastRuns`' CSS still selects through them.
 - Probably (read from Reka's `hideOthers`, not checked) the toasts are `aria-hidden` while a modal is open: not announced by screen readers then.
 - Contrast of `--muted-foreground` on `--muted` (WCAG AA) in both themes: not measured.
