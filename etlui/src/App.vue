@@ -9,7 +9,7 @@
       <div class="app-header-content">
 <router-link to="/" class="app-logo">
           <div class="logo-icon">
-            <Icon :path="ICONS.database" class="icon-md" />
+            <Database class="icon-md" />
           </div>
           <div>
             <h1 class="logo-title">ETL Hub</h1>
@@ -19,7 +19,7 @@
 
         <div class="header-right">
           <Button variant="ghost" size="icon" aria-label="Open the menu" @click="isDrawerOpen = true">
-            <Icon :path="ICONS.menu" class="size-6" />
+            <Menu class="size-6" />
           </Button>
 
           <Drawer
@@ -62,16 +62,14 @@
   pointer-events: none;
 }
 
-@reference "tailwindcss";
+@reference "./styles/base.css";
 
 .app-container {
   @apply min-h-screen;
 }
 
 .app-header {
-  @apply px-6 py-4 shadow-lg;
-  background-color: #131921;
-  color: white;
+  @apply px-6 py-4 border-b bg-card text-card-foreground;
 }
 
 .app-header-content {
@@ -89,13 +87,7 @@
 }
 
 .logo-icon {
-  @apply w-10 h-10 rounded-lg flex items-center justify-center;
-  background: linear-gradient(to bottom right, #febd69, #f0c14b);
-}
-
-.logo-icon .icon-md {
-  @apply h-6 w-6;
-  color: #131921;
+  @apply w-10 h-10 rounded-lg flex items-center justify-center bg-primary text-primary-foreground;
 }
 
 .logo-title {
@@ -103,8 +95,7 @@
 }
 
 .logo-subtitle {
-  @apply text-xs;
-  color: #9ca3af;
+  @apply text-xs text-muted-foreground;
 }
 
 .header-right {
@@ -112,21 +103,12 @@
 }
 
 .app-badge {
-  @apply hidden lg:inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold;
-  background-color: #febd69;
-  color: #131921;
+  @apply hidden lg:inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-primary/15 text-primary;
 }
 
 .nav-link-secondary {
-  @apply hidden lg:inline-flex px-3 py-1.5 text-xs font-medium rounded-md transition-colors;
+  @apply hidden lg:inline-flex px-3 py-1.5 text-xs font-medium rounded-md transition-colors border bg-secondary text-secondary-foreground hover:bg-secondary/80;
   text-decoration: none;
-  background-color: #232F3E;
-  border: 1px solid #4b5563;
-  color: #d1d5db;
-}
-
-.nav-link-secondary:hover {
-  @apply bg-gray-700 text-white;
 }
 
 .main-content {
@@ -136,7 +118,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import Icon, { ICONS } from '@/components/Icons'
+import { Database, Menu } from '@lucide/vue'
 import Drawer from '@/components/Drawer.vue'
 import { Toaster } from 'vue3-hot-toast'
 import { Button } from '@/components/ui/button'

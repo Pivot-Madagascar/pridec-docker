@@ -99,12 +99,12 @@ const emit = defineEmits<{
 </script>
 
 <style scoped>
-@reference "tailwindcss";
+@reference "../../../styles/base.css";
 
 .availability-meta {
   margin-bottom: 0.5rem;
   font-size: 0.8125rem;
-  color: #94a3b8;
+  color: var(--muted-foreground);
 }
 
 .availability-section {
@@ -114,7 +114,7 @@ const emit = defineEmits<{
 .availability-task {
   margin-bottom: 0.5rem;
   font-weight: 700;
-  color: #f1f5f9;
+  color: var(--foreground);
 }
 
 .availability-ou {
@@ -122,14 +122,14 @@ const emit = defineEmits<{
   font-family: ui-monospace, monospace;
   font-size: 0.75rem;
   font-weight: 400;
-  color: #64748b;
+  color: var(--muted-foreground);
   word-break: break-all;
 }
 
 .availability-origin {
   margin-bottom: 0.5rem;
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--muted-foreground);
 }
 
 .availability-badge {
@@ -137,21 +137,21 @@ const emit = defineEmits<{
   padding: 0.0625rem 0.5rem;
   border-radius: 999px;
   font-weight: 600;
-  color: #93c5fd;
-  background: rgba(59, 130, 246, 0.12);
+  color: var(--primary);
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
 }
 
 .availability-table th,
 .availability-table td {
   padding: 0.375rem 0.625rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
   text-align: center;
   white-space: nowrap;
 }
 
 .availability-table thead th {
-  background: #1e293b;
-  color: #cbd5e1;
+  background: var(--muted);
+  color: var(--foreground);
 }
 
 .availability-code {
@@ -163,19 +163,19 @@ const emit = defineEmits<{
 .availability-analytics {
   display: block;
   font-size: 0.6875rem;
-  color: #64748b;
+  color: var(--muted-foreground);
 }
 
 .availability-analytics.is-behind {
-  color: #fbbf24;
+  color: var(--warning);
 }
 
 .is-missing {
-  color: #64748b;
+  color: var(--muted-foreground);
 }
 
 .is-error {
-  color: #f87171;
+  color: var(--destructive);
   white-space: normal !important;
 }
 
@@ -185,16 +185,16 @@ const emit = defineEmits<{
 }
 
 .is-ok {
-  color: #4ade80;
+  color: var(--success);
 }
 
 .is-ko {
-  color: #f87171;
+  color: var(--destructive);
 }
 
 .availability-note {
   margin-top: 0.375rem;
   font-size: 0.75rem;
-  color: #fbbf24;
+  color: var(--warning);
 }
 </style>

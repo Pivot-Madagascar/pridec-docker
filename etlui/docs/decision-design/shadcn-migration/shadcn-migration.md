@@ -14,10 +14,10 @@ Reka UI). shadcn-vue is not a library imported whole: its CLI **copies the sourc
 | # | Decision | Replaces |
 |---|---|---|
 | S1 | Replace etlui's hand-made components by their shadcn-vue equivalent, **one lot at a time** (§ 4). | — |
-| S2 | **shadcn tokens** (`--background`, `--primary`, `--muted`, `--border`…) in `src/styles/base.css`, with Tailwind **gray** values and one **indigo** accent (`--primary`). | tailwind-migration D5 (`surface`, `accent`… tokens), § 3.1 |
+| S2 | **shadcn tokens** (`--background`, `--primary`, `--muted`, `--border`…) in `src/styles/base.css`, with Tailwind **gray** values and one **indigo** accent (`--primary`). Owner's choice (2026-10-27, lot 6a): the only other colours are `--success`, `--warning` and `--destructive` (added to shadcn's set); HTTP methods and step icons are neutral / indigo. | tailwind-migration D5 (`surface`, `accent`… tokens), § 3.1 |
 | S3 | Components are **Vue components** (`Button`, `Dialog`…) with `variant` / `size` props. | tailwind-migration D6 (`.btn`, `.card` classes), § 3.3 |
-| S4 | Dark theme = **`.dark` class on `<html>`** (shadcn convention, `@custom-variant dark (&:is(.dark *))`). Forced on by `main.ts` while hand-written surfaces are still dark hex (lots 3–5): shadcn tokens following a light OS would put white buttons on dark cards. Lot 6 follows the OS and adds the header toggle (D3), writing the same class. | tailwind-migration `data-theme` attribute, § 3.2 |
-| S5 | Icons: **`@lucide/vue`** (successor of the deprecated `lucide-vue-next`). `Icons/Icon.vue` goes once every use is migrated. | tailwind-migration § 6 "no icon pack" |
+| S4 | Dark theme = **`.dark` class on `<html>`** (shadcn convention, `@custom-variant dark (&:is(.dark *))`). Forced on by `main.ts` while hand-written surfaces are still dark hex (lots 3–5): shadcn tokens following a light OS would put white buttons on dark cards. Lot 6b follows the OS and adds the header toggle (D3), writing the same class: System / Light / Dark, remembered in the browser (owner's choice, 2026-10-27); the header follows the theme. | tailwind-migration `data-theme` attribute, § 3.2 |
+| S5 | Icons: **`@lucide/vue`** (successor of the deprecated `lucide-vue-next`). `Icons/` deleted in lot 6a. | tailwind-migration § 6 "no icon pack" |
 | S6 | Toasts stay on `vue3-hot-toast` for now. | — |
 
 Kept from tailwind-migration: D1 (gray), D2 (indigo), D3 (light + dark, toggle), D4 + § 3.5 (`data-test` in specs,
@@ -54,7 +54,8 @@ touched pages with `yarn dev` (dark only until lot 6).
 | **3. Buttons, inputs, badges, cards** | `Button` everywhere else, `Input`, `Label`, `Badge`, `Card`; delete the matching `base.css` and scoped CSS. Mapping: primary → `default`, plain → `outline` (`secondary` on toolbars), danger → `destructive` (also `ImpactDialog` Confirm, amber before), icon → `ghost` + `icon-sm`, small → `size="sm"`, spinners → `LoaderCircle`. Left native on purpose: `ActionCard`, `card-steps` overlay, Journal pass list (not action buttons); `Accordion`, `ModeToggle`, `Drawer` (lot 5); radios (Home), checkbox (`ImpactDialog`), `<select>` (Config, Journal; shadcn `Select` uses a portal, lot 5). | done |
 | **4. Dialogs, all together** | `Dialog` for `PreviewDialog` / `ForecastReportModal` / `RequestDialog` / Steps dialog, `AlertDialog` for `ConfirmDialog` / `ImpactDialog`; `BaseDialog` deleted. Owner's choices (2026-10-27): shadcn look, shadcn's close cross everywhere (the custom close buttons and RequestDialog's "Close" went), toasts usable over a modal, ImpactDialog Confirm in indigo. See § 4.1. | done |
 | **5. Other widgets** | `Accordion`, `Sheet` (`Drawer`), `ToggleGroup` NO / YES (`ModeToggle`, owner's choice over `Switch`: leaving test mode pauses the test pass), `Table` (all five tables, owner's choice), `Progress` (owner's choice), `Select` (Config, Journal), `RadioGroup` (Home), `Checkbox` (`ImpactDialog`). `<details>` (admin zone, Journal years) stay native. See § 4.2. | done |
-| **6. Clean-up** | header theme toggle (D3), `Icon.vue` → `@lucide/vue`, dead `base.css` classes, `etlui/CLAUDE.md`. | todo |
+| **6a. Icons and colours** | `Icons/` → `@lucide/vue`; every hex, `rgba` and Tailwind palette class of `src/` (outside `components/ui/`) → tokens: utilities (`text-muted-foreground`, `bg-success/15`…) in templates, `var(--…)` and `color-mix()` in scoped CSS. Header, logo and badges on tokens (the amber went). Still dark only. Left on purpose: `JobToast` (the toast stays white, S6), the report iframe's white, black shadows. `base.css` classes still used stay, on tokens. | done |
+| **6b. Light theme** | follow the OS, header toggle System / Light / Dark (remembered), drop the forced `.dark`; check every page in light. | todo |
 
 ### 4.1 Dialogs (lot 4)
 
@@ -115,5 +116,7 @@ In the views:
 - After lot 5 (Chrome): Forecast (accordion, ToggleGroup, progress bars), a server CSV preview from the Steps dialog
   (sticky header kept), the Sheet menu, Config (closed Select), Tracking and Journal tables. Not seen open: a `Select`
   list (covered by the Journal spec), Home's radios (the month had an active pass, so none were shown).
+- After lot 6a (Chrome, dark): every page; no light rendering checked yet (lot 6b).
+- The `.forecast-runs` / `.steps-dialog` wrappers of the Steps dialog stay: `ForecastRuns`' CSS still selects through them.
 - Probably (read from Reka's `hideOthers`, not checked) the toasts are `aria-hidden` while a modal is open: not announced by screen readers then.
 - Contrast of `--muted-foreground` on `--muted` (WCAG AA) in both themes: not measured.

@@ -14,9 +14,9 @@ Vue 3 + TypeScript front-end (Vite 7, Pinia 3, vue-router 4, axios, Tailwind 4, 
 - `src/types/` — `config.ts` (`ConfigResponse`), `inputs.ts` (`InputName`, `ServerFile`, `CsvPreviewData`, `ConfigData`, `DefaultFile`, `PreviewFrom`)
 - `src/config/pipeline.ts` — display of each checkpoint as an `ActionCard` (label, icon) and `jobOf` (checkpoint → job route); step 2 display names (`DISEASE_NAMES`, `LEVEL_NAMES`, `ITEM_NAMES`, `coupleName`) and `plainError` (etlhub's common refusals in plain words, used by `usePipeline` for every error toast). No rule: statuses, `launchable` and order come from etlhub
 - `src/services/pipeline.ts` + `src/types/pipeline.ts` — `/pipeline/*` routes and job launches, with `confirm`; `GET /import_availability` (`ImportAvailabilityReport`)
-- `src/utils/status.ts` — `statusColor` (badge colours of an HTTP code or a job status, used by `RequestTable`, `RequestDetail`, `JobLogsPanel`). `src/utils/preview.ts` — pure helpers, no I/O: streaming CSV parser (`createCsvParser`, `previewCsvStream`, same output shape as etlhub's preview), `formatPeriod`, `formatCell`
+- `src/utils/status.ts` — `statusColor` (badge token classes of an HTTP code or a job status, used by `RequestTable`, `RequestDetail`, `JobLogsPanel`). `src/utils/preview.ts` — pure helpers, no I/O: streaming CSV parser (`createCsvParser`, `previewCsvStream`, same output shape as etlhub's preview), `formatPeriod`, `formatCell`
 - `src/components/ui/` — shadcn-vue components copied by its CLI (`Button`, `Input`, `Label`, `Badge`, `Card`, `Dialog`, `AlertDialog`, `Accordion`, `Sheet`, `ToggleGroup`, `Select`, `RadioGroup`, `Checkbox`, `Table`, `Progress`; local edits marked `etlui:`), ours to edit; `src/lib/utils.ts` re-exports `cn`. Migration by lots: `docs/decision-design/shadcn-migration/shadcn-migration.md`.
-- `src/components/` — `Drawer.vue` (right-side navigation menu on shadcn `Sheet`, opened by the header hamburger), `JobToast.vue` (content of a job's toast), `Icons/` (inline SVG paths, `Icon` + `ICONS`). `src/styles/base.css`.
+- `src/components/` — `Drawer.vue` (right-side navigation menu on shadcn `Sheet`, opened by the header hamburger), `JobToast.vue` (content of a job's toast). Icons come from `@lucide/vue`. `src/styles/base.css`: shadcn tokens plus `--success` / `--warning`; colours are tokens only (no hex, no Tailwind palette class) outside `components/ui/`, `JobToast` (white toast) and the report iframe.
 - Tests: `__tests__/*.spec.ts` next to the code (`router/`, `services/`, `composables/`, `utils/`). The `test` block of `vite.config.ts` (no `vitest.config.ts`): `happy-dom`, `globals: true`, `src/test/setup.ts` (fresh Pinia before each test).
 
 Siblings in the repo:
@@ -84,7 +84,7 @@ Run from `etlui/`. Yarn 1 is the package manager (`yarn.lock`; the `Dockerfile` 
 
 ## Where to look next
 
-- `etlui/docs/decision-design/` — etlui design and decision docs, one folder per feature. `shadcn-migration/`: shadcn-vue components and tokens (gray + indigo, `.dark` class), by lots, lot 1 done. `tailwind-migration/`: gray + indigo, light/dark theme, `data-test` in specs; its tokens and component classes are superseded by shadcn-migration
+- `etlui/docs/decision-design/` — etlui design and decision docs, one folder per feature. `shadcn-migration/`: shadcn-vue components and tokens (gray + indigo, `.dark` class), by lots, lots 1–6a done (6b: light theme). `tailwind-migration/`: gray + indigo, light/dark theme, `data-test` in specs; its tokens and component classes are superseded by shadcn-migration
 - `etlhub/CLAUDE.MD` — backend rules, frozen contracts, gotchas
 - `etlhub/docs/ARCHITECTURE.md` — runtime topology, state, pipeline order
 - `etlhub/docs/DEVELOPMENT.md` — test and clean-code state, proposed rules

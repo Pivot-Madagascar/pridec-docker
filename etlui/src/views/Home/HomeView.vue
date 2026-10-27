@@ -1,13 +1,13 @@
 <template>
   <Card class="mx-auto max-w-3xl gap-0 space-y-6 p-8">
     <div>
-      <h1 class="text-2xl font-bold text-gray-100">Start a pass</h1>
-      <p class="text-sm text-gray-400">Choose the cycle, then start a new pass or resume a paused one. The forecast page follows.</p>
+      <h1 class="text-2xl font-bold text-foreground">Start a pass</h1>
+      <p class="text-sm text-muted-foreground">Choose the cycle, then start a new pass or resume a paused one. The forecast page follows.</p>
     </div>
 
     <ModeToggle :test-mode="state?.test_mode" :dry-run="state?.dry_run" :disabled="busy || state?.lock != null" @change="changeMode" />
 
-    <p v-if="!state" class="text-sm text-gray-400">Loading the pipeline state…</p>
+    <p v-if="!state" class="text-sm text-muted-foreground">Loading the pipeline state…</p>
     <form v-else class="space-y-6" @submit.prevent="start">
       <Label>
         Cycle
@@ -23,7 +23,7 @@
         />
       </Label>
 
-      <fieldset v-if="month" class="space-y-2 text-sm text-gray-200">
+      <fieldset v-if="month" class="space-y-2 text-sm text-foreground">
         <legend class="mb-2 font-semibold">Pass</legend>
         <p v-if="active">
           Pass <span class="font-mono">{{ active.id }}</span> is active, started {{ formatTime(active.started_at) }} by
@@ -48,15 +48,15 @@
       </fieldset>
 
       <div v-if="month">
-        <h2 class="mb-2 text-sm font-semibold text-gray-200">Parameters of this pass</h2>
-        <p v-if="configStore.error" class="mb-2 text-sm text-red-300">{{ configStore.error }}</p>
+        <h2 class="mb-2 text-sm font-semibold text-foreground">Parameters of this pass</h2>
+        <p v-if="configStore.error" class="mb-2 text-sm text-destructive">{{ configStore.error }}</p>
         <dl class="grid grid-cols-[12rem_1fr] gap-x-4 gap-y-1 text-sm">
           <template v-for="[name, value] in parameters" :key="name">
-            <dt class="text-gray-400">{{ name }}</dt>
-            <dd class="break-all text-gray-100">{{ value }}</dd>
+            <dt class="text-muted-foreground">{{ name }}</dt>
+            <dd class="break-all text-foreground">{{ value }}</dd>
           </template>
         </dl>
-        <p class="mt-2 text-xs text-gray-500">
+        <p class="mt-2 text-xs text-muted-foreground">
           Values now. PARENT_OU, GEE_VARIABLES and LOG_LEVEL are edited in Admin Config and apply to the launches after the change;
           DRYRUN comes from the root .env.
         </p>

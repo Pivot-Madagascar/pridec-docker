@@ -20,21 +20,20 @@
           :style="hasDetail(req) ? 'cursor: pointer' : undefined"
           @click="hasDetail(req) && $emit('select', req.request_id)"
         >
-          <TableCell class="px-4 py-2 font-mono text-xs text-gray-300">
+          <TableCell class="px-4 py-2 font-mono text-xs text-foreground">
             {{ shortRequestId(req.request_id) }}
           </TableCell>
-          <TableCell class="px-4 py-2 text-xs text-gray-400">
+          <TableCell class="px-4 py-2 text-xs text-muted-foreground">
             {{ formatTime(req.timestamp) }}
           </TableCell>
           <TableCell class="px-4 py-2">
             <span
-              class="inline-block rounded px-2 py-0.5 text-xs font-semibold"
-              :class="methodColor(req.method)"
+              class="inline-block rounded bg-muted px-2 py-0.5 text-xs font-semibold"
             >
               {{ req.method }}
             </span>
           </TableCell>
-          <TableCell class="px-4 py-2 font-mono text-xs text-gray-300 break-all">
+          <TableCell class="px-4 py-2 font-mono text-xs text-foreground break-all">
             {{ endpointOf(req.url) }}
           </TableCell>
           <TableCell class="px-4 py-2">
@@ -46,7 +45,7 @@
               {{ req.job_status ?? req.status_code }}
             </span>
           </TableCell>
-          <TableCell class="px-4 py-2 text-right font-mono text-xs text-gray-300">
+          <TableCell class="px-4 py-2 text-right font-mono text-xs text-foreground">
             {{ req.duration_ms.toFixed(2) }}
           </TableCell>
           <TableCell class="px-4 py-2 text-right">
@@ -57,7 +56,7 @@
           </TableCell>
         </TableRow>
         <TableRow v-if="!requests.length">
-          <TableCell colspan="7" class="px-4 py-6 text-center text-gray-500">
+          <TableCell colspan="7" class="px-4 py-6 text-center text-muted-foreground">
             No requests recorded yet.
           </TableCell>
         </TableRow>
@@ -66,7 +65,7 @@
 
     <div class="flex items-center justify-end border-t px-4 py-2 space-x-2">
       <Button variant="secondary" size="xs" :disabled="page <= 0" @click="$emit('update:page', page - 1)">Prev</Button>
-      <span class="text-xs text-gray-400">Page {{ page + 1 }} / {{ totalPages || 1 }}</span>
+      <span class="text-xs text-muted-foreground">Page {{ page + 1 }} / {{ totalPages || 1 }}</span>
       <Button variant="secondary" size="xs" :disabled="page + 1 >= totalPages" @click="$emit('update:page', page + 1)">Next</Button>
     </div>
   </div>
@@ -111,21 +110,6 @@ function endpointOf(url: string) {
     return new URL(url).pathname
   } catch {
     return url
-  }
-}
-
-function methodColor(method: string) {
-  switch (method) {
-    case 'GET':
-      return 'bg-green-900 text-green-300'
-    case 'POST':
-      return 'bg-blue-900 text-blue-300'
-    case 'PUT':
-      return 'bg-yellow-900 text-yellow-300'
-    case 'DELETE':
-      return 'bg-red-900 text-red-300'
-    default:
-      return 'bg-gray-700 text-gray-300'
   }
 }
 </script>

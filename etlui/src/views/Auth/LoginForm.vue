@@ -105,7 +105,7 @@ const handleSubmit = async () => {
   justify-content: center;
   align-items: center;
   min-height: 60vh;
-  color: white;
+  color: var(--foreground);
 }
 
 .login-form {
@@ -132,8 +132,8 @@ const handleSubmit = async () => {
 }
 
 .error-message {
-  background: #fee;
-  color: #c00;
+  background: color-mix(in oklab, var(--destructive) 15%, transparent);
+  color: var(--destructive);
   padding: 0.5rem;
   border-radius: 4px;
   text-align: center;

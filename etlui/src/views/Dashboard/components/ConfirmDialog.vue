@@ -4,7 +4,7 @@
     <AlertDialogContent class="sm:max-w-md">
       <div class="flex gap-4">
         <div class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-destructive/15 text-destructive">
-          <Icon :path="ICONS.reset" class="size-5" />
+          <Trash2 class="size-5" />
         </div>
         <div>
           <AlertDialogTitle>{{ title }}</AlertDialogTitle>
@@ -23,8 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { LoaderCircle } from '@lucide/vue'
-import Icon, { ICONS } from '@/components/Icons'
+import { LoaderCircle, Trash2 } from '@lucide/vue'
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 

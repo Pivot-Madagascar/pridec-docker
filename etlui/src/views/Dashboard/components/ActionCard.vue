@@ -5,8 +5,8 @@
     :class="{ 'card-success': action.success }"
     @click="handleClick"
   >
-    <div class="card-icon" :class="action.iconClass">
-      <Icon v-if="action.icon" :path="action.icon" class="icon-svg" />
+    <div class="card-icon">
+      <component :is="action.icon" v-if="action.icon" class="icon-svg" />
     </div>
     <div class="card-content">
       <span class="card-title">{{ action.label }}</span>
@@ -24,15 +24,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import Icon from '@/components/Icons'
+import { computed, type Component } from 'vue'
 
 interface Action {
   key: string
   label: string
   subtitle?: string
-  icon?: string
-  iconClass?: string
+  icon?: Component
   inactive?: boolean
   loading?: boolean
   success?: boolean
@@ -56,15 +54,15 @@ const handleClick = () => {
 </script>
 
 <style scoped>
-@reference "tailwindcss";
+@reference "../../../styles/base.css";
 
 .action-card {
   display: flex;
   align-items: flex-start;
   gap: 1rem;
   padding: 1.25rem;
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--muted);
+  border: 1px solid var(--border);
   border-radius: 0.75rem;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
@@ -78,7 +76,7 @@ const handleClick = () => {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at top left, rgba(99, 102, 241, 0.1), transparent 60%);
+  background: radial-gradient(circle at top left, color-mix(in oklab, var(--primary) 10%, transparent), transparent 60%);
   opacity: 0;
   transition: opacity 0.3s ease;
 }
@@ -88,8 +86,8 @@ const handleClick = () => {
 }
 
 .action-card:hover:not(:disabled) {
-  border-color: rgba(99, 102, 241, 0.5);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(99, 102, 241, 0.1);
+  border-color: color-mix(in oklab, var(--primary) 50%, transparent);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2), 0 0 0 1px color-mix(in oklab, var(--primary) 10%, transparent);
   transform: translateY(-4px);
 }
 
@@ -100,9 +98,9 @@ const handleClick = () => {
 }
 
 .action-card.card-success {
-  border-color: #10b981;
-  background: rgba(16, 185, 129, 0.15);
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+  border-color: var(--success);
+  background: color-mix(in oklab, var(--success) 15%, transparent);
+  box-shadow: 0 0 15px color-mix(in oklab, var(--success) 20%, transparent);
 }
 
 .card-icon {
@@ -113,25 +111,13 @@ const handleClick = () => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+  background: var(--primary);
 }
-
-/* Icon colors, set per job in src/config/pipeline.ts */
-.icon-blue, .icon-indigo { background: #6366f1; }
-.icon-sky { background: #0ea5e9; }
-.icon-green { background: #16a34a; }
-.icon-teal { background: #0d9488; }
-.icon-purple { background: #8b5cf6; }
-.icon-orange { background: #ea580c; }
-.icon-amber { background: #d97706; }
-.icon-rose { background: #e11d48; }
-.icon-emerald { background: #059669; }
-.icon-slate { background: #64748b; }
 
 .icon-svg {
   width: 1.25rem;
   height: 1.25rem;
-  color: white;
+  color: var(--primary-foreground);
 }
 
 .card-content {
@@ -145,14 +131,13 @@ const handleClick = () => {
 .card-title {
   font-weight: 600;
   font-size: 0.9375rem;
-  color: #f1f5f9;
+  color: var(--foreground);
   display: block;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .card-subtitle {
   font-size: 0.8125rem;
-  color: #94a3b8;
+  color: var(--muted-foreground);
   display: block;
 }
 
@@ -165,34 +150,34 @@ const handleClick = () => {
 }
 
 .status-running {
-  color: #fbbf24;
+  color: var(--warning);
   display: flex;
   align-items: center;
   gap: 0.375rem;
 }
 
 .status-done {
-  color: #34d399;
+  color: var(--success);
   font-weight: 600;
 }
 
 .status-pending {
-  color: #64748b;
+  color: var(--muted-foreground);
 }
 
 .status-error .status-pending {
-  color: #f87171;
+  color: var(--destructive);
 }
 
 .status-inactive {
-  color: #475569;
+  color: var(--muted-foreground);
   opacity: 0.6;
 }
 
 .spinner {
   width: 0.75rem;
   height: 0.75rem;
-  border: 2px solid #fbbf24;
+  border: 2px solid var(--warning);
   border-top-color: transparent;
   border-radius: 50%;
 }

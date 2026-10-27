@@ -174,11 +174,11 @@ const handleReload = async () => {
 @reference "../../styles/base.css";
 
 .login-container {
-  @apply flex justify-center items-center min-h-[60vh] text-white;
+  @apply flex justify-center items-center min-h-[60vh] text-foreground;
 }
 
 .form-title {
-  @apply text-2xl font-bold text-white mb-2;
+  @apply text-2xl font-bold text-foreground mb-2;
 }
 
 .form-group {
@@ -190,19 +190,19 @@ const handleReload = async () => {
 }
 
 .hint {
-  @apply text-xs text-gray-400;
+  @apply text-xs text-muted-foreground;
 }
 
 .token-status {
-  @apply text-sm text-gray-300;
+  @apply text-sm text-foreground;
 }
 
 .error-message {
-  @apply bg-red-900/30 text-red-300 p-3 rounded-lg text-sm;
+  @apply bg-destructive/15 text-destructive p-3 rounded-lg text-sm;
 }
 
 .success-message {
-  @apply bg-green-900/30 text-green-300 p-3 rounded-lg text-sm;
+  @apply bg-success/15 text-success p-3 rounded-lg text-sm;
 }
 
 .button-group {

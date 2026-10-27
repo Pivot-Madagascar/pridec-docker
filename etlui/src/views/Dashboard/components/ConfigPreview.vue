@@ -9,7 +9,7 @@ defineProps<{ config: ConfigData }>()
 </script>
 
 <style scoped>
-@reference "tailwindcss";
+@reference "../../../styles/base.css";
 
 .json-block {
   margin: 0;
@@ -19,10 +19,10 @@ defineProps<{ config: ConfigData }>()
   font-family: ui-monospace, monospace;
   font-size: 0.875rem;
   line-height: 1.6;
-  color: #cbd5e1;
-  background: #020617;
+  color: var(--foreground);
+  background: var(--muted);
   border-radius: 0.625rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
   tab-size: 2;
 }
 </style>
