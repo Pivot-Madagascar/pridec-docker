@@ -4,25 +4,15 @@
       <h2 class="section-header">ETL Pipeline</h2>
       <p class="section-subtitle">
         <template v-if="state">
-          <label>
-            Cycle
-            <!-- The month the next pass starts on; picking the current month follows the calendar again. -->
-            <input
-              type="month"
-              class="cycle-input"
-              :value="`${state.cycle.slice(0, 4)}-${state.cycle.slice(4)}`"
-              :disabled="busy || state.lock != null || active"
-              :title="active ? 'Pause or abandon this cycle first' : 'Month the next launch starts a cycle on'"
-              @change="changeCycle"
-            />
-          </label>
+          <!-- The month is chosen on Home (/), with the pass to start or resume. -->
+          Cycle <strong class="cycle-value">{{ state.cycle }}</strong>
           <template v-if="state.pass">
             · {{ state.pass.state === 'active' ? `current step: ${state.current_step}` : state.pass.state }}
             · started by {{ state.pass.started_by ?? '-' }}
           </template>
           <template v-else> · not started: the first launch starts it</template>
           · <RouterLink :to="{ name: 'Journal', query: state.pass ? { pass: state.pass.id } : {} }" class="journal-link">Journal</RouterLink>
-          <span v-if="state.pass?.state === 'paused'" class="paused-note"> · paused: resume it from the Journal</span>
+          <span v-if="state.pass?.state === 'paused'" class="paused-note"> · paused: resume it from <RouterLink :to="{ name: 'Home' }" class="journal-link">Home</RouterLink> or the Journal</span>
         </template>
         <template v-else>Loading the pipeline state…</template>
       </p>
@@ -42,10 +32,9 @@
           <div class="imports-approval">
             <span class="approval-text">
               Imports approval: <strong :class="`status-${approveImports?.status ?? 'pending'}`">{{ approveImports?.status ?? 'pending' }}</strong>
-              · check the case counts first: COM &lt; 100, CSB under the limit
+              · check the case counts first: COM &lt; 100, CSB under the limit, then approve or reject under the Details
             </span>
-            <button type="button" class="approval-btn approval-btn-primary" :disabled="busy || state?.lock != null || !approveImports?.launchable" @click="decideImports('approve')">Approve imports</button>
-            <button type="button" class="approval-btn" :disabled="busy || state?.lock != null || approveImports?.status !== 'success'" @click="decideImports('reject')">Reject</button>
+            <button type="button" class="approval-btn" @click="availability.show()">Details</button>
           </div>
         </template>
 
@@ -93,6 +82,21 @@
         <button type="button" class="approval-btn approval-btn-primary" :disabled="busy" @click="decideFromReport('approve')">Approve</button>
       </template>
     </ForecastReportModal>
+
+    <ImportAvailabilityDialog
+      :open="availability.open.value"
+      :loading="availability.loading.value"
+      :error="availability.error.value"
+      :report="availability.report.value"
+      @close="availability.close"
+      @refresh="availability.load(true)"
+    >
+      <!-- The imports decision, under the report it is made on: closes it, then sends the decision (as decideFromReport). -->
+      <template #footer>
+        <button type="button" class="approval-btn" :disabled="busy || state?.lock != null || availability.loading.value || approveImports?.status !== 'success'" @click="decideImportsFromDetails('reject')">Reject</button>
+        <button type="button" class="approval-btn approval-btn-primary" :disabled="busy || state?.lock != null || availability.loading.value || !approveImports?.launchable" @click="decideImportsFromDetails('approve')">Approve imports</button>
+      </template>
+    </ImportAvailabilityDialog>
 
     <ImpactDialog :pending="pending" :busy="busy" @confirm="confirm" @cancel="cancel" />
 
@@ -156,11 +160,13 @@ import CsvPreview from '@/views/Dashboard/components/CsvPreview.vue'
 import ForecastReportModal from '@/views/Dashboard/components/ForecastReportModal.vue'
 import ForecastRuns from '@/views/Dashboard/components/ForecastRuns.vue'
 import ImpactDialog from '@/views/Dashboard/components/ImpactDialog.vue'
+import ImportAvailabilityDialog from '@/views/Dashboard/components/ImportAvailabilityDialog.vue'
 import ModeToggle from '@/views/Dashboard/components/ModeToggle.vue'
 import PreviewDialog from '@/views/Dashboard/components/PreviewDialog.vue'
 import RecentActivity from '@/views/Dashboard/components/RecentActivity.vue'
 
 import { useActivityLog } from '@/composables/useActivityLog'
+import { useImportAvailability } from '@/composables/useImportAvailability'
 import { useInputPreview } from '@/composables/useInputPreview'
 import { usePipeline } from '@/composables/usePipeline'
 import { jobOf, labelOf, step, toCard } from '@/config/pipeline'
@@ -179,13 +185,11 @@ const accordionItems = [
 const { activityLog, addActivity } = useActivityLog()
 const {
   state, serverFiles, defaults, busy, pending, refresh, confirm, cancel,
-  launch, openRun, abandonRun, decide, decideImports, skipAlerts, setMode, setCycle, releaseLock, upload, remove, useDefault,
+  launch, openRun, abandonRun, decide, decideImports, skipAlerts, setMode, releaseLock, upload, remove, useDefault,
   pause, abandonPass
 } = usePipeline(addActivity)
 const active = computed(() => state.value?.pass?.state === 'active')
-
-// <input type="month"> gives 'YYYY-MM' ('' when cleared = back to the current month).
-const changeCycle = (event: Event) => setCycle((event.target as HTMLInputElement).value.replace('-', '') || null)
+const availability = useImportAvailability() // "Details" of Data Import: is the imported data in DHIS2?
 
 const {
   current: previewCurrent,
@@ -224,6 +228,11 @@ const openReport = (run: { source: string; disease: string } | null, decide: boo
 const decideFromReport = async (decision: 'approve' | 'reject') => {
   showReportModal.value = false
   await decide(decision)
+}
+
+const decideImportsFromDetails = async (decision: 'approve' | 'reject') => {
+  availability.close()
+  await decideImports(decision)
 }
 
 const confirmDelete = async () => {
@@ -270,18 +279,8 @@ onMounted(refresh)
   margin-bottom: 1.5rem;
 }
 
-.cycle-input {
-  margin-left: 0.25rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: 0.375rem;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+.cycle-value {
   color: #e2e8f0;
-  color-scheme: dark;
-}
-
-.cycle-input:disabled {
-  opacity: 0.5;
 }
 
 .journal-link {

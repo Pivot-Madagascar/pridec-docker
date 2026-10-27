@@ -83,7 +83,7 @@ describe('JournalView', () => {
 
   it('shows the events of the pass in the link, test ones marked, and filters by step', async () => {
     getJournal.mockResolvedValue([
-      event({ detail: { confirm: true } }),
+      event({ detail: { confirm: true, dry_run: false, params: { task: 'import_gee' } } }),
       event({ step: 'forecast', item: 'COM/Malaria:forecast', event: 'succeeded', actor: 'worker', mode: 'test' })
     ])
     const wrapper = mount(JournalView)
@@ -92,7 +92,8 @@ describe('JournalView', () => {
     expect(getJournal).toHaveBeenCalledWith('cccc3333')
     const rows = wrapper.findAll('tbody tr')
     expect(rows).toHaveLength(2)
-    expect(rows[0].text()).toContain('confirm: true')
+    expect(rows[0].text()).toContain('confirm: true · dry_run: false')
+    expect(rows[0].text()).not.toContain('params') // an import's parameters: in the CSV only
     expect(rows[1].text()).toContain('test')
 
     await wrapper.find('select[aria-label="Step"]').setValue('forecast')

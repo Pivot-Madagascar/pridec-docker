@@ -110,6 +110,7 @@ export function usePipeline(addActivity: AddActivity) {
     setMode: (testMode: boolean) => act(testMode ? 'Switch to test mode' : 'Switch to production', () => pipeline.setMode(testMode)),
     setCycle: (cycle: string | null) => act(`Cycle ${cycle ?? 'of the current month'}`, () => pipeline.setCycle(cycle)),
     pause: () => act('Pause the cycle', () => pipeline.pausePass()),
+    resume: (passId: string) => act('Resume the cycle', () => pipeline.resumePass(passId)),
     abandonPass: (passId: string) => act('Abandon the cycle', () => pipeline.abandonPass(passId)),
     releaseLock: () => act('Release lock', () => pipeline.releaseLock()),
     upload: (name: InputName, file: File) => act(`Upload ${name}`, c => uploadInputFile(name, file, c)),

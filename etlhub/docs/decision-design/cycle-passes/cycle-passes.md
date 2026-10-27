@@ -290,6 +290,53 @@ Actors: **operator** (logged-in DHIS2 user), **system** (month change, mode chan
 
 ## 11. Open points and what was not verified
 
+**Implemented (2026-10-26): carry Data Import over to a new pass.** Raised and decided by the owner the same day.
+When a new pass starts in a cycle (UC2 redo, or after an abandon), the `data_import` items already done in a previous
+pass of the same cycle, with the same parameters, show as done at once, so the operator does not relaunch the imports.
+Today a new pass starts from `data_import` with every item `pending`.
+
+Answers of the owner (2026-10-26):
+
+| # | Question | Answer |
+|---|---|---|
+| C1 | Which items? | The imports and `approve_imports`; **not `build_analytics`** (approving leads to it anyway) |
+| C2 | Same parameters? | The import availability parameters ([../import-availability/import-availability.md](../import-availability/import-availability.md) § 5) **and the same `DRYRUN`** in both passes. With `DRYRUN=false`, what DHIS2 has (the availability report) is the only truth |
+| C3 | Automatic or a Skip button? | **Automatic**: shown as done at once |
+| C4 | Which previous passes? | **Any** pass of the cycle: complete, abandoned or paused |
+| C5 | Relaunch a carried item? | **Free**: like any item in success, with the operator's confirmation (`confirm=true`) |
+| C6 | Journal | **A new event** in the new pass, carrying the status and details of the previous item |
+
+Precisions of the owner (2026-10-26):
+
+| # | Question | Answer |
+|---|---|---|
+| C7 | Which imports? | The three: `import_gee`, `import_pivot_com`, `import_pivot_csb` |
+| C8 | When is `approve_imports` carried? | Only when `import_pivot_com` and `import_pivot_csb` are carried too (its prerequisites) |
+| C9 | `DRYRUN=true` in both passes | The previous pass's status is enough |
+| C10 | `DRYRUN=false`: which report result carries an import? | None is required: the **user validates by reading the report** (Details) and relaunches if needed (C5) |
+| C11 | `DRYRUN` per launch | **Recorded now** (2026-10-26): every `launched` event keeps `"dry_run"` (cycle-journal event table). Launches before that have none: they cannot be compared, so they are not carried |
+| C12 | Several previous passes have the item in success | **The most recent** |
+| C13 | Event | `carried_over`, in the new pass, detail: source pass (`from_pass`), previous status, `job_id`, `updated_at` |
+| C14 | How are an import's parameters known later? | **Option (a), implemented 2026-10-26**: each import launch keeps them in its `launched` event (`"params"`, the same dict as the import availability check: `dhis_url`, `task`, `elements`, `periods`, `org_units`). Launches before that, or whose parameters could not be read (`null`), are not carried |
+
+Rule as it stands: an item is carried into the new pass when its latest success in a previous pass of the same
+cycle (any state) has the same parameters and the same `dry_run` as now. The launch that starts the new pass is itself
+a `data_import` job: that item is relaunched, not carried.
+
+
+How it works (`CheckpointStore.start` → `_carry_over`): `IngestionService` sends, with each import launch, the current
+parameters of the three imports (`import_params(availability_plan())`). When that launch starts a pass (`_current`
+returns it as new), each other import whose latest success in another pass of the cycle was launched with equal
+`params` and `dry_run` gets a `success` checkpoint (keeping the original `job_id`) and a `carried_over` event
+(`detail`: `from_pass`, `status`, `updated_at`, `dry_run`); then `approve_imports`, if `import_pivot_com` and
+`import_pivot_csb` were both carried. All in the launch's transaction: a refused launch carries nothing. A carried item
+carried again in a later pass keeps the job that really imported.
+
+Limits: a **paused** pass of the month refuses every launch until it is resumed or abandoned, so its items are carried
+only once it is abandoned (C4 in practice). Launches made before 2026-10-26 have no `dry_run`/`params`: never carried.
+The carried data is not checked in DHIS2 (C10): the operator reads the Details report and relaunches with confirmation.
+Tests: `tests/infrastructure/test_checkpoint_store.py` (carry-over section).
+
 - The test-mode Redis blob grows with every test pass (state is no longer emptied on exit). Its size over many passes
   is not measured (same open point as the journal).
 - `DELETE /output/reset`, the CLI and DHIS2-side `build_analytics` still bypass the gate (known limit Q8 of the journal).
@@ -320,7 +367,7 @@ target: `_settle()`, run by every request, pauses the active pass once its month
 `GET /pipeline/cycles` → `[{cycle, target, passes[...]}]`, `GET /pipeline/checkpoints` returns `pass` and takes
 `?pass_id=` (was `?cycle=`), so does the run report. `PUT /pipeline/mode` lost `confirm`: nothing is discarded any more.
 
-**etlui.** Dashboard: the pass and its starter on the Cycle line, the month picker disabled while a pass is active,
+**etlui.** (Since 2026-10-26 the month picker is on Home, `/`, with "New pass" / "Resume paused pass" and the pass's parameters; the Dashboard moved to `/forecast` and only shows the cycle.) Dashboard: the pass and its starter on the Cycle line, the month picker disabled while a pass is active,
 "Pause the cycle" and "Abandon the cycle" (confirm dialog) after System Update. Journal (`?pass=<id>`): months with
 their passes, Resume and Abandon on a paused pass, Resume disabled with the reason while another pass of its mode is
 active; the mode filter is gone (a pass lives in one mode).

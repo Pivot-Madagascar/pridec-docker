@@ -76,7 +76,10 @@ export interface JournalEvent {
   step: StepName | null
   item: string | null
   // pass_started, launched, succeeded, failed, reset, uploaded, removed, decided, skipped, run_opened, run_closed,
-  // run_abandoned, lock_released, mode_changed, paused, resumed, abandoned, cycle_closed
+  // run_abandoned, lock_released, mode_changed, paused, resumed, abandoned, cycle_closed,
+  // carried_over (an import or approve_imports done in an earlier pass of the cycle, detail {from_pass, status,
+  // updated_at, dry_run?}, job_id = that pass's job), availability_checked / availability_reused (GET /import_availability, detail {checked?, reused?, missing,
+  // analytics_behind, errors} or {error})
   event: string
   job_id: string | null
   actor: string | null // DHIS2 username, 'worker' or 'system'
@@ -89,11 +92,37 @@ export interface JournalEvent {
 // GET /pipeline/cycles: months with passes (and the target one), newest first, each with its passes, newest first.
 export interface JournalPass extends Pass {
   mode: 'production' | 'test' // test passes: kept in Redis only
-  events: number // mode_changed left out (as last_at)
+  events: number // mode_changed and availability_checked left out (as last_at)
   last_at: string | null
 }
 export interface JournalCycle {
   cycle: string // YYYYMM
   target: boolean // launches go to it
   passes: JournalPass[]
+}
+
+// GET /import_availability (etl/scripts/check_import_availability.py). Counts: orgUnits with a value, per period (YYYYMM).
+export interface ElementAvailability {
+  code: string
+  raw: Record<string, number> | null // stored values (/api/dataValueSets); null if the query failed
+  analytics: Record<string, number> | null // values in the analytics tables; null if the query failed
+  last_updated: string | null
+  imported: boolean // a stored value for every period
+  analytics_up_to_date: boolean | null // analytics == raw; null if a query failed
+  error: string | null
+}
+export interface ImportAvailability {
+  task: string // import_gee, import_pivot_com, import_pivot_csb
+  periods: string[]
+  org_units: string
+  elements: ElementAvailability[]
+  checked_at: string // when this section's check started, etlhub local time (as the journal)
+  checked_by: string | null
+  pass_id: string | null // null: checked before the month's first launch
+  reused: boolean // checked earlier in the cycle (any pass, any user) and still valid: DHIS2 not asked now
+}
+export interface ImportAvailabilityReport {
+  dhis_url: string
+  last_analytics: string | null // DHIS2's last analytics build (server local time), read by the latest section check
+  imports: ImportAvailability[]
 }

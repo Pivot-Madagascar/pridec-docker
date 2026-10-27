@@ -150,8 +150,8 @@ import RequestDialog from '@/views/TrackerView/components/RequestDialog.vue'
 import ConfirmDialog from '@/views/Dashboard/components/ConfirmDialog.vue'
 
 const STEPS = ['data_import', 'forecast', 'system_update']
-// Events of a real job: they have logs. Uploads and decisions have none.
-const JOB_EVENTS = new Set(['launched', 'succeeded', 'failed', 'lock_released'])
+// Events of a real job: they have logs. Uploads and decisions have none. carried_over: the job of an earlier pass.
+const JOB_EVENTS = new Set(['launched', 'succeeded', 'failed', 'lock_released', 'carried_over'])
 const EVENT_COLORS: Record<string, string> = {
   succeeded: 'text-green-400',
   failed: 'text-red-400',
@@ -161,6 +161,8 @@ const EVENT_COLORS: Record<string, string> = {
   cycle_closed: 'text-green-400',
   paused: 'text-yellow-400',
   abandoned: 'text-red-400',
+  availability_checked: 'text-sky-400',
+  carried_over: 'text-green-400',
 }
 const STATE_COLORS: Record<PassState, string> = {
   active: 'text-blue-400',
@@ -196,8 +198,12 @@ const hasDetail = (e: JournalEvent) => e.request != null || (e.job_id != null &&
 const formatTime = (at: string) => new Date(at).toLocaleString()
 const monthName = (c: string) =>
   new Date(Number(c.slice(0, 4)), Number(c.slice(4)) - 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+// Nested objects (an import launch's `params`, kept to carry it over to a later pass) stay out: the CSV export has them.
 const formatDetail = (detail: Record<string, unknown>) =>
-  Object.entries(detail).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : String(v)}`).join(' · ')
+  Object.entries(detail)
+    .filter(([, v]) => Array.isArray(v) || v === null || typeof v !== 'object')
+    .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : String(v)}`)
+    .join(' · ')
 
 function select(id: string) {
   passId.value = id

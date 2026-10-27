@@ -6,6 +6,12 @@ const router = createRouter({
   routes: [
     {
       path: '/',
+      name: 'Home',
+      component: () => import('@/views/Home/HomeView.vue'),
+      meta: { title: 'ETL UI - Start a pass' }
+    },
+    {
+      path: '/forecast',
       name: 'Dashboard',
       component: () => import('@/views/Dashboard/Dashboard.vue'),
       meta: { title: 'ETL UI - Dashboard' }

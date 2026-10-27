@@ -86,7 +86,7 @@ class FakeBlob:
 class OpenGate:
     """Pipeline gate that lets everything through: for tests that are not about the pipeline order."""
 
-    def start(self, task, job_id, confirm=False):
+    def start(self, task, job_id, confirm=False, carry_over=None):
         pass
 
     def finish(self, job_id, status):

@@ -6,7 +6,7 @@ import sqlite3
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import closing, contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 
@@ -15,7 +15,7 @@ from etlhub.core.request_context import request_context
 from etlhub.domain import pipeline
 from etlhub.domain.exceptions import ConfirmationRequiredError, ETLException, PipelineBlockedError
 from etlhub.domain.pipeline import (
-    accessible_steps, blocking_reason, config_item, dependents, disease_of, external_data_item,
+    IMPORT_TASKS, accessible_steps, blocking_reason, config_item, dependents, disease_of, external_data_item,
     impact, level_of, progress, require_confirmation, require_input_confirmation, resolve_slot, run_context,
     run_items, status,
 )
@@ -83,11 +83,24 @@ CREATE TABLE IF NOT EXISTS pipeline_events (  -- the journal: appended in the tr
 );
 CREATE INDEX IF NOT EXISTS ix_pipeline_events_pass ON pipeline_events(pass_id, id);
 CREATE INDEX IF NOT EXISTS ix_pipeline_events_job_id ON pipeline_events(job_id);
+CREATE TABLE IF NOT EXISTS availability_checks (  -- sections of GET /import_availability, shared by the cycle's users
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    cycle          TEXT NOT NULL,
+    pass_id        TEXT,  -- NULL: checked before the month's first launch
+    task           TEXT NOT NULL,
+    params         TEXT NOT NULL,  -- JSON of what the section checked: dhis_url, task, elements, periods, org_units
+    checked_at     TEXT NOT NULL,  -- when the check started, local time like pipeline_events.at
+    checked_by     TEXT,
+    section        TEXT NOT NULL,  -- JSON section of the report
+    last_analytics TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_availability_checks ON availability_checks(cycle, task, checked_at);
 """
 # Databases created before 2026-10-12 also have an external_data column (DEFAULT 'none'): unused, inserts skip it.
 _RUN_COLUMNS = ("pass_id", "couple", "state", "disease_code", "ou_level", "alert_name", "opened_at")
 _EVENT_COLUMNS = ("cycle", "pass_id", "at", "step", "item", "event", "job_id", "actor", "request_id", "detail")
 _PASS_COLUMNS = ("id", "cycle", "state", "started_at", "started_by")
+_AVAILABILITY_DAYS = 30  # a stored check older than this is checked again (decision 2026-10-26)
 
 
 def _now() -> str:
@@ -358,7 +371,7 @@ class CheckpointStore:
         conn.execute(f"INSERT INTO passes ({', '.join(_PASS_COLUMNS)}) VALUES ({', '.join('?' * len(_PASS_COLUMNS))})",
                      tuple(p[c] for c in _PASS_COLUMNS))
         self._event(conn, p, "pass_started", detail={"cause": "redo"} if redo else None)
-        return p
+        return {**p, "new": True}  # start() carries the previous passes' imports over to it
 
     @staticmethod
     def _open_run(conn: sqlite3.Connection, pass_id: str | None) -> dict | None:
@@ -461,12 +474,15 @@ class CheckpointStore:
 
     # --- jobs ----------------------------------------------------------------------------
 
-    def start(self, task: str, job_id: str, confirm: bool = False) -> None:
+    def start(self, task: str, job_id: str, confirm: bool = False, carry_over: dict[str, dict] | None = None) -> None:
         """Takes the lock and marks the checkpoint running. A refusal writes nothing.
 
         Raises PipelineBlockedError, or ConfirmationRequiredError for an item already in success without confirm.
         A run job resets its dependents in the run and gets the run context (DISEASE_CODE, OU_LEVEL).
         Without an active pass, a launch starts one (confirm=true after a complete pass).
+        The launched event keeps DRYRUN as read now (since 2026-10-26): whether this job may write to DHIS2, and, for an
+        import, its parameters (`carry_over[item]`). A launch that starts a pass carries over the imports done before
+        in the cycle (`carry_over`: the current parameters of each import; None records and carries nothing).
         """
         with self._transaction() as conn:
             self._check_lock_free(conn)
@@ -478,10 +494,48 @@ class CheckpointStore:
             require_confirmation(step, item, rows, confirm)
             self._take_lock(conn, job_id, task)
             self._upsert(conn, p, step, item, job_id, "running")
-            self._event(conn, p, "launched", step, item, job_id, {"confirm": True} if confirm else None)
+            self._event(conn, p, "launched", step, item, job_id,
+                        {**({"confirm": True} if confirm else {}), "dry_run": self._dry_run(),
+                         **({"params": carry_over[item]} if carry_over and item in carry_over else {})})
+            if p.get("new") and carry_over:
+                self._carry_over(conn, p, carry_over, item)
             if step == "forecast":
                 self._reset(conn, p, dependents(item), "relaunch", job_id)
                 self._apply_context(run_context(couple))  # inside the transaction: a failure writes nothing
+
+    def _carry_over(self, conn: sqlite3.Connection, p: dict, params: dict[str, dict], launched: str) -> None:
+        """A new pass: each import whose latest success in another pass of the cycle (any state) was launched with the
+        same parameters and DRYRUN as now is success at once; approve_imports too, when both its prerequisites are
+        carried. The launched item is relaunched, not carried. The operator relaunches a carried item with confirm=true,
+        as any success. cycle-passes.md § 11.
+        """
+        dry_run, carried = self._dry_run(), set()
+        for item in IMPORT_TASKS:
+            prev = self._last_success(conn, p, item) if item != launched and item in params else None
+            if prev and prev["launch"].get("dry_run") == dry_run and prev["launch"].get("params") == params[item]:
+                self._carry(conn, p, item, prev, {"dry_run": dry_run})
+                carried.add(item)
+        if {"import_pivot_com", "import_pivot_csb"} <= carried and (prev := self._last_success(conn, p, "approve_imports")):
+            self._carry(conn, p, "approve_imports", prev, {})
+
+    @staticmethod
+    def _last_success(conn: sqlite3.Connection, p: dict, item: str) -> dict | None:
+        """The latest success of a data_import item in another pass of p's cycle, with its launched event's detail."""
+        row = conn.execute(
+            "SELECT c.pass_id, c.job_id, c.updated_at FROM checkpoints c JOIN passes s ON s.id = c.pass_id"
+            " WHERE s.cycle = ? AND c.pass_id != ? AND c.step = 'data_import' AND c.item = ? AND c.status = 'success'"
+            " ORDER BY c.updated_at DESC, s.started_at DESC LIMIT 1", (p["cycle"], p["id"], item)).fetchone()
+        if not row:
+            return None
+        launch = row[1] and conn.execute("SELECT detail FROM pipeline_events WHERE job_id = ? AND event = 'launched'",
+                                         (row[1],)).fetchone()
+        return {"pass_id": row[0], "job_id": row[1], "updated_at": row[2],
+                "launch": json.loads(launch[0]) if launch and launch[0] else {}}
+
+    def _carry(self, conn: sqlite3.Connection, p: dict, item: str, prev: dict, extra: dict) -> None:
+        self._upsert(conn, p, "data_import", item, prev["job_id"], "success")
+        self._event(conn, p, "carried_over", "data_import", item, prev["job_id"],
+                    {"from_pass": prev["pass_id"], "status": "success", "updated_at": prev["updated_at"], **extra})
 
     def finish(self, job_id: str, state: str) -> None:
         """Records the final status (success | error) and frees the lock. A post_forecast success closes the run.
@@ -785,6 +839,52 @@ class CheckpointStore:
                              (p["id"],))
             self._event(conn, p, "decided", "data_import", "approve_imports", detail={"decision": decision})
 
+    def reusable_availability(self, params: dict[str, str]) -> dict[str, dict]:
+        """Per task, the latest stored check of the shown cycle (any pass) that still holds: same params, at most
+        30 days old, and no launch of that import in the cycle since it started. Tasks without one are left out.
+
+        {task: {"section", "checked_at", "checked_by", "pass_id", "last_analytics"}}.
+        """
+        cutoff = (datetime.now() - timedelta(days=_AVAILABILITY_DAYS)).isoformat(timespec="microseconds")
+        found = {}
+        with self._transaction() as conn:
+            self._settle(conn)  # as progress(): after a month change, the Dashboard shows the new month
+            cycle = (self._shown(conn) or {"cycle": self._target(conn)})["cycle"]
+            for task, task_params in params.items():
+                row = conn.execute(
+                    "SELECT section, checked_at, checked_by, pass_id, last_analytics FROM availability_checks c"
+                    " WHERE cycle = ? AND task = ? AND params = ? AND checked_at >= ?"
+                    " AND NOT EXISTS (SELECT 1 FROM pipeline_events e WHERE e.cycle = c.cycle AND e.item = c.task"
+                    " AND e.event = 'launched' AND e.at > c.checked_at)"
+                    " ORDER BY checked_at DESC LIMIT 1", (cycle, task, task_params, cutoff)).fetchone()
+                if row:
+                    found[task] = {"section": json.loads(row[0]),
+                                   **dict(zip(("checked_at", "checked_by", "pass_id", "last_analytics"), row[1:]))}
+        return found
+
+    def record_availability_check(self, event: str, detail: dict, sections: list[dict] = (),
+                                  started_at: str | None = None) -> dict:
+        """Journals a GET /import_availability (read only: no lock, no checkpoint) in the pass the Dashboard shows,
+        and stores the sections it checked ({task, params, section, last_analytics}) for the other users of the cycle.
+
+        Before the month's first launch there is no pass: event and sections keep pass_id null (the event then shows
+        in no journal, like mode_changed). Stored checks older than 30 days are dropped.
+        Returns {checked_at: started_at, checked_by, pass_id}.
+        """
+        cutoff = (datetime.now() - timedelta(days=_AVAILABILITY_DAYS)).isoformat(timespec="microseconds")
+        with self._transaction() as conn:
+            self._settle(conn)
+            p = self._shown(conn) or {"id": None, "cycle": self._target(conn)}
+            for s in sections:
+                conn.execute(
+                    "INSERT INTO availability_checks (cycle, pass_id, task, params, checked_at, checked_by, section,"
+                    " last_analytics) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (p["cycle"], p["id"], s["task"], s["params"], started_at, _actor(), json.dumps(s["section"]),
+                     s["last_analytics"]))
+            conn.execute("DELETE FROM availability_checks WHERE checked_at < ?", (cutoff,))
+            self._event(conn, p, event, "data_import", detail=detail)
+        return {"checked_at": started_at, "checked_by": _actor(), "pass_id": p["id"]}
+
     # --- reading and unlocking ------------------------------------------------------------
 
     def progress(self, pass_id: str | None = None) -> dict:
@@ -854,10 +954,11 @@ class CheckpointStore:
     def cycles(self) -> list[dict]:
         """Every month with passes (and the target month), newest first; each with its passes, newest first.
 
-        A pass: id, cycle, state, started_at, started_by, mode, events and last_at (mode_changed left out of both:
-        they measure the pipeline's work, not the mode switches).
+        A pass: id, cycle, state, started_at, started_by, mode, events and last_at (mode_changed and
+        the availability_* reads left out of both: they measure the pipeline's work, not mode switches or reads).
         """
-        count = ("SELECT pass_id, count(*), max(at) FROM pipeline_events WHERE event != 'mode_changed'"
+        count = ("SELECT pass_id, count(*), max(at) FROM pipeline_events"
+                 " WHERE event NOT IN ('mode_changed', 'availability_checked', 'availability_reused')"
                  " AND pass_id IS NOT NULL GROUP BY pass_id")
         passes = []
         for mode, store in (("production", self._file_transaction), ("test", self._test_journal)):

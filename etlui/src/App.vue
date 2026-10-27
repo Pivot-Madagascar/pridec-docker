@@ -159,7 +159,7 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8111'
 const isDrawerOpen = ref(false)
 
 const navItems = computed(() => [
-  { to: '/', label: 'Dashboard' },
+  { to: '/', label: 'Home' },
   { to: '/tracking', label: 'Tracking' },
   { to: '/journal', label: 'Journal' },
   { to: '/logs', label: 'Logs' },

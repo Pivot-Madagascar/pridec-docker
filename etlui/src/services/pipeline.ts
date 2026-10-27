@@ -1,9 +1,16 @@
 import api, { withConfirm } from '@/services/api'
-import type { Checkpoints, Disease, ForecastRun, JournalCycle, JournalEvent, Source } from '@/types/pipeline'
+import type { Checkpoints, Disease, ForecastRun, ImportAvailabilityReport, JournalCycle, JournalEvent, Source } from '@/types/pipeline'
 
 // GET /pipeline/checkpoints: the whole state of the current cycle, in the current mode.
 export async function getCheckpoints(): Promise<Checkpoints> {
   const response = await api.get<Checkpoints>('/pipeline/checkpoints')
+  return response.data
+}
+
+// GET /import_availability: read only, synchronous (a few seconds of DHIS2 requests), journaled by etlhub.
+// Sections still valid in the cycle come back reused; refresh=true makes etlhub ask DHIS2 for all of them.
+export async function getImportAvailability(refresh = false): Promise<ImportAvailabilityReport> {
+  const response = await api.get<ImportAvailabilityReport>('/import_availability', refresh ? { params: { refresh: true } } : undefined)
   return response.data
 }
 

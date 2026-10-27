@@ -23,6 +23,15 @@ const CONFIRM = { params: { confirm: true } }
 describe('pipeline service', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it('reads the import availability report from GET /import_availability', async () => {
+    get.mockResolvedValue({ data: { imports: [] } })
+
+    expect(await pipeline.getImportAvailability()).toEqual({ imports: [] })
+    expect(get).toHaveBeenCalledWith('/import_availability', undefined)
+    await pipeline.getImportAvailability(true) // Refresh: etlhub asks DHIS2 for every section
+    expect(get).toHaveBeenLastCalledWith('/import_availability', { params: { refresh: true } })
+  })
+
   it('reads the state from GET /pipeline/checkpoints', async () => {
     get.mockResolvedValue({ data: { cycle: '202610' } })
 

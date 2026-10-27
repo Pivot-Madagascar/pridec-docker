@@ -677,13 +677,63 @@ def test_the_journal_keeps_every_attempt_and_what_a_relaunch_reset(checkpoint_st
     assert [e["event"] for e in journal if e["item"] == "ADJ/Malaria:fetch_disease"] == [
         "launched", "succeeded", "launched", "succeeded"]
     relaunch = [e for e in journal if e["item"] == "ADJ/Malaria:fetch_disease" and e["event"] == "launched"][-1]
-    assert relaunch["detail"] == {"confirm": True}
+    assert relaunch["detail"] == {"confirm": True, "dry_run": True}
     reset = next(e for e in journal if e["event"] == "reset")
     assert (reset["job_id"], reset["detail"]) == (relaunch["job_id"], {"items": ["ADJ/Malaria:validate_inputs"], "cause": "relaunch"})
     assert ("decided", "approve_imports") in _events(checkpoint_store)
     assert ("uploaded", "config/Malaria") in _events(checkpoint_store)
     assert {e["actor"] for e in journal} == {"worker"}  # no HTTP request in these calls
     assert {(e["mode"], e["cycle"]) for e in journal} == {("production", "202610")}
+
+
+def _check(store, task="import_pivot_com", params="P", started_at=None):
+    from datetime import datetime
+    started_at = started_at or datetime.now().isoformat(timespec="microseconds")
+    section = {"task": task, "params": params, "section": {"task": task}, "last_analytics": "b"}
+    return store.record_availability_check("availability_checked", {"checked": [task]}, [section], started_at)
+
+
+def test_an_availability_check_is_journaled_in_the_shown_pass_even_while_a_job_runs(checkpoint_store, month):
+    _check(checkpoint_store)  # no pass yet: in no journal
+    _pass(checkpoint_store, "import_gee")
+    checkpoint_store.start("import_pivot_csb", "running")
+
+    meta = _check(checkpoint_store)  # a read: no lock, no checkpoint
+
+    journal = _journal(checkpoint_store)
+    assert [e["detail"] for e in journal if e["event"] == "availability_checked"] == [{"checked": ["import_pivot_com"]}]
+    assert meta["pass_id"] == checkpoint_store.progress()["pass"]["id"]
+    assert _status(checkpoint_store.progress(), "data_import", "import_pivot_csb") == "running"
+
+
+def test_a_stored_check_holds_in_its_cycle_until_its_import_is_launched_or_30_days_pass(checkpoint_store, month):
+    from datetime import datetime, timedelta
+    _check(checkpoint_store, "import_gee")
+    _check(checkpoint_store, "import_pivot_csb", started_at=(datetime.now() - timedelta(days=31)).isoformat())
+    _check(checkpoint_store)
+    asked = {"import_gee": "P", "import_pivot_com": "P", "import_pivot_csb": "P"}
+
+    assert set(checkpoint_store.reusable_availability(asked)) == {"import_gee", "import_pivot_com"}  # csb: too old
+    assert checkpoint_store.reusable_availability({"import_gee": "other params"}) == {}
+
+    _pass(checkpoint_store, "import_gee")  # a new pass of the same cycle, launched after the check
+    assert set(checkpoint_store.reusable_availability(asked)) == {"import_pivot_com"}
+
+    month("202611")
+    assert checkpoint_store.reusable_availability(asked) == {}  # another cycle
+
+
+def test_each_launch_keeps_the_dryrun_it_was_launched_with_and_an_import_its_parameters(checkpoint_store, month):
+    _pass(checkpoint_store, "import_gee")
+    checkpoint_store.mode["dry_run"] = False  # .env changed, API restarted: the next jobs write to DHIS2
+    _pass(checkpoint_store, "import_pivot_com")
+
+    checkpoint_store.start("import_pivot_csb", "csb_1", carry_over={"import_pivot_csb": {"task": "import_pivot_csb"}})
+
+    launched = [e for e in _journal(checkpoint_store) if e["event"] == "launched"]
+    assert [(e["item"], e["detail"]) for e in launched] == [
+        ("import_gee", {"dry_run": True}), ("import_pivot_com", {"dry_run": False}),
+        ("import_pivot_csb", {"dry_run": False, "params": {"task": "import_pivot_csb"}})]  # an import's parameters
 
 
 def test_a_refusal_writes_no_event(checkpoint_store, month):
@@ -877,3 +927,91 @@ def test_test_mode_and_dryrun_are_independent(checkpoint_store):
 
     state = checkpoint_store.progress()
     assert (state["test_mode"], state["dry_run"]) == (True, False)
+
+
+# --- carry-over of Data Import to a new pass of the cycle (cycle-passes.md § 11) ---------------
+
+PARAMS = {t: {"task": t, "org_units": "ou:LEVEL-6;P1"} for t in ("import_gee", "import_pivot_com", "import_pivot_csb")}
+
+
+def _launch_import(store, task, params=PARAMS, confirm=False, state="success"):
+    """What IngestionService does: the import's parameters in its launched event, all of them to carry the others over."""
+    job_id = f"{task}_{next(_ids)}"
+    store.start(task, job_id, confirm, carry_over=params)
+    if state:
+        store.finish(job_id, state)
+    return job_id
+
+
+def _imports_approved(store, params=PARAMS):
+    jobs = {t: _launch_import(store, t, params) for t in PARAMS}
+    store.decide_imports("approve")
+    return jobs
+
+
+def _new_pass(store, task="import_gee", params=PARAMS):
+    """Abandons the shown pass, then starts the next one of the cycle with a launch of `task` (left running)."""
+    old = store.progress()["pass"]["id"]
+    store.abandon(old)
+    _launch_import(store, task, params, state=None)
+    return old, store.progress()
+
+
+def test_a_new_pass_carries_over_the_imports_and_their_approval_done_with_the_same_parameters(checkpoint_store, month):
+    jobs = _imports_approved(checkpoint_store)
+    _pass(checkpoint_store, "build_analytics")
+
+    old, state = _new_pass(checkpoint_store)
+
+    assert {i: _status(state, "data_import", i) for i in ("import_gee", "import_pivot_com", "import_pivot_csb",
+                                                          "approve_imports", "build_analytics")} == {
+        "import_gee": "running",  # the launch that started the pass: relaunched, not carried
+        "import_pivot_com": "success", "import_pivot_csb": "success", "approve_imports": "success",
+        "build_analytics": "pending"}  # never carried: approving leads to it
+    carried = [e for e in _journal(checkpoint_store) if e["event"] == "carried_over"]
+    assert [(e["item"], e["job_id"], e["detail"]["from_pass"]) for e in carried] == [
+        ("import_pivot_com", jobs["import_pivot_com"], old), ("import_pivot_csb", jobs["import_pivot_csb"], old),
+        ("approve_imports", None, old)]
+    assert carried[0]["detail"]["dry_run"] is True and carried[0]["detail"]["status"] == "success"
+
+
+def test_other_parameters_another_dryrun_or_an_unrecorded_launch_are_not_carried(checkpoint_store, month):
+    for task in ("import_gee", "import_pivot_csb"):
+        _launch_import(checkpoint_store, task)
+    _pass(checkpoint_store, "import_pivot_com")  # launched without parameters (before they were recorded)
+    checkpoint_store.decide_imports("approve")
+
+    _, state = _new_pass(checkpoint_store, "import_pivot_csb", {**PARAMS, "import_gee": {"task": "import_gee", "org_units": "P2"}})
+
+    assert [_status(state, "data_import", i) for i in ("import_gee", "import_pivot_com", "approve_imports")] == [
+        "pending", "pending", "pending"]  # gee: PARENT_OU changed; com: no parameters; approve: com not carried
+    checkpoint_store.finish(state["lock"]["job_id"], "success")
+
+    checkpoint_store.mode["dry_run"] = False
+    _, state = _new_pass(checkpoint_store, "import_gee")
+    assert _status(state, "data_import", "import_pivot_csb") == "pending"  # launched with DRYRUN=true, now false
+
+
+def test_a_carried_item_is_relaunched_only_with_confirmation_and_carries_on_to_the_next_pass(checkpoint_store, month):
+    jobs = _imports_approved(checkpoint_store)
+    _, state = _new_pass(checkpoint_store)
+    checkpoint_store.finish(state["lock"]["job_id"], "success")
+
+    with pytest.raises(ConfirmationRequiredError):
+        _launch_import(checkpoint_store, "import_pivot_com")
+    _launch_import(checkpoint_store, "import_pivot_com", confirm=True)  # free choice of the operator
+
+    _, state = _new_pass(checkpoint_store, "import_gee")
+    carried = {e["item"]: e["job_id"] for e in _journal(checkpoint_store) if e["event"] == "carried_over"}
+    assert carried["import_pivot_csb"] == jobs["import_pivot_csb"]  # carried twice: still the job that imported
+    assert carried["import_pivot_com"] != jobs["import_pivot_com"]  # the relaunch, the most recent success
+
+
+def test_the_first_pass_of_a_cycle_has_nothing_to_carry(checkpoint_store, month):
+    _imports_approved(checkpoint_store)
+    month("202611")
+
+    _launch_import(checkpoint_store, "import_gee", state=None)
+
+    assert [_status(checkpoint_store.progress(), "data_import", i) for i in ("import_pivot_com", "approve_imports")] == [
+        "pending", "pending"]

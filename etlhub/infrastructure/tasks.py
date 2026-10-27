@@ -72,11 +72,11 @@ def task_forecast(job_id: str, params: dict, webhook_url: str | None = None):
 
 class CeleryTaskLauncher:
     def launch(self, task_type: str, job_id: str, webhook_url: str | None = None, confirm: bool = False,
-               **kwargs) -> None:
+               carry_over: dict[str, dict] | None = None, **kwargs) -> None:
         if task_type != "forecast" and task_type not in ETL_JOBS:
             raise ValueError(f"Unknown task type: {task_type}")
         gate = get_checkpoint_store()
-        gate.start(task_type, job_id, confirm)  # PipelineBlockedError -> 409, nothing queued
+        gate.start(task_type, job_id, confirm, carry_over)  # PipelineBlockedError -> 409, nothing queued
         # Known from the 202 on, before a worker picks it up: the log WebSocket and the
         # tracking page can follow it (an unknown job gets 4004).
         JobStore().set(job_id, {"job_id": job_id, "status": "pending", "message": "Queued"})

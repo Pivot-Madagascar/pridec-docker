@@ -130,7 +130,7 @@ stays in Redis after test mode is left (§ 6.3). No `mode` column: the mode of a
 
 | Event | Written by | `job_id` | `detail` |
 |---|---|---|---|
-| `launched` | `start` | the job | `{"confirm": true}` when confirmed (the dependents it reset: a `reset` event) |
+| `launched` | `start` | the job | `{"confirm": true}` when confirmed (the dependents it reset: a `reset` event); since 2026-10-26 always `"dry_run"`: DRYRUN as read at launch (Redis), whether the job may write to DHIS2. Events written before have no `dry_run`. An import (`import_gee`, `import_pivot_com`, `import_pivot_csb`) also keeps `"params"`: `{dhis_url, task, elements, periods, org_units}` at launch (`import_params()`, the same as the import availability check), `null` when they could not be read (the launch goes on). The Journal page hides `params`; the CSV export has it |
 | `succeeded` / `failed` | `finish` | the job | — |
 | `reset` | `_reset` (every caller) | causing job, if any | `{"items": [...], "cause": "relaunch" \| "reject" \| "reopen" \| "abandon" \| "input_change"}` |
 | `uploaded` / `removed` | `change_input` | `upload_*` / `delete_*` id (already generated) | `{"confirm": true}` when confirmed; the item says which file |
@@ -142,6 +142,8 @@ stays in Redis after test mode is left (§ 6.3). No `mode` column: the mode of a
 | `cycle_chosen` | `set_cycle` | — | `{"from", "to"}` |
 | `lock_released` | `release_lock` | the freed job | `{"task"}` (G5) |
 | `cycle_closed` | `finish`, once per cycle, when its success makes the last step done (only a job can complete a cycle) | the job | — (Q7) |
+| `carried_over` | `start` → `_carry_over`, when a launch starts a pass (since 2026-10-26, cycle-passes.md § 11) | the job of the earlier pass that did it (`null` for `approve_imports`) | `{"from_pass", "status": "success", "updated_at", "dry_run"}` (`dry_run` for the imports only) |
+| `availability_checked` / `availability_reused` | `record_availability_check` (`GET /import_availability`, read only, no lock; `_reused` when every section came from an earlier check of the cycle; in the shown pass, or no pass before the first launch; left out of `events` and `last_at` like `mode_changed`, since 2026-10-26) | — | `{"checked"?, "reused"?, "missing", "analytics_behind", "errors"}` or `{"error"}` |
 | `mode_changed` | `set_mode`, both directions, written in `etlhub.db` (a production fact: production paused or resumed; no test data in it) | — | `{"to": "test" \| "production"}` (Q6) |
 
 One private helper, `_event(conn, cycle, event, step, item, job_id, detail, actor)`, called next to each existing write

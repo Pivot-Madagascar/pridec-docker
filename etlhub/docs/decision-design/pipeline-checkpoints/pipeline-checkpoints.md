@@ -389,6 +389,7 @@ Open points:
 |---|---|
 | `forecast_start` | Which value does `jq` write in `pivot_forecast.sh` (current month, next month, last month of data)? The server must write the same one. |
 | `approve_imports` | What is the limit for CSB cases? |
+| `approve_imports` role (to be determined, 2026-10-26) | Its buttons are now under the import availability report ([../import-availability/import-availability.md](../import-availability/import-availability.md)). Still open: should it close step ① (after `build_analytics`) instead of gating `build_analytics`? Should etlhub refuse it (409) while the report shows missing data, or keep it a free human decision? Should it also need `import_gee`? Should its journal event keep which report (section check times) it was made on? Nothing changed: today it needs `import_pivot_com` and `import_pivot_csb` only and does not read the report. |
 | Test mode and `forecast` | Decided 2026-10-15: test mode offers `assets/test/inputs/config.json` as default ([../default-input-files/default-input-files.md](../default-input-files/default-input-files.md)). |
 | `calc_orgunit_alerts` | Celery or synchronous job? What exactly does it publish? |
 | Level check for `external_data` | Which columns distinguish an fkt file from a csb file? |

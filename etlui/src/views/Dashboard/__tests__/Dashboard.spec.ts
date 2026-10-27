@@ -13,6 +13,7 @@ const pausePass = vi.fn()
 const abandonPass = vi.fn()
 const apiGet = vi.fn()
 const applyDefaultFile = vi.fn()
+const getImportAvailability = vi.fn()
 vi.mock('@/services/pipeline', () => ({
   getCheckpoints: (...args: unknown[]) => getCheckpoints(...args),
   launchJob: (...args: unknown[]) => launchJob(...args),
@@ -24,7 +25,8 @@ vi.mock('@/services/pipeline', () => ({
   abandonRun: (...args: unknown[]) => abandonRun(...args),
   pausePass: (...args: unknown[]) => pausePass(...args),
   abandonPass: (...args: unknown[]) => abandonPass(...args),
-  releaseLock: vi.fn()
+  releaseLock: vi.fn(),
+  getImportAvailability: (...args: unknown[]) => getImportAvailability(...args)
 }))
 vi.mock('@/services/inputs', () => ({
   getInputFiles: vi.fn().mockResolvedValue({}),
@@ -109,30 +111,21 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
-  it('shows the cycle in a month input and sends the chosen one to the server', async () => {
-    setCycle.mockResolvedValue(undefined)
-    getCheckpoints.mockResolvedValue(state({ pass: null })) // no active pass: the month can be chosen
+  it('shows the cycle as text: the month is chosen on Home', async () => {
+    getCheckpoints.mockResolvedValue(state({ pass: null }))
     const wrapper = await mountPage()
+    expect(wrapper.text()).toContain('Cycle 202610')
     expect(wrapper.text()).toContain('not started: the first launch starts it')
-
-    const input = wrapper.find<HTMLInputElement>('input[type="month"]')
-    expect(input.element.value).toBe('2026-10')
-    await input.setValue('2026-09')
-    await flushPromises()
-    await input.setValue('')
-    await flushPromises()
-
-    expect(setCycle).toHaveBeenNthCalledWith(1, '202609')
-    expect(setCycle).toHaveBeenNthCalledWith(2, null)
+    expect(wrapper.find('input[type="month"]').exists()).toBe(false)
+    expect(setCycle).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('locks the month while a pass is active, and pauses or abandons it from the bottom of the page', async () => {
+  it('while a pass is active, pauses or abandons it from the bottom of the page', async () => {
     pausePass.mockResolvedValue({})
     abandonPass.mockResolvedValue({})
     const wrapper = await mountPage()
 
-    expect(wrapper.find('input[type="month"]').attributes('disabled')).toBeDefined()
     expect(wrapper.text()).toContain('started by jdoe')
     const html = wrapper.html()
     expect(html.indexOf('Pause the cycle')).toBeGreaterThan(html.indexOf('System Update'))
@@ -154,9 +147,8 @@ describe('Dashboard', () => {
     getCheckpoints.mockResolvedValue(state({ pass: { id: '3f9c1a2b', cycle: '202610', state: 'paused', started_at: 't', started_by: 'jdoe' } }))
     const wrapper = await mountPage()
 
-    expect(wrapper.text()).toContain('paused: resume it from the Journal')
+    expect(wrapper.text()).toContain('paused: resume it from Home or the Journal')
     expect(wrapper.text()).not.toContain('Pause the cycle')
-    expect(wrapper.find('input[type="month"]').attributes('disabled')).toBeUndefined()
     wrapper.unmount()
   })
 
@@ -200,19 +192,74 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
-  it('shows the imports approval as a decision, not a job card', async () => {
+  it('opens the import availability report from the Details button of Data Import, with a loader first', async () => {
+    let answer!: (v: unknown) => void
+    getImportAvailability.mockReturnValue(new Promise(resolve => (answer = resolve)))
+    const wrapper = await mountPage()
+
+    expect(wrapper.find('.accordion-header').findAll('button').length).toBe(0) // nothing next to the title
+    const details = wrapper.find('.imports-approval').findAll('button').find(b => b.text() === 'Details')!
+    await details.trigger('click')
+    expect(wrapper.find('.availability-dialog').text()).toContain('Checking DHIS2')
+
+    const el = { last_updated: null, error: null }
+    answer({
+      dhis_url: 'http://dhis2.test', last_analytics: null,
+      imports: [{ task: 'import_pivot_com', periods: ['202608', '202609'], org_units: 'ou:LEVEL-6;P1',
+        checked_at: '2026-10-26T08:00:00', checked_by: 'jdoe', pass_id: '3f9c1a2b', reused: true, elements: [
+        { ...el, code: 'pridec_historic_COMMalaria', raw: { 202608: 67, 202609: 0 }, analytics: { 202608: 60, 202609: 0 }, imported: false, analytics_up_to_date: false },
+        { ...el, code: 'pridec_historic_COMDiarrhea', raw: { 202608: 5, 202609: 6 }, analytics: { 202608: 5, 202609: 6 }, imported: true, analytics_up_to_date: true }
+      ] }]
+    })
+    await flushPromises()
+
+    const dialog = wrapper.find('.availability-dialog')
+    expect(dialog.text()).toContain('Import Pivot COM')
+    const malaria = dialog.find('tr[data-code="pridec_historic_COMMalaria"]')
+    expect(malaria.findAll('td').map(td => td.text())).toEqual(['67 60', 'N/A', '✗'])
+    expect(malaria.find('.is-ko').exists()).toBe(true)
+    expect(dialog.find('tr[data-code="pridec_historic_COMDiarrhea"] .is-ok').text()).toBe('✓')
+    expect(dialog.text()).toContain('pridec_historic_COMMalaria: analytics behind the stored values, run Build Analytics.')
+    expect(dialog.find('.availability-origin').text()).toMatch(/^reused checked .* by jdoe · pass 3f9c1a2b$/) // shared by another user
+
+    await dialog.findAll('button').find(b => b.text() === 'Refresh')!.trigger('click')
+    expect(getImportAvailability).toHaveBeenLastCalledWith(true)
+    wrapper.unmount()
+  })
+
+  it('shows the error of an availability check that could not run', async () => {
+    getImportAvailability.mockRejectedValue(new Error('500'))
+    const wrapper = await mountPage()
+
+    await wrapper.find('.imports-approval').findAll('button').find(b => b.text() === 'Details')!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.availability-dialog [role="alert"]').text()).toBe('Could not check the imported data')
+    wrapper.unmount()
+  })
+
+  it('shows the imports approval as a decision, not a job card, made under the Details report', async () => {
     getCheckpoints.mockResolvedValue(state({ steps: [
       { step: 'data_import', done: false, accessible: true, items: [item('import_gee', 'success', true), item('approve_imports', 'pending', true), item('build_analytics')] },
       { step: 'forecast', done: false, accessible: false, items: [] },
       { step: 'system_update', done: false, accessible: false, items: [] }
     ] }))
     decideImports.mockResolvedValue(undefined)
+    getImportAvailability.mockResolvedValue({ dhis_url: 'http://dhis2.test', last_analytics: null, imports: [] })
     const wrapper = await mountPage()
 
     expect(wrapper.findAll('.action-card').map(c => c.text()).some(t => t.includes('approve_imports'))).toBe(false)
-    await wrapper.findAll('button').find(b => b.text() === 'Approve imports')!.trigger('click')
+    expect(wrapper.find('.imports-approval').findAll('button').map(b => b.text())).toEqual(['Details']) // moved under the report
+    await wrapper.find('.imports-approval button').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.availability-dialog').attributes('open')).toBeDefined()
+    const footer = wrapper.find('.availability-dialog .preview-footer')
+    expect(footer.findAll('button').map(b => [b.text(), b.attributes('disabled') !== undefined])).toEqual([
+      ['Reject', true], ['Approve imports', false]]) // nothing approved yet: nothing to reject
+    await footer.findAll('button')[1].trigger('click')
     await flushPromises()
     expect(decideImports).toHaveBeenCalledWith('approve')
+    expect(wrapper.find('.availability-dialog').attributes('open')).toBeUndefined() // closed before the decision
     wrapper.unmount()
   })
 

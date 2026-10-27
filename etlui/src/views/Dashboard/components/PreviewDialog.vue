@@ -4,23 +4,27 @@
       <div class="preview-heading">
         <Icon :path="ICONS.eye" class="preview-heading-icon" />
         <h3 :id="titleId" class="preview-title">{{ title }}</h3>
-        <span class="preview-badge" :class="`is-${source}`">
+        <span v-if="source" class="preview-badge" :class="`is-${source}`">
           {{ BADGES[source] }}
         </span>
       </div>
-      <button type="button" class="preview-close" aria-label="Close preview" @click="emit('close')">
-        <Icon :path="ICONS.close" class="preview-close-icon" />
-      </button>
+      <div class="preview-heading">
+        <slot name="actions" />
+        <button type="button" class="preview-close" aria-label="Close preview" @click="emit('close')">
+          <Icon :path="ICONS.close" class="preview-close-icon" />
+        </button>
+      </div>
     </header>
 
     <div class="preview-body">
       <div v-if="loading" class="preview-state" role="status">
         <span class="preview-spinner animate-spin" aria-hidden="true"></span>
-        Loading preview…
+        {{ loadingLabel ?? 'Loading preview…' }}
       </div>
       <div v-else-if="error" class="preview-state is-error" role="alert">{{ error }}</div>
       <slot v-else />
     </div>
+    <div v-if="$slots.footer" class="preview-footer"><slot name="footer" /></div>
   </BaseDialog>
 </template>
 
@@ -32,9 +36,10 @@ import BaseDialog from './BaseDialog.vue'
 defineProps<{
   open: boolean
   title: string
-  source: 'server' | 'local' | 'default'
+  source?: 'server' | 'local' | 'default' // no badge without it (ImportAvailabilityDialog)
   loading: boolean
   error: string
+  loadingLabel?: string
 }>()
 
 const emit = defineEmits<{
@@ -138,6 +143,15 @@ const BADGES = { server: 'On server', local: 'Selected file — not uploaded', d
   min-height: 0;
   overflow: auto;
   padding: 1.25rem 1.5rem;
+}
+
+.preview-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  background: #1e293b;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .preview-state {
