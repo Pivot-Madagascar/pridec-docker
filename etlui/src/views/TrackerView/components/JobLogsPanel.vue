@@ -1,28 +1,28 @@
 <template>
   <section data-test="job-logs-section" class="job-logs-section space-y-2">
     <div class="flex items-center justify-between gap-4">
-      <h3 class="flex items-center gap-2 text-sm font-semibold text-gray-100">
+      <h3 class="flex items-center gap-2 text-sm font-semibold text-foreground">
         Logs
-        <Badge v-if="live" data-test="live-badge" class="border-transparent bg-green-900 text-green-300">● Live</Badge>
+        <Badge v-if="live" data-test="live-badge" class="border-transparent bg-success/15 text-success">● Live</Badge>
       </h3>
       <Button variant="secondary" size="sm" :disabled="jobLogsLoading" @click="store.fetchJobLogs(jobId)">
         {{ jobLogsLoading ? 'Loading...' : 'Refresh logs' }}
       </Button>
     </div>
-    <div v-if="jobLogsError" class="rounded-lg border border-red-900 bg-red-950 p-3 text-sm text-red-300">
+    <div v-if="jobLogsError" class="rounded-lg border border-destructive/40 bg-destructive/15 p-3 text-sm text-destructive">
       {{ jobLogsError }}
     </div>
     <template v-else-if="displayedLogs">
       <div class="flex flex-wrap items-center gap-3 text-sm">
-        <span class="text-gray-500">Status</span>
+        <span class="text-muted-foreground">Status</span>
         <span class="rounded px-2 py-0.5 text-xs font-semibold" :class="statusColor(displayedLogs.status)">
           {{ displayedLogs.status ?? 'unknown (record expired)' }}
         </span>
-        <span v-if="displayedLogs.message" class="text-gray-300">{{ displayedLogs.message }}</span>
+        <span v-if="displayedLogs.message" class="text-foreground">{{ displayedLogs.message }}</span>
       </div>
-      <pre class="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-lg border border-gray-700 bg-black/40 p-3 font-mono text-xs text-gray-200">{{ displayedLogs.logs || 'No logs yet.' }}</pre>
+      <pre class="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-muted p-3 font-mono text-xs text-foreground">{{ displayedLogs.logs || 'No logs yet.' }}</pre>
     </template>
-    <p v-else-if="jobLogsLoading" class="text-sm text-gray-400">Loading logs...</p>
+    <p v-else-if="jobLogsLoading" class="text-sm text-muted-foreground">Loading logs...</p>
   </section>
 </template>
 

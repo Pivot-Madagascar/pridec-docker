@@ -8,11 +8,11 @@
           On server · {{ formatSize(serverFile.size ?? 0) }}<template v-if="serverFile.modified"> · {{ formatDate(serverFile.modified) }}</template>
         </span>
         <Button variant="outline" size="sm" :aria-label="`Preview ${label} on the server`" @click="emit('preview-server')">
-          <Icon :path="ICONS.eye" />
+          <Eye />
           Preview
         </Button>
         <Button variant="destructive" size="sm" :disabled="busy" :aria-label="`Delete ${label} from the server`" @click="emit('delete')">
-          <Icon :path="ICONS.reset" />
+          <Trash2 />
           {{ busy ? 'Deleting…' : 'Delete' }}
         </Button>
       </template>
@@ -30,7 +30,7 @@
       @drop.prevent="onDrop"
     >
       <div class="dropzone-icon">
-        <Icon :path="modelValue ? ICONS.checkCircle : ICONS.upload" class="dropzone-icon-svg" />
+        <component :is="modelValue ? CircleCheck : Upload" class="dropzone-icon-svg" />
       </div>
 
       <div class="dropzone-body">
@@ -51,7 +51,7 @@
 
       <div v-if="modelValue" class="dropzone-actions">
         <Button variant="outline" size="sm" :aria-label="`Preview the selected ${label}`" @click="emit('preview-local', modelValue)">
-          <Icon :path="ICONS.eye" />
+          <Eye />
           Preview
         </Button>
         <Button as="label" :for="inputId" variant="outline" size="sm" :class="{ 'pointer-events-none opacity-50': busy }">Replace</Button>
@@ -64,7 +64,7 @@
           @click="emit('upload', modelValue)"
         >
           <LoaderCircle v-if="busy" class="animate-spin" aria-hidden="true" />
-          <Icon v-else :path="ICONS.upload" />
+          <Upload v-else />
           {{ busy ? 'Uploading…' : 'Upload' }}
         </Button>
       </div>
@@ -76,7 +76,7 @@
     <div v-if="defaultFile && !serverFile?.exists" class="status-row is-present default-status" data-test="default-status">
       <span class="status-text">Default · {{ defaultFile.filename }} · {{ formatSize(defaultFile.size) }}</span>
       <Button variant="outline" size="sm" :aria-label="`Preview the default ${label}`" @click="emit('preview-default')">
-        <Icon :path="ICONS.eye" />
+        <Eye />
         Preview
       </Button>
       <Button variant="outline" size="sm" :disabled="disabled || busy" :aria-label="`Use the default ${label}`" @click="emit('use-default')">
@@ -88,8 +88,7 @@
 
 <script setup lang="ts">
 import { computed, ref, useId } from 'vue'
-import { LoaderCircle } from '@lucide/vue'
-import Icon, { ICONS } from '@/components/Icons'
+import { CircleCheck, Eye, LoaderCircle, Trash2, Upload } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import type { DefaultFile, ServerFile } from '@/types/inputs'
 
@@ -166,8 +165,8 @@ const formatDate = (iso: string) =>
   align-items: center;
   gap: 1rem;
   padding: 1.25rem;
-  background: #1e293b;
-  border: 2px dashed rgba(255, 255, 255, 0.12);
+  background: var(--muted);
+  border: 2px dashed var(--border);
   border-radius: 0.75rem;
   transition: border-color 0.2s ease, background 0.2s ease;
 }
@@ -175,18 +174,18 @@ const formatDate = (iso: string) =>
 .dropzone:hover,
 .dropzone:focus-within,
 .dropzone.is-dragging {
-  border-color: #3b82f6;
-  background: rgba(59, 130, 246, 0.08);
+  border-color: var(--primary);
+  background: color-mix(in oklab, var(--primary) 8%, transparent);
 }
 
 .dropzone.has-file {
   border-style: solid;
-  border-color: rgba(34, 197, 94, 0.5);
-  background: rgba(34, 197, 94, 0.06);
+  border-color: color-mix(in oklab, var(--success) 50%, transparent);
+  background: color-mix(in oklab, var(--success) 6%, transparent);
 }
 
 .dropzone.has-error {
-  border-color: rgba(239, 68, 68, 0.6);
+  border-color: color-mix(in oklab, var(--destructive) 60%, transparent);
 }
 
 .dropzone.is-disabled {
@@ -202,13 +201,13 @@ const formatDate = (iso: string) =>
   width: 3rem;
   height: 3rem;
   border-radius: 0.75rem;
-  background: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
+  background: color-mix(in oklab, var(--primary) 15%, transparent);
+  color: var(--primary);
 }
 
 .has-file .dropzone-icon {
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
+  background: color-mix(in oklab, var(--success) 15%, transparent);
+  color: var(--success);
 }
 
 .dropzone-icon-svg {
@@ -225,13 +224,13 @@ const formatDate = (iso: string) =>
 }
 
 .dropzone-title {
-  color: #f1f5f9;
+  color: var(--foreground);
   font-weight: 600;
   font-family: ui-monospace, monospace;
 }
 
 .dropzone-file {
-  color: #4ade80;
+  color: var(--success);
   font-size: 0.875rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -239,19 +238,19 @@ const formatDate = (iso: string) =>
 }
 
 .dropzone-hint {
-  color: #94a3b8;
+  color: var(--muted-foreground);
   font-size: 0.8125rem;
 }
 
 .dropzone-link {
-  color: #60a5fa;
+  color: var(--primary);
   font-weight: 600;
   cursor: pointer;
   text-decoration: underline;
 }
 
 .dropzone-error {
-  color: #f87171;
+  color: var(--destructive);
   font-size: 0.8125rem;
 }
 
@@ -277,20 +276,20 @@ const formatDate = (iso: string) =>
   gap: 0.5rem;
   min-height: 2rem;
   padding: 0 0.25rem;
-  color: #64748b;
+  color: var(--muted-foreground);
   font-size: 0.8125rem;
 }
 
 .status-row.is-present {
-  color: #94a3b8;
+  color: var(--muted-foreground);
 }
 
 .status-dot {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
-  background: #22c55e;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--success) 20%, transparent);
 }
 
 .status-text {

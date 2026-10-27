@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-6">
     <div class="flex items-center justify-between gap-4">
-      <h1 class="text-2xl font-bold text-gray-100">Request Tracking</h1>
+      <h1 class="text-2xl font-bold text-foreground">Request Tracking</h1>
       <div class="flex items-center gap-2">
         <Input
           v-model="endpointFilter"
@@ -17,7 +17,7 @@
       </div>
     </div>
 
-    <div v-if="error" class="rounded-lg border border-red-900 bg-red-950 p-3 text-sm text-red-300">
+    <div v-if="error" class="rounded-lg border border-destructive/40 bg-destructive/15 p-3 text-sm text-destructive">
       {{ error }}
     </div>
 

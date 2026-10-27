@@ -90,20 +90,20 @@ const todo = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  color: #e2e8f0;
+  color: var(--foreground);
 }
 
 .forecast-runs .hint {
   font-size: 0.8125rem;
-  color: #94a3b8;
+  color: var(--muted-foreground);
 }
 
 .forecast-runs .todo {
   padding: 1rem 1.25rem;
   border-radius: 0.75rem;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.45);
-  color: #fde68a;
+  background: color-mix(in oklab, var(--warning) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--warning) 45%, transparent);
+  color: var(--warning);
 }
 
 .forecast-runs .disease-nav,
@@ -116,7 +116,7 @@ const todo = computed(() => {
 .forecast-runs .carousel:focus-visible,
 .forecast-runs a:focus-visible,
 .forecast-runs summary:focus-visible {
-  outline: 2px solid #818cf8;
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
@@ -141,8 +141,8 @@ const todo = computed(() => {
   gap: 1.5rem;
   padding: 2.5rem;
   border-radius: 1rem;
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--muted);
+  border: 1px solid var(--border);
 }
 
 .forecast-runs .card-header {
@@ -156,14 +156,14 @@ const todo = computed(() => {
 .forecast-runs .card-title {
   font-size: 1.375rem;
   font-weight: 700;
-  color: #f1f5f9;
+  color: var(--foreground);
 }
 
 .forecast-runs .card-progress {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  color: #cbd5e1;
+  color: var(--foreground);
 }
 
 .forecast-runs .progress-dots {
@@ -175,17 +175,17 @@ const todo = computed(() => {
   width: 0.75rem;
   height: 0.75rem;
   border-radius: 9999px;
-  border: 2px solid #475569;
+  border: 2px solid var(--border);
 }
 
 .forecast-runs .progress-dot.is-done {
-  background: #10b981;
-  border-color: #10b981;
+  background: var(--success);
+  border-color: var(--success);
 }
 
 .forecast-runs code {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--muted-foreground);
 }
 
 .forecast-runs .level-grid {
@@ -201,15 +201,15 @@ const todo = computed(() => {
   gap: 0.5rem;
   padding: 1.25rem;
   border-radius: 0.75rem;
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--card);
+  border: 1px solid var(--border);
 }
 
 /* The open run: highlighted, and the whole card is the button to its steps. */
 .forecast-runs .level-column.is-open {
-  border-color: #6366f1;
-  background: rgba(99, 102, 241, 0.12);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35);
+  border-color: var(--primary);
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 35%, transparent);
 }
 
 .forecast-runs .card-steps {
@@ -222,16 +222,16 @@ const todo = computed(() => {
 }
 
 .forecast-runs .card-steps:hover {
-  background: rgba(99, 102, 241, 0.1);
+  background: color-mix(in oklab, var(--primary) 10%, transparent);
 }
 
 .forecast-runs .card-steps:focus-visible {
-  outline: 2px solid #818cf8;
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
 .forecast-runs .card-steps-hint {
-  color: #a5b4fc;
+  color: var(--primary);
   font-size: 0.8125rem;
 }
 
@@ -239,12 +239,12 @@ const todo = computed(() => {
 .forecast-runs .level-title {
   font-size: 1rem;
   font-weight: 700;
-  color: #f1f5f9;
+  color: var(--foreground);
 }
 
 .forecast-runs .level-code {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--muted-foreground);
 }
 
 .forecast-runs .level-status {
@@ -253,25 +253,25 @@ const todo = computed(() => {
 
 .forecast-runs .status-published,
 .forecast-runs .text-success {
-  color: #34d399;
+  color: var(--success);
 }
 
 .forecast-runs .status-waiting,
 .forecast-runs .text-todo {
-  color: #fbbf24;
+  color: var(--warning);
 }
 
 .forecast-runs .status-open {
-  color: #a5b4fc;
+  color: var(--primary);
 }
 
 .forecast-runs .status-idle {
-  color: #94a3b8;
+  color: var(--muted-foreground);
   font-size: 0.875rem;
 }
 
 .forecast-runs .level-progress {
-  color: #94a3b8;
+  color: var(--muted-foreground);
   font-size: 0.875rem;
   display: flex;
   justify-content: space-between;
@@ -298,8 +298,8 @@ const todo = computed(() => {
   align-content: start;
   padding: 0.875rem;
   border-radius: 0.75rem;
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--card);
+  border: 1px solid var(--border);
 }
 
 .forecast-runs .steps-dialog .item-input {
@@ -316,7 +316,7 @@ const todo = computed(() => {
   align-items: center;
   gap: 0.75rem;
   padding-top: 1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--border);
 }
 
 /* Stage 2's Previous: where Next is in stage 1. */
@@ -324,7 +324,7 @@ const todo = computed(() => {
   display: flex;
   justify-content: flex-end;
   padding-top: 1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--border);
 }
 
 /* The text on the left, the data check and Next buttons together on the right. */
@@ -367,7 +367,7 @@ const todo = computed(() => {
   width: 0.875rem;
   height: 0.875rem;
   border-radius: 9999px;
-  background: #475569;
+  background: var(--muted-foreground);
 }
 
 .forecast-runs .item-text {
@@ -378,7 +378,7 @@ const todo = computed(() => {
 
 .forecast-runs .item-label {
   font-size: 0.9375rem;
-  color: #f1f5f9;
+  color: var(--foreground);
 }
 
 .forecast-runs .item-tech {
@@ -387,43 +387,43 @@ const todo = computed(() => {
 
 .forecast-runs .item-state {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--muted-foreground);
 }
 
 .forecast-runs .item-pending .item-label {
-  color: #94a3b8;
+  color: var(--muted-foreground);
 }
 
 .forecast-runs .item-success .item-dot {
-  background: #10b981;
+  background: var(--success);
 }
 
 .forecast-runs .item-waiting .item-dot {
-  background: #f59e0b;
-  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.3);
+  background: var(--warning);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--warning) 30%, transparent);
 }
 
 .forecast-runs .item-waiting .item-state {
-  color: #fbbf24;
+  color: var(--warning);
 }
 
 .forecast-runs .item-running .item-dot {
   background: transparent;
-  border: 2px solid #818cf8;
+  border: 2px solid var(--primary);
   border-top-color: transparent;
   animation: forecast-spin 0.8s linear infinite;
 }
 
 .forecast-runs .item-running .item-state {
-  color: #a5b4fc;
+  color: var(--primary);
 }
 
 .forecast-runs .item-error .item-dot {
-  background: #ef4444;
+  background: var(--destructive);
 }
 
 .forecast-runs .item-error .item-state {
-  color: #f87171;
+  color: var(--destructive);
 }
 
 .forecast-runs .level-action {
@@ -433,7 +433,7 @@ const todo = computed(() => {
 
 .forecast-runs .next-link {
   align-self: flex-end;
-  color: #a5b4fc;
+  color: var(--primary);
   font-weight: 600;
   padding: 0.75rem 0;
 }
@@ -443,7 +443,7 @@ const todo = computed(() => {
   min-height: 44px;
   display: flex;
   align-items: center;
-  color: #94a3b8;
+  color: var(--muted-foreground);
   font-weight: 600;
 }
 

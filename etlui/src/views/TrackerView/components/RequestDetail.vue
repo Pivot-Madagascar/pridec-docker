@@ -19,7 +19,7 @@
         <TableCell class="px-3 py-2">{{ request.duration_ms.toFixed(2) }} ms</TableCell>
         <TableCell class="px-3 py-2 font-mono text-xs break-all">{{ request.job_id ?? '-' }}</TableCell>
       </TableRow>
-      <TableRow v-if="request.reason" class="text-yellow-300">
+      <TableRow v-if="request.reason" class="text-warning">
         <TableCell colspan="5" class="px-3 py-2 text-xs">
           Refused by the pipeline<template v-if="request.code"> ({{ request.code }})</template>: {{ request.reason }}
         </TableCell>

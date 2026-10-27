@@ -25,6 +25,6 @@ const auth = useAuthStore()
   max-width: 500px;
   margin: 0 auto;
   padding: 2rem;
-  color: white;
+  color: var(--foreground);
 }
 </style>

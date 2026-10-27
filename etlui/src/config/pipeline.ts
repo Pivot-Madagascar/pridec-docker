@@ -1,20 +1,21 @@
-import { ICONS } from '@/components/Icons'
+import type { Component } from 'vue'
+import { Bell, ChartPie, CircleCheck, ClipboardList, Cloud, Download, FlaskConical, Key, Map, Upload, Users, Zap } from '@lucide/vue'
 import type { Checkpoints, Disease, PipelineItem, Source, StepName } from '@/types/pipeline'
 
 // How each job looks on its card. Pure display: statuses and rules come from etlhub.
-const CARDS: Record<string, { label: string; icon: string; iconClass: string }> = {
-  import_gee: { label: 'Import GEE', icon: ICONS.download, iconClass: 'icon-blue' },
-  import_pivot_com: { label: 'Import Pivot COM', icon: ICONS.users, iconClass: 'icon-green' },
-  import_pivot_csb: { label: 'Import Pivot CSB', icon: ICONS.clipboardList, iconClass: 'icon-purple' },
-  build_analytics: { label: 'Build Analytics', icon: ICONS.chartPie, iconClass: 'icon-emerald' },
-  update_key: { label: 'Update Key', icon: ICONS.key, iconClass: 'icon-slate' },
-  fetch_disease: { label: 'Fetch Disease', icon: ICONS.beaker, iconClass: 'icon-teal' },
-  fetch_climate: { label: 'Fetch Climate', icon: ICONS.cloud, iconClass: 'icon-sky' },
-  fetch_geojson: { label: 'Fetch GeoJSON', icon: ICONS.map, iconClass: 'icon-indigo' },
-  validate_inputs: { label: 'Validate Inputs', icon: ICONS.checkCircle, iconClass: 'icon-teal' },
-  forecast: { label: 'Run Forecast', icon: ICONS.lightning, iconClass: 'icon-orange' },
-  calc_orgunit_alerts: { label: 'Org Unit Alerts (CSB)', icon: ICONS.bell, iconClass: 'icon-amber' },
-  post_forecast: { label: 'Post Forecast', icon: ICONS.upload, iconClass: 'icon-rose' }
+const CARDS: Record<string, { label: string; icon: Component }> = {
+  import_gee: { label: 'Import GEE', icon: Download },
+  import_pivot_com: { label: 'Import Pivot COM', icon: Users },
+  import_pivot_csb: { label: 'Import Pivot CSB', icon: ClipboardList },
+  build_analytics: { label: 'Build Analytics', icon: ChartPie },
+  update_key: { label: 'Update Key', icon: Key },
+  fetch_disease: { label: 'Fetch Disease', icon: FlaskConical },
+  fetch_climate: { label: 'Fetch Climate', icon: Cloud },
+  fetch_geojson: { label: 'Fetch GeoJSON', icon: Map },
+  validate_inputs: { label: 'Validate Inputs', icon: CircleCheck },
+  forecast: { label: 'Run Forecast', icon: Zap },
+  calc_orgunit_alerts: { label: 'Org Unit Alerts (CSB)', icon: Bell },
+  post_forecast: { label: 'Post Forecast', icon: Upload }
 }
 
 const STATUS_TEXT = { pending: 'Waiting', running: 'Running…', success: '✓ Done', error: '✗ Failed: relaunch' }
@@ -51,7 +52,7 @@ export const lastUpdate = (item: PipelineItem) =>
 
 /** ActionCard props for one checkpoint. Disabled when etlhub says it cannot start, or while any job runs. */
 export function toCard(item: PipelineItem, state: Checkpoints | null, busy: boolean) {
-  const card = CARDS[jobOf(item.item)] ?? { label: labelOf(item.item), icon: ICONS.lightning, iconClass: 'icon-slate' }
+  const card = CARDS[jobOf(item.item)] ?? { label: labelOf(item.item), icon: Zap }
   return {
     key: item.item,
     ...card,

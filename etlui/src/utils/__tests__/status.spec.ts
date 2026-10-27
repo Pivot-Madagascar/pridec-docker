@@ -4,9 +4,9 @@ import { statusColor } from '@/utils/status'
 describe('statusColor', () => {
   it('colours HTTP codes and job statuses alike', () => {
     expect([202, 'success', 409, 500, 'error', 'running', 'pending', null].map(statusColor)).toEqual([
-      'bg-green-900 text-green-300', 'bg-green-900 text-green-300', 'bg-yellow-900 text-yellow-300',
-      'bg-red-900 text-red-300', 'bg-red-900 text-red-300', 'bg-blue-900 text-blue-300', 'bg-blue-900 text-blue-300',
-      'bg-gray-700 text-gray-300'
+      'bg-success/15 text-success', 'bg-success/15 text-success', 'bg-warning/15 text-warning',
+      'bg-destructive/15 text-destructive', 'bg-destructive/15 text-destructive', 'bg-primary/15 text-primary',
+      'bg-primary/15 text-primary', 'bg-muted text-muted-foreground'
     ])
   })
 })

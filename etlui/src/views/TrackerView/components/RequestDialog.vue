@@ -7,7 +7,7 @@
       </div>
       <div class="min-h-0 space-y-4 overflow-y-auto p-4">
         <RequestDetail v-if="request" :request="request" />
-        <p v-else-if="error" class="text-sm text-red-300">{{ error }}</p>
+        <p v-else-if="error" class="text-sm text-destructive">{{ error }}</p>
         <JobLogsPanel v-if="jobId" :job-id="jobId" />
       </div>
     </DialogContent>

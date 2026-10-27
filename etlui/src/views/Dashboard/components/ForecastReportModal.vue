@@ -15,7 +15,7 @@
           <!-- Native download: the browser sends the session cookie and saves the zip itself. New tab so an
                error page (404, expired session) does not replace the app. Open run only: a closed run's files left input/. -->
           <Button v-if="!run" as="a" variant="outline" size="sm" :href="archiveUrl" target="_blank" rel="noopener" download>
-            <Icon :path="ICONS.download" stroke-width="2" />
+            <Download />
             <span>Download Forecast Data</span>
           </Button>
         </div>
@@ -32,7 +32,7 @@
           <LoaderCircle class="size-12 animate-spin" aria-hidden="true" />
           <p>Loading report...</p>
         </div>
-        <div v-else class="flex h-full items-center justify-center text-red-400">
+        <div v-else class="flex h-full items-center justify-center text-destructive">
           <p>{{ errorMessage }}</p>
         </div>
       </div>
@@ -45,8 +45,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import api from '@/services/api'
-import { LoaderCircle, RefreshCw } from '@lucide/vue'
-import Icon, { ICONS } from '@/components/Icons'
+import { Download, LoaderCircle, RefreshCw } from '@lucide/vue'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 

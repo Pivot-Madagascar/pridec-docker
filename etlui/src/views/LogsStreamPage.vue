@@ -11,7 +11,7 @@
       </div>
     </div>
 
-    <p class="text-sm text-gray-400 max-w-3xl">
+    <p class="text-sm text-muted-foreground max-w-3xl">
       Connect to an ETL job via WebSocket to stream logs in real time. Enter a job ID below to start tracking.
     </p>
 
@@ -37,13 +37,13 @@
           </Button>
           <Button v-if="connected" variant="secondary" @click="disconnect">Disconnect</Button>
         </div>
-        <div v-if="connectionError" class="text-sm text-red-400">
+        <div v-if="connectionError" class="text-sm text-destructive">
           {{ connectionError }}
         </div>
       </div>
 
-      <div v-if="statusMessage" class="mt-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-        <p class="text-sm text-blue-800 dark:text-blue-300">{{ statusMessage }}</p>
+      <div v-if="statusMessage" class="mt-4 p-3 rounded-lg bg-primary/15 border border-primary/40">
+        <p class="text-sm text-primary">{{ statusMessage }}</p>
       </div>
       </CardContent>
     </Card>
@@ -51,9 +51,9 @@
     <Card>
       <CardContent>
       <div class="flex-row-center-between mb-4">
-        <h2 class="heading-tertiary text-gray-900 dark:text-white">Log Output</h2>
+        <h2 class="heading-tertiary text-foreground">Log Output</h2>
         <div class="flex-row-center space-x-2">
-          <span class="text-xs text-gray-500">Lines: {{ lineCount }}</span>
+          <span class="text-xs text-muted-foreground">Lines: {{ lineCount }}</span>
           <Button v-if="lineCount > 0" variant="link" size="xs" @click="scrollToBottom">Scroll ↓</Button>
           <Button v-if="lineCount > 0" variant="ghost" size="xs" @click="clearLogs">Clear</Button>
         </div>
@@ -64,13 +64,13 @@
         class="log-container"
       >
         <template v-if="history && !logs.length && !connected">
-          <pre class="text-sm text-gray-300 font-mono whitespace-pre-wrap">{{ history }}</pre>
+          <pre class="text-sm text-foreground font-mono whitespace-pre-wrap">{{ history }}</pre>
         </template>
         <template v-else-if="combinedLogs">
-          <pre class="text-sm text-green-400 font-mono whitespace-pre-wrap">{{ combinedLogs }}</pre>
+          <pre class="text-sm text-foreground font-mono whitespace-pre-wrap">{{ combinedLogs }}</pre>
         </template>
         <template v-else>
-          <p class="text-sm text-gray-500 text-center py-8">
+          <p class="text-sm text-muted-foreground text-center py-8">
             Connect to a job to start streaming logs.
           </p>
         </template>
@@ -127,10 +127,10 @@ watch(
 )
 
 const statusDotClass = computed(() => {
-  if (isRunning.value) return 'bg-yellow-500'
-  if (status.value === 'success') return 'bg-green-500'
-  if (status.value === 'error') return 'bg-red-500'
-  return 'bg-gray-400'
+  if (isRunning.value) return 'bg-warning'
+  if (status.value === 'success') return 'bg-success'
+  if (status.value === 'error') return 'bg-destructive'
+  return 'bg-muted-foreground'
 })
 
 const statusBadgeClass = computed(() => {
@@ -171,25 +171,25 @@ function scrollToBottom() {
 </script>
 
 <style scoped>
-@reference "tailwindcss";
+@reference "../styles/base.css";
 
 .log-container {
-  @apply bg-[#1a1a1a] rounded-lg p-4 h-[500px] overflow-y-auto border border-gray-800;
+  @apply bg-muted rounded-lg p-4 h-[500px] overflow-y-auto border border-border;
 }
 
 .status-badge-success {
-  @apply bg-green-50 text-green-800 border border-green-200;
+  @apply bg-success/15 text-success border border-success/40;
 }
 
 .status-badge-running {
-  @apply bg-yellow-50 text-yellow-800 border border-yellow-200;
+  @apply bg-warning/15 text-warning border border-warning/40;
 }
 
 .status-badge-error {
-  @apply bg-red-50 text-red-800 border border-red-200;
+  @apply bg-destructive/15 text-destructive border border-destructive/40;
 }
 
 .status-badge-unknown {
-  @apply bg-gray-50 text-gray-800 border border-gray-200;
+  @apply bg-muted text-foreground border border-border;
 }
 </style>

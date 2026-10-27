@@ -256,36 +256,35 @@ onMounted(refresh)
 </script>
 
 <style scoped>
-@reference "tailwindcss";
+@reference "../../styles/base.css";
 
 .dashboard-section {
-  background: #0f172a;
+  background: var(--card);
   border-radius: 1rem;
   padding: 2rem;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
 }
 
 .section-header {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #f1f5f9;
+  color: var(--foreground);
   margin-bottom: 0.25rem;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .section-subtitle {
-  color: #94a3b8;
+  color: var(--muted-foreground);
   font-size: 0.875rem;
   margin-bottom: 1.5rem;
 }
 
 .cycle-value {
-  color: #e2e8f0;
+  color: var(--foreground);
 }
 
 .journal-link {
-  color: #60a5fa;
+  color: var(--primary);
 }
 
 .imports-approval {
@@ -298,7 +297,7 @@ onMounted(refresh)
 
 .approval-text {
   font-size: 0.8125rem;
-  color: #94a3b8;
+  color: var(--muted-foreground);
 }
 
 
@@ -311,16 +310,16 @@ onMounted(refresh)
 }
 
 .paused-note {
-  color: #fde68a;
+  color: var(--warning);
 }
 
 
 .status-success {
-  color: #34d399;
+  color: var(--success);
 }
 
 .status-error {
-  color: #f87171;
+  color: var(--destructive);
 }
 
 .lock-banner {
@@ -331,9 +330,9 @@ onMounted(refresh)
   padding: 0.75rem 1rem;
   margin-bottom: 1.5rem;
   border-radius: 0.75rem;
-  background: rgba(251, 191, 36, 0.1);
-  border: 1px solid rgba(251, 191, 36, 0.4);
-  color: #fde68a;
+  background: color-mix(in oklab, var(--warning) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--warning) 40%, transparent);
+  color: var(--warning);
   font-size: 0.875rem;
 }
 

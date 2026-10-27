@@ -45,7 +45,7 @@ const emit = defineEmits<{
 </script>
 
 <style scoped>
-@reference "tailwindcss";
+@reference "../../../styles/base.css";
 
 .mode-toggle {
   display: flex;
@@ -55,13 +55,13 @@ const emit = defineEmits<{
   padding: 1rem 1.25rem;
   margin-bottom: 1.5rem;
   border-radius: 0.75rem;
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--card);
+  border: 1px solid var(--border);
 }
 
 .mode-toggle.is-test {
-  border-color: rgba(251, 191, 36, 0.5);
-  background: rgba(251, 191, 36, 0.08);
+  border-color: color-mix(in oklab, var(--warning) 50%, transparent);
+  background: color-mix(in oklab, var(--warning) 8%, transparent);
 }
 
 .mode-text {
@@ -72,15 +72,15 @@ const emit = defineEmits<{
 
 .mode-label {
   font-weight: 700;
-  color: #f1f5f9;
+  color: var(--foreground);
 }
 
 .mode-hint {
   font-size: 0.8125rem;
-  color: #94a3b8;
+  color: var(--muted-foreground);
 }
 
 .mode-hint.mode-warn {
-  color: #fca5a5;
+  color: var(--destructive);
 }
 </style>

@@ -14,19 +14,18 @@ body {
 
 #app {
   min-height: 100vh;
-  background-color: var(--color-gray-900);
 }
 
 /* Component Styles */
 
 /* Section Header */
 .section-header {
-  @apply text-2xl font-bold text-[#131921] dark:text-white mb-4;
+  @apply text-2xl font-bold text-foreground mb-4;
 }
 
 /* Heading Styles */
 .heading-primary {
-  @apply text-3xl font-bold text-[#131921] dark:text-white;
+  @apply text-3xl font-bold text-foreground;
 }
 
 /* Icon Sizes */
@@ -36,15 +35,15 @@ body {
 
 /* Recent Activity */
 .activity-section {
-  @apply bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden;
+  @apply bg-card rounded-lg border overflow-hidden;
 }
 
 .activity-divide {
-  @apply divide-y divide-gray-100 dark:divide-gray-800;
+  @apply divide-y;
 }
 
 .activity-item {
-  @apply px-6 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors;
+  @apply px-6 py-4 flex items-center justify-between hover:bg-muted/50 transition-colors;
 }
 
 .activity-icon {
@@ -52,23 +51,23 @@ body {
 }
 
 .activity-icon-success {
-  @apply bg-green-500;
+  @apply bg-success;
 }
 
 .activity-icon-error {
-  @apply bg-red-500;
+  @apply bg-destructive;
 }
 
 .activity-action {
-  @apply text-sm font-medium text-gray-900 dark:text-gray-100;
+  @apply text-sm font-medium text-foreground;
 }
 
 .activity-message {
-  @apply text-xs text-gray-500 dark:text-gray-400;
+  @apply text-xs text-muted-foreground;
 }
 
 .activity-time {
-  @apply text-xs text-gray-400 dark:text-gray-500;
+  @apply text-xs text-muted-foreground;
 }
 
 /* Flex Layouts */
@@ -80,12 +79,15 @@ body {
   @apply flex items-center;
 }
 
-/* shadcn-vue tokens: Tailwind gray + one indigo accent. Dark = `.dark` on <html> (main.ts, follows the OS). */
+/* shadcn-vue tokens: Tailwind gray + one indigo accent; success / warning / destructive are the only other colours.
+   Dark = `.dark` on <html> (main.ts). */
 @theme inline {
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -124,6 +126,8 @@ body {
   --accent: var(--color-gray-100);
   --accent-foreground: var(--color-gray-900);
   --destructive: var(--color-red-600);
+  --success: var(--color-green-700);
+  --warning: var(--color-amber-600);
   --border: var(--color-gray-200);
   --input: var(--color-gray-300);
   --ring: var(--color-indigo-500);
@@ -146,6 +150,8 @@ body {
   --accent: var(--color-gray-800);
   --accent-foreground: var(--color-gray-100);
   --destructive: var(--color-red-500);
+  --success: var(--color-green-400);
+  --warning: var(--color-amber-400);
   --border: var(--color-gray-700);
   --input: var(--color-gray-700);
   --ring: var(--color-indigo-400);

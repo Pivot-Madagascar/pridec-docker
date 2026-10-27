@@ -3,7 +3,7 @@
   <AlertDialog :open="!!pending" @update:open="!$event && !busy && emit('cancel')">
     <AlertDialogContent class="sm:max-w-xl" data-test="impact-dialog">
       <div v-if="pending" class="text-sm">
-        <AlertDialogTitle class="text-amber-400">{{ pending.label }}: confirmation required</AlertDialogTitle>
+        <AlertDialogTitle class="text-warning">{{ pending.label }}: confirmation required</AlertDialogTitle>
         <AlertDialogDescription class="mt-2">{{ pending.message }}</AlertDialogDescription>
 
         <dl class="mt-4 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-[0.8125rem]">

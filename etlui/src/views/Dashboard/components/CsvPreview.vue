@@ -62,7 +62,7 @@ const isNumeric = (value: string | undefined) => value !== undefined && /^-?\d+(
 </script>
 
 <style scoped>
-@reference "tailwindcss";
+@reference "../../../styles/base.css";
 
 .csv-preview {
   display: flex;
@@ -82,13 +82,13 @@ const isNumeric = (value: string | undefined) => value !== undefined && /^-?\d+(
   padding: 0.375rem 0.75rem;
   border-radius: 0.5rem;
   font-size: 0.8125rem;
-  color: #94a3b8;
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border: 1px solid var(--border);
 }
 
 .summary-item strong {
-  color: #f1f5f9;
+  color: var(--foreground);
   font-weight: 600;
 }
 
@@ -97,12 +97,12 @@ const isNumeric = (value: string | undefined) => value !== undefined && /^-?\d+(
   min-height: 0;
   overflow: auto;
   border-radius: 0.625rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: #0b1222;
+  border: 1px solid var(--border);
+  background: var(--card);
 }
 
 .table-wrap:focus-visible {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
@@ -116,7 +116,7 @@ const isNumeric = (value: string | undefined) => value !== undefined && /^-?\d+(
 .csv-table th,
 .csv-table td {
   padding: 0.5rem 0.875rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border);
   text-align: left;
 }
 
@@ -124,27 +124,27 @@ const isNumeric = (value: string | undefined) => value !== undefined && /^-?\d+(
   position: sticky;
   top: 0;
   z-index: 2;
-  background: #1e293b;
-  color: #cbd5e1;
+  background: var(--muted);
+  color: var(--foreground);
   font-weight: 600;
   font-family: ui-monospace, monospace;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid var(--border);
 }
 
 .csv-table tbody tr:nth-child(even) td {
-  background: #0f172a;
+  background: var(--card);
 }
 
 .csv-table tbody tr:nth-child(odd) td {
-  background: #0b1222;
+  background: var(--card);
 }
 
 .csv-table tbody tr:hover td {
-  background: #1e293b;
+  background: var(--muted);
 }
 
 .csv-table td {
-  color: #e2e8f0;
+  color: var(--foreground);
   max-width: 18rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -174,7 +174,7 @@ thead .col-sticky-2 {
   width: 3.5rem;
   min-width: 3.5rem;
   max-width: 3.5rem;
-  color: #64748b !important;
+  color: var(--muted-foreground) !important;
   text-align: right !important;
 }
 
@@ -196,11 +196,11 @@ thead .col-sticky-2 {
 .empty {
   padding: 2rem;
   text-align: center;
-  color: #64748b;
+  color: var(--muted-foreground);
 }
 
 .footer {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--muted-foreground);
 }
 </style>
