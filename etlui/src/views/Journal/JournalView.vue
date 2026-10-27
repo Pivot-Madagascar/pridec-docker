@@ -1,38 +1,78 @@
 <template>
-  <div class="grid gap-6 md:grid-cols-[16rem_1fr]">
-    <!-- The months and their passes, newest first: one click shows a pass's journal. Above the journal on small screens. -->
-    <nav aria-label="Cycles" class="space-y-2">
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Cycles</h2>
-      <!-- One native <details> per year: the newest year and the one of the selected pass start open. -->
-      <details v-for="[year, list] in years" :key="year" :open="year === years[0][0] || year === current?.cycle.slice(0, 4)" class="space-y-2">
-        <summary class="cursor-pointer text-sm text-foreground">{{ year }}</summary>
-        <section v-for="c in list" :key="c.cycle" class="mt-2">
-          <h3 class="text-sm font-semibold text-foreground">
-            {{ monthName(c.cycle) }}<span v-if="c.target" class="ml-1 text-xs font-normal text-muted-foreground">· launches go here</span>
-          </h3>
-          <button
-            v-for="p in c.passes"
-            :key="p.id"
-            type="button"
-            class="mt-1 block w-full rounded-lg border px-3 py-2 text-left text-sm"
-            :class="p.id === passId ? 'border-primary bg-muted' : 'border-border bg-card hover:bg-muted'"
-            :aria-current="p.id === passId ? 'true' : undefined"
-            @click="select(p.id)"
-          >
-            <span class="block text-xs" :class="STATE_COLORS[p.state]">
-              {{ p.state }}<span v-if="p.mode === 'test'" class="ml-1 rounded bg-warning/15 px-1.5 text-warning">test</span>
-            </span>
-            <span class="block text-xs text-muted-foreground">started {{ formatTime(p.started_at) }} by {{ p.started_by ?? '-' }}</span>
-            <span class="block text-xs text-muted-foreground">
-              {{ p.events }} event{{ p.events === 1 ? '' : 's' }}<template v-if="p.last_at"> · {{ formatTime(p.last_at) }}</template>
-              · <span class="font-mono">{{ p.id }}</span>
-            </span>
-          </button>
-          <p v-if="!c.passes.length" class="mt-1 text-xs text-muted-foreground">No pass yet: the first launch starts one.</p>
-        </section>
-      </details>
-      <p v-if="!cycles.length && !loading" class="text-sm text-muted-foreground">No cycle yet.</p>
-    </nav>
+  <SideLayout>
+    <!-- The months and their passes, newest first: one click shows a pass's journal. In the side panel (SideLayout),
+         like Recent Activity on the forecast page. -->
+    <template #side>
+      <nav aria-label="Cycles" class="space-y-2 rounded-lg border bg-card p-3 shadow-lg">
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Cycles</h2>
+        <!-- A tree like shadcn's file tree (block sidebar-11: Collapsible, chevron, folder, sub-level with a left rule):
+             years, then months, then passes. The newest year, the target month and those of the selected pass start open;
+             folded content stays in the DOM. -->
+        <Collapsible
+          v-for="[year, list] in years"
+          :key="year"
+          :default-open="year === years[0][0] || year === current?.cycle.slice(0, 4)"
+          :unmount-on-hide="false"
+          data-test="year"
+        >
+          <CollapsibleTrigger :class="TREE_TRIGGER">
+            <ChevronRight :class="TREE_CHEVRON" /><Folder class="size-4 shrink-0" />{{ year }}
+          </CollapsibleTrigger>
+          <CollapsibleContent :class="TREE_SUB">
+            <Collapsible
+              v-for="c in list"
+              :key="c.cycle"
+              :default-open="c.target || c.cycle === current?.cycle"
+              :unmount-on-hide="false"
+              data-test="cycle"
+            >
+              <CollapsibleTrigger :class="TREE_TRIGGER">
+                <ChevronRight :class="TREE_CHEVRON" /><Folder class="size-4 shrink-0" />
+                <span class="font-semibold">{{ monthName(c.cycle) }}</span>
+                <span class="text-xs text-muted-foreground">
+                  · {{ c.passes.length }} pass{{ c.passes.length === 1 ? '' : 'es' }}<template v-if="c.target"> · launches go here</template>
+                </span>
+              </CollapsibleTrigger>
+              <CollapsibleContent :class="TREE_SUB">
+                <!-- One shadcn Trace line per pass, like Recent Activity: the icon and colour of its state; a click selects
+                     the pass (its journal on the right) and unfolds its details. The selected pass starts unfolded. -->
+                <Trace v-if="c.passes.length" class="py-1">
+                  <TraceCollapsible v-for="p in c.passes" :key="p.id" :default-open="p.id === passId" data-test="pass">
+                    <TraceCollapsibleTrigger
+                      :aria-current="p.id === passId ? 'true' : undefined"
+                      :class="{ 'font-semibold text-foreground': p.id === passId }"
+                      @click="select(p.id)"
+                    >
+                      <TraceLine>
+                        <TraceIcon :class="STATE_COLORS[p.state]">
+                          <component :is="STATE_ICONS[p.state]" :data-test="`state-${p.state}`" />
+                        </TraceIcon>
+                        <TraceTitle>
+                          {{ p.state }}<span v-if="p.mode === 'test'" class="ml-1 rounded bg-warning/15 px-1.5 text-xs text-warning">test</span>
+                        </TraceTitle>
+                        <TraceDescription class="font-mono text-xs">{{ p.id }}</TraceDescription>
+                      </TraceLine>
+                    </TraceCollapsibleTrigger>
+                    <TraceCollapsibleContent class="text-xs">
+                      <!-- The body of AI Elements' Context (hover card of token usage), inline: one fact per row, the label on the
+                           left, the value on the right, a rule between rows; a value too long wraps under its label. -->
+                      <dl class="divide-y">
+                        <div v-for="row in passDetails(p)" :key="row.label" class="flex flex-wrap items-baseline justify-between gap-x-3 py-1.5">
+                          <dt>{{ row.label }}</dt>
+                          <dd class="ml-auto font-mono text-foreground">{{ row.value }}</dd>
+                        </div>
+                      </dl>
+                    </TraceCollapsibleContent>
+                  </TraceCollapsible>
+                </Trace>
+                <p v-if="!c.passes.length" class="mt-1 text-xs text-muted-foreground">No pass yet: start one from Home.</p>
+              </CollapsibleContent>
+            </Collapsible>
+          </CollapsibleContent>
+        </Collapsible>
+        <p v-if="!cycles.length && !loading" class="text-sm text-muted-foreground">No cycle yet.</p>
+      </nav>
+    </template>
 
     <div class="min-w-0 space-y-6">
       <div class="flex flex-wrap items-center justify-between gap-4">
@@ -139,10 +179,11 @@
         open forecast run is abandoned. Its journal stays readable. The month can be run again in a new pass.
       </ConfirmDialog>
     </div>
-  </div>
+  </SideLayout>
 </template>
 
 <script setup lang="ts">
+import SideLayout from '@/components/SideLayout.vue'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { computed, onMounted, ref } from 'vue'
 import TablePager from '@/components/TablePager.vue'
@@ -154,6 +195,11 @@ import type { JournalEvent, JournalPass, PassState } from '@/types/pipeline'
 import RequestDialog from '@/views/TrackerView/components/RequestDialog.vue'
 import ConfirmDialog from '@/views/Dashboard/components/ConfirmDialog.vue'
 import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { ChevronRight, CircleCheck, CirclePause, CirclePlay, CircleX, Folder } from '@lucide/vue'
+import {
+  Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle
+} from '@/components/ui/trace'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 const STEPS = ['data_import', 'forecast', 'system_update']
@@ -177,6 +223,19 @@ const STATE_COLORS: Record<PassState, string> = {
   complete: 'text-success',
   abandoned: 'text-destructive',
 }
+// The unfolded details of a pass in the tree: label, value.
+const passDetails = (p: JournalPass) => [
+  { label: 'Started by', value: p.started_by ?? '-' },
+  { label: 'Started', value: formatTime(p.started_at) },
+  { label: 'Events', value: String(p.events) },
+  ...(p.last_at ? [{ label: 'Last event', value: formatTime(p.last_at) }] : [])
+]
+const STATE_ICONS: Record<PassState, typeof CircleCheck> = {
+  active: CirclePlay,
+  paused: CirclePause,
+  complete: CircleCheck,
+  abandoned: CircleX,
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -189,6 +248,11 @@ const passId = ref(typeof query === 'string' && /^[0-9a-f]{8}$/.test(query) ? qu
 const step = ref('')
 const selected = ref<JournalEvent | null>(null)
 const abandoning = ref(false)
+
+// The tree's look, after shadcn's file tree (sidebar-11): the chevron turns when its own trigger is open.
+const TREE_TRIGGER = 'group/trigger flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm text-foreground hover:bg-muted'
+const TREE_CHEVRON = 'size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/trigger:rotate-90'
+const TREE_SUB = 'ml-3.5 border-l pl-2'
 
 // Cycles come newest first: grouping keeps that order, years included.
 const years = computed(() => {

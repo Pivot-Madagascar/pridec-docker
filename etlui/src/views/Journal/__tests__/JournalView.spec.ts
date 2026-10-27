@@ -55,20 +55,31 @@ describe('JournalView', () => {
     const wrapper = mount(JournalView)
     await flushPromises()
 
-    const years = wrapper.findAll('nav details')
-    expect(years.map(d => [d.find('summary').text(), d.attributes('open') !== undefined])).toEqual([['2026', true], ['2025', false]])
-    expect(wrapper.find('nav section').text()).toContain('launches go here')
-    const cards = wrapper.findAll('nav button')
+    const folds = (selector: string) =>
+      wrapper.findAll(selector).map(d => [d.find('button').text(), d.attributes('data-state') === 'open'])
+    expect(folds('[data-test="year"]')).toEqual([['2026', true], ['2025', false]])
+    // A tree (shadcn file-tree look): each month folds its passes too, open for the target month and the selected pass's month
+    const months = folds('[data-test="cycle"]')
+    expect(months.map(([, open]) => open)).toEqual([true, true, false])
+    expect(months[0][0]).toContain('launches go here')
+    expect(months[1][0]).toContain('2 passes')
+    const cards = wrapper.findAll('[data-test="pass"]') // one shadcn Trace line per pass, like Recent Activity
     expect(cards).toHaveLength(4)
     expect(cards[0].text()).toContain('active')
     expect(cards[0].text()).toContain('test')
     expect(cards[1].text()).toContain('paused')
+    expect(cards[1].find('[data-test="state-paused"]').exists()).toBe(true) // the icon of its state
+    expect(cards[1].find('dl').exists()).toBe(false) // folded: its details show once unfolded
     expect(cards[2].text()).toContain('complete')
-    expect(cards[2].text()).toContain('by jdoe')
-    expect(cards[2].text()).toContain('42 events')
-    expect(cards[2].attributes('aria-current')).toBe('true') // ?pass=cccc3333
+    // The selected pass starts unfolded: its details as a labelled list, one fact per row
+    const details = Object.fromEntries(cards[2].findAll('dt').map((dt, i) => [dt.text(), cards[2].findAll('dd')[i].text()]))
+    expect(details).toMatchObject({ 'Started by': 'jdoe', Events: '42' })
+    expect(Object.keys(details)).toEqual(['Started by', 'Started', 'Events', 'Last event'])
+    expect(cards[2].find('button').attributes('aria-current')).toBe('true') // ?pass=cccc3333
 
-    await cards[1].trigger('click')
+    await cards[1].find('button').trigger('click') // selects the pass and unfolds its details
+    await flushPromises()
+    expect(cards[1].find('dl').text()).toContain('jdoe')
     expect(getJournal).toHaveBeenLastCalledWith('bbbb2222')
     expect(replace).toHaveBeenCalledWith({ query: { pass: 'bbbb2222' } })
   })
