@@ -10,9 +10,9 @@
       </div>
       <div class="preview-heading">
         <slot name="actions" />
-        <button type="button" class="preview-close" aria-label="Close preview" @click="emit('close')">
-          <Icon :path="ICONS.close" class="preview-close-icon" />
-        </button>
+        <Button variant="ghost" size="icon-sm" aria-label="Close preview" @click="emit('close')">
+          <Icon :path="ICONS.close" class="size-5" />
+        </Button>
       </div>
     </header>
 
@@ -32,6 +32,7 @@
 import { useId } from 'vue'
 import Icon, { ICONS } from '@/components/Icons'
 import BaseDialog from './BaseDialog.vue'
+import { Button } from '@/components/ui/button'
 
 defineProps<{
   open: boolean
@@ -120,23 +121,6 @@ const BADGES = { server: 'On server', local: 'Selected file — not uploaded', d
   background: rgba(59, 130, 246, 0.12);
 }
 
-.preview-close {
-  display: flex;
-  padding: 0.375rem;
-  border-radius: 0.5rem;
-  color: #94a3b8;
-  cursor: pointer;
-}
-
-.preview-close:hover {
-  color: #f1f5f9;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.preview-close-icon {
-  width: 1.25rem;
-  height: 1.25rem;
-}
 
 .preview-body {
   flex: 1;

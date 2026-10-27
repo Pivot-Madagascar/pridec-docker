@@ -10,18 +10,20 @@
       </div>
     </div>
     <div class="dialog-actions">
-      <button type="button" class="dialog-btn" :disabled="busy" autofocus @click="emit('cancel')">Cancel</button>
-      <button type="button" class="dialog-btn dialog-btn-danger" data-test="confirm-btn" :disabled="busy" @click="emit('confirm')">
-        <span v-if="busy" class="confirm-spinner animate-spin" aria-hidden="true"></span>
+      <Button variant="outline" :disabled="busy" autofocus @click="emit('cancel')">Cancel</Button>
+      <Button variant="destructive" data-test="confirm-btn" :disabled="busy" @click="emit('confirm')">
+        <LoaderCircle v-if="busy" class="animate-spin" aria-hidden="true" />
         {{ busy ? 'Deleting…' : confirmLabel }}
-      </button>
+      </Button>
     </div>
   </BaseDialog>
 </template>
 
 <script setup lang="ts">
 import { useId } from 'vue'
+import { LoaderCircle } from '@lucide/vue'
 import Icon, { ICONS } from '@/components/Icons'
+import { Button } from '@/components/ui/button'
 import BaseDialog from './BaseDialog.vue'
 
 defineProps<{
@@ -81,11 +83,4 @@ const titleId = useId()
   line-height: 1.5;
 }
 
-.confirm-spinner {
-  width: 0.875rem;
-  height: 0.875rem;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #fff;
-  border-radius: 50%;
-}
 </style>

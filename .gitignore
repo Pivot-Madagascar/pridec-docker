@@ -47,6 +47,8 @@ build.log
 #output of docker workflow
 output/
 input/
+# shadcn-vue's Input component, not pipeline files
+!etlui/src/components/ui/input/
 # etlhub uploaded pipeline files (config, external data)
 uploads/
 # leftover of the removed DELETE /output/reset (see etlhub/docs/known-issues.md)

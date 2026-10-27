@@ -15,7 +15,7 @@ Vue 3 + TypeScript front-end (Vite 7, Pinia 3, vue-router 4, axios, Tailwind 4, 
 - `src/config/pipeline.ts` — display of each checkpoint as an `ActionCard` (label, icon) and `jobOf` (checkpoint → job route); step 2 display names (`DISEASE_NAMES`, `LEVEL_NAMES`, `ITEM_NAMES`, `coupleName`) and `plainError` (etlhub's common refusals in plain words, used by `usePipeline` for every error toast). No rule: statuses, `launchable` and order come from etlhub
 - `src/services/pipeline.ts` + `src/types/pipeline.ts` — `/pipeline/*` routes and job launches, with `confirm`; `GET /import_availability` (`ImportAvailabilityReport`)
 - `src/utils/status.ts` — `statusColor` (badge colours of an HTTP code or a job status, used by `RequestTable`, `RequestDetail`, `JobLogsPanel`). `src/utils/preview.ts` — pure helpers, no I/O: streaming CSV parser (`createCsvParser`, `previewCsvStream`, same output shape as etlhub's preview), `formatPeriod`, `formatCell`
-- `src/components/ui/` — shadcn-vue components copied by its CLI (`Button` so far), ours to edit; `src/lib/utils.ts` re-exports `cn`. Migration by lots: `docs/decision-design/shadcn-migration/shadcn-migration.md`.
+- `src/components/ui/` — shadcn-vue components copied by its CLI (`Button`, `Input`, `Label`, `Badge`, `Card`), ours to edit; `src/lib/utils.ts` re-exports `cn`. Migration by lots: `docs/decision-design/shadcn-migration/shadcn-migration.md`.
 - `src/components/` — `Drawer.vue` (right-side navigation menu, opened by the header hamburger), `JobToast.vue` (content of a job's toast), `Icons/` (inline SVG paths, `Icon` + `ICONS`). `src/styles/base.css`.
 - Tests: `__tests__/*.spec.ts` next to the code (`router/`, `services/`, `composables/`, `utils/`). The `test` block of `vite.config.ts` (no `vitest.config.ts`): `happy-dom`, `globals: true`, `src/test/setup.ts` (fresh Pinia before each test).
 
@@ -58,7 +58,7 @@ Run from `etlui/`. Yarn 1 is the package manager (`yarn.lock`; the `Dockerfile` 
 - Dev: `yarn dev` (Vite; needs `etlhub` on `:8111`, proxy `/api` and `/auth`)
 - Build: `yarn build` (output `dist/`, git-ignored). `vite build` does **not** type-check.
 - Preview: `yarn preview`
-- Tests: `yarn vitest run` (there is no `test` script). 21 files, 116 tests, all passing.
+- Tests: `yarn vitest run` (there is no `test` script). 22 files, 117 tests, all passing.
 - One file: `yarn vitest run src/composables/__tests__/usePipeline.spec.ts`
 - Type-check, linter, formatter, coverage: none installed (`vue-tsc`, ESLint, Prettier and `@vitest/coverage-*` are absent). Do not invent one.
 - Docker: `docker build -t etlui etlui/` → nginx on 8000.

@@ -1,5 +1,5 @@
 <template>
-  <section class="mx-auto max-w-3xl space-y-6 rounded-2xl border border-gray-800 bg-slate-900 p-8">
+  <Card class="mx-auto max-w-3xl gap-0 space-y-6 p-8">
     <div>
       <h1 class="text-2xl font-bold text-gray-100">Start a pass</h1>
       <p class="text-sm text-gray-400">Choose the cycle, then start a new pass or resume a paused one. The forecast page follows.</p>
@@ -9,19 +9,19 @@
 
     <p v-if="!state" class="text-sm text-gray-400">Loading the pipeline state…</p>
     <form v-else class="space-y-6" @submit.prevent="start">
-      <label class="block text-sm text-gray-200">
+      <Label>
         Cycle
         <!-- A pass is active: the server refuses another month until it is paused or abandoned. -->
-        <input
+        <Input
           v-model="month"
           type="month"
           required
           :max="thisMonth"
           :disabled="busy || active != null"
           :title="active ? 'Pause or abandon the active pass first (on the forecast page)' : 'Month of the pass'"
-          class="ml-2 rounded-md border border-gray-600 bg-gray-800 px-2 py-1 text-gray-200 [color-scheme:dark] disabled:opacity-50"
+          class="w-auto"
         />
-      </label>
+      </Label>
 
       <fieldset v-if="month" class="space-y-2 text-sm text-gray-200">
         <legend class="mb-2 font-semibold">Pass</legend>
@@ -66,7 +66,7 @@
         <Button type="submit" size="lg" :disabled="busy || !month">Start</Button>
       </div>
     </form>
-  </section>
+  </Card>
 </template>
 
 <script setup lang="ts">
@@ -76,6 +76,9 @@ import ModeToggle from '@/views/Dashboard/components/ModeToggle.vue'
 import { useJournal } from '@/composables/useJournal'
 import { usePipeline } from '@/composables/usePipeline'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useConfigStore } from '@/stores/config'
 
 const router = useRouter()

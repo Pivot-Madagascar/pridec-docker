@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@lucide/vue": "^1.62.0",
+    "@vueuse/core": "^15.0.0",
     "axios": "^1.11.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.0",

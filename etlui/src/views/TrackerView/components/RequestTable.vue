@@ -54,13 +54,9 @@
           </td>
           <td class="px-4 py-2 text-right">
             <!-- Only requests that started a job (their logs) or were refused by the pipeline (the reason) have something to show -->
-            <button
-              v-if="hasDetail(req)"
-              data-test="detail-btn" class="detail-btn text-xs text-blue-400 hover:text-blue-300"
-              @click.stop="$emit('select', req.request_id)"
-            >
+            <Button v-if="hasDetail(req)" variant="link" size="xs" data-test="detail-btn" @click.stop="$emit('select', req.request_id)">
               Detail
-            </button>
+            </Button>
           </td>
         </tr>
         <tr v-if="!requests.length">
@@ -72,21 +68,9 @@
     </table>
 
     <div class="flex items-center justify-end border-t border-gray-700 bg-gray-900 px-4 py-2 space-x-2">
-      <button
-        class="rounded px-2 py-1 text-xs bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-50"
-        :disabled="page <= 0"
-        @click="$emit('update:page', page - 1)"
-      >
-        Prev
-      </button>
+      <Button variant="secondary" size="xs" :disabled="page <= 0" @click="$emit('update:page', page - 1)">Prev</Button>
       <span class="text-xs text-gray-400">Page {{ page + 1 }} / {{ totalPages || 1 }}</span>
-      <button
-        class="rounded px-2 py-1 text-xs bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-50"
-        :disabled="page + 1 >= totalPages"
-        @click="$emit('update:page', page + 1)"
-      >
-        Next
-      </button>
+      <Button variant="secondary" size="xs" :disabled="page + 1 >= totalPages" @click="$emit('update:page', page + 1)">Next</Button>
     </div>
   </div>
 </template>
@@ -95,6 +79,7 @@
 import { computed } from 'vue'
 import type { RequestLog } from '@/services/api'
 import { statusColor } from '@/utils/status'
+import { Button } from '@/components/ui/button'
 
 const PAGE_SIZE = 10
 const props = defineProps<{

@@ -24,10 +24,10 @@
       </label>
     </div>
     <div class="dialog-actions">
-      <button type="button" class="dialog-btn" :disabled="busy" autofocus @click="emit('cancel')">Cancel</button>
-      <button type="button" class="dialog-btn dialog-btn-primary" :disabled="busy || !approved" @click="emit('confirm')">
+      <Button variant="outline" :disabled="busy" autofocus @click="emit('cancel')">Cancel</Button>
+      <Button variant="destructive" :disabled="busy || !approved" @click="emit('confirm')">
         Confirm
-      </button>
+      </Button>
     </div>
   </BaseDialog>
 </template>
@@ -36,6 +36,7 @@
 import { computed, ref, useId, watch } from 'vue'
 import type { PendingConfirmation } from '@/composables/usePipeline'
 import BaseDialog from './BaseDialog.vue'
+import { Button } from '@/components/ui/button'
 
 const props = defineProps<{
   pending: PendingConfirmation | null
@@ -137,11 +138,5 @@ watch(
   font-size: 0.875rem;
   font-weight: 600;
   color: #f1f5f9;
-}
-
-.dialog-btn-primary {
-  color: #fff;
-  background: #d97706;
-  border-color: #d97706;
 }
 </style>

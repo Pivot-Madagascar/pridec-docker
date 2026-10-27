@@ -4,11 +4,9 @@ import App from './App.vue'
 import router from './router'
 import './styles/base.css'
 
-// ponytail: follows the OS only; the header toggle of D3 (tailwind-migration.md) overrides it when added
-const darkOs = matchMedia('(prefers-color-scheme: dark)')
-const applyTheme = () => document.documentElement.classList.toggle('dark', darkOs.matches)
-applyTheme()
-darkOs.addEventListener('change', applyTheme)
+// ponytail: dark only while the hand-written surfaces are still dark hex (shadcn-migration lots 3-5);
+// lot 6 follows the OS and adds the header toggle (D3)
+document.documentElement.classList.add('dark')
 
 const app = createApp(App)
 

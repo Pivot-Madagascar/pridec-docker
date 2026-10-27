@@ -3,15 +3,11 @@
     <div class="flex items-center justify-between gap-4">
       <h3 class="flex items-center gap-2 text-sm font-semibold text-gray-100">
         Logs
-        <span v-if="live" data-test="live-badge" class="live-badge rounded bg-green-900 px-2 py-0.5 text-xs text-green-300">● Live</span>
+        <Badge v-if="live" data-test="live-badge" class="border-transparent bg-green-900 text-green-300">● Live</Badge>
       </h3>
-      <button
-        class="rounded-md px-3 py-1 text-sm bg-gray-700 text-gray-300 hover:bg-gray-600"
-        :disabled="jobLogsLoading"
-        @click="store.fetchJobLogs(jobId)"
-      >
+      <Button variant="secondary" size="sm" :disabled="jobLogsLoading" @click="store.fetchJobLogs(jobId)">
         {{ jobLogsLoading ? 'Loading...' : 'Refresh logs' }}
-      </button>
+      </Button>
     </div>
     <div v-if="jobLogsError" class="rounded-lg border border-red-900 bg-red-950 p-3 text-sm text-red-300">
       {{ jobLogsError }}
@@ -37,6 +33,8 @@ import { useTrackingStore } from '@/stores/useTrackingStore'
 import type { JobLogs } from '@/services/api'
 import { statusColor } from '@/utils/status'
 import { useWebSocketLogger } from '@/composables/useWebSocketLogger'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 
 const props = defineProps<{ jobId: string }>()
 

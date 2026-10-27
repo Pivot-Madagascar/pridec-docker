@@ -3,20 +3,11 @@
     <div class="flex-row-center-between">
       <h1 class="heading-primary">ETL Logs Live</h1>
       <div class="flex-row-center space-x-3">
-        <span
-          v-if="currentJobId"
-          class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold"
-          :class="statusBadgeClass"
-        >
-          <span class="w-2 h-2 rounded-full mr-2" :class="statusDotClass"></span>
+        <Badge v-if="currentJobId" variant="outline" class="px-3 py-1" :class="statusBadgeClass">
+          <span class="size-2 rounded-full" :class="statusDotClass"></span>
           {{ status || 'Idle' }}
-        </span>
-        <button
-          class="btn-link-secondary"
-          @click="reset"
-        >
-          Reset
-        </button>
+        </Badge>
+        <Button variant="secondary" @click="reset">Reset</Button>
       </div>
     </div>
 
@@ -24,32 +15,27 @@
       Connect to an ETL job via WebSocket to stream logs in real time. Enter a job ID below to start tracking.
     </p>
 
-    <div class="card card-padded">
+    <Card>
+      <CardContent>
       <div class="flex-row-center-between gap-4 flex-wrap">
         <div class="flex-row-center flex-1 space-x-3 min-w-75">
-          <input
+          <Input
             v-model="jobIdInput"
             type="text"
-            class="form-input font-mono"
+            class="font-mono"
+            aria-label="Job ID"
             placeholder="Enter job ID (e.g. import_gee_a1b2c3d4)"
             @keyup.enter="start"
             :disabled="connected || !!route.query.jobId"
           />
-          <button
-            class="btn-primary"
+          <Button
             :disabled="!jobIdInput || connected || (!isCompleted && currentJobId !== jobIdInput)"
             @click="start"
           >
-            <span v-if="connecting" class="spinner animate-spin" aria-hidden="true"></span>
+            <LoaderCircle v-if="connecting" class="animate-spin" aria-hidden="true" />
             {{ connected ? 'Connected' : connecting ? 'Connecting...' : 'Connect' }}
-          </button>
-          <button
-            v-if="connected"
-            class="btn-link-secondary"
-            @click="disconnect"
-          >
-            Disconnect
-          </button>
+          </Button>
+          <Button v-if="connected" variant="secondary" @click="disconnect">Disconnect</Button>
         </div>
         <div v-if="connectionError" class="text-sm text-red-400">
           {{ connectionError }}
@@ -59,27 +45,17 @@
       <div v-if="statusMessage" class="mt-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
         <p class="text-sm text-blue-800 dark:text-blue-300">{{ statusMessage }}</p>
       </div>
-    </div>
+      </CardContent>
+    </Card>
 
-    <div class="card card-padded">
+    <Card>
+      <CardContent>
       <div class="flex-row-center-between mb-4">
         <h2 class="heading-tertiary text-gray-900 dark:text-white">Log Output</h2>
         <div class="flex-row-center space-x-2">
           <span class="text-xs text-gray-500">Lines: {{ lineCount }}</span>
-          <button
-            v-if="lineCount > 0"
-            class="text-xs text-blue-400 hover:text-blue-300"
-            @click="scrollToBottom"
-          >
-            Scroll ↓
-          </button>
-          <button
-            v-if="lineCount > 0"
-            class="text-xs text-gray-400 hover:text-gray-300"
-            @click="clearLogs"
-          >
-            Clear
-          </button>
+          <Button v-if="lineCount > 0" variant="link" size="xs" @click="scrollToBottom">Scroll ↓</Button>
+          <Button v-if="lineCount > 0" variant="ghost" size="xs" @click="clearLogs">Clear</Button>
         </div>
       </div>
 
@@ -99,13 +75,19 @@
           </p>
         </template>
       </div>
-    </div>
+      </CardContent>
+    </Card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
+import { LoaderCircle } from '@lucide/vue'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { useWebSocketLogger } from '@/composables/useWebSocketLogger'
 
 const route = useRoute()
@@ -209,9 +191,5 @@ function scrollToBottom() {
 
 .status-badge-unknown {
   @apply bg-gray-50 text-gray-800 border border-gray-200;
-}
-
-.spinner {
-  @apply h-5 w-5 mr-2 rounded-full border-4 border-current/25 border-t-current;
 }
 </style>

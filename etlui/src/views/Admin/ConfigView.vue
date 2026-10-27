@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useConfigStore } from '@/stores/config'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { LOG_LEVELS, type ConfigUpdate } from '@/types/config'
 
@@ -71,7 +74,7 @@ const handleReload = async () => {
 
 <template>
   <div class="login-container">
-    <div class="login-card">
+    <Card class="w-full max-w-md gap-4 p-8">
       <h2 class="form-title">Dynamic Configuration</h2>
       
       <div v-if="configStore.error" class="error-message">
@@ -83,8 +86,8 @@ const handleReload = async () => {
       </div>
 
       <div class="form-group">
-        <label for="dhis_url">DHIS URL (from login)</label>
-        <input
+        <Label for="dhis_url">DHIS URL (from login)</Label>
+        <Input
           id="dhis_url"
           :value="configStore.config?.dhis_url || ''"
           type="url"
@@ -93,13 +96,13 @@ const handleReload = async () => {
       </div>
 
       <div class="form-group">
-        <label>DHIS Token</label>
+        <Label>DHIS Token</Label>
         <p class="token-status">{{ tokenStatus }}</p>
       </div>
 
       <div class="form-group">
-        <label for="parent_ou">Parent OrgUnit ID</label>
-        <input
+        <Label for="parent_ou">Parent OrgUnit ID</Label>
+        <Input
           id="parent_ou"
           v-model="form.parent_ou"
           type="text"
@@ -108,8 +111,8 @@ const handleReload = async () => {
       </div>
 
       <div class="form-group">
-        <label for="ou_level">OrgUnit Level</label>
-        <input
+        <Label for="ou_level">OrgUnit Level</Label>
+        <Input
           id="ou_level"
           v-model.number="form.ou_level"
           type="number"
@@ -120,8 +123,8 @@ const handleReload = async () => {
       </div>
 
       <div class="form-group">
-        <label for="disease_code">Disease Code</label>
-        <input
+        <Label for="disease_code">Disease Code</Label>
+        <Input
           id="disease_code"
           v-model="form.disease_code"
           type="text"
@@ -130,7 +133,7 @@ const handleReload = async () => {
       </div>
 
       <div class="form-group">
-        <label for="log_level">Log level</label>
+        <Label for="log_level">Log level</Label>
         <select id="log_level" v-model="form.log_level">
           <option value="">Default (INFO)</option>
           <option v-for="level in LOG_LEVELS" :key="level" :value="level">{{ level }}</option>
@@ -138,8 +141,8 @@ const handleReload = async () => {
       </div>
 
       <div class="form-group">
-        <label for="gee_variables">GEE variables</label>
-        <input
+        <Label for="gee_variables">GEE variables</Label>
+        <Input
           id="gee_variables"
           v-model="form.gee_variables"
           type="text"
@@ -158,19 +161,15 @@ const handleReload = async () => {
           {{ configStore.loading ? 'Loading...' : 'Reload from .env' }}
         </Button>
       </div>
-    </div>
+    </Card>
   </div>
 </template>
 
 <style scoped>
-@reference "tailwindcss";
+@reference "../../styles/base.css";
 
 .login-container {
   @apply flex justify-center items-center min-h-[60vh] text-white;
-}
-
-.login-card {
-  @apply flex flex-col gap-4 p-8 border border-white/10 rounded-xl bg-[#0f172a] max-w-md w-full;
 }
 
 .form-title {
@@ -181,13 +180,9 @@ const handleReload = async () => {
   @apply flex flex-col gap-2 text-left;
 }
 
-.form-group label {
-  @apply block text-sm font-medium text-white;
-}
-
-.form-group input,
+/* ponytail: native <select> styled like Input; shadcn Select (Reka, portal) comes with lot 5 */
 .form-group select {
-  @apply w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 transition-colors;
+  @apply h-9 w-full rounded-md border border-input bg-input/30 px-3 text-sm;
 }
 
 .form-group input[readonly] {
