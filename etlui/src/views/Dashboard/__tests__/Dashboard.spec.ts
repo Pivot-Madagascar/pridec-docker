@@ -105,7 +105,7 @@ describe('Dashboard', () => {
     expect(html.indexOf('mode-toggle')).toBeLessThan(html.indexOf('Data Import'))
     expect(wrapper.text()).toContain('DHIS2: DRYRUN on (.env), nothing is written.') // read only, from GET /pipeline/checkpoints
 
-    await wrapper.findAll('.mode-btn').find(b => b.text() === 'YES')!.trigger('click')
+    await wrapper.findAll('[data-test="mode-btn"]').find(b => b.text() === 'YES')!.trigger('click')
     await flushPromises()
     expect(setMode).toHaveBeenCalledWith(true)
     wrapper.unmount()
@@ -156,7 +156,7 @@ describe('Dashboard', () => {
     launchJob.mockResolvedValue('job')
     const wrapper = await mountPage()
 
-    const cards = wrapper.findAll('.action-card')
+    const cards = wrapper.findAll('[data-test="action-card"]')
     const gee = cards.find(c => c.text().includes('Import GEE'))!
     const build = cards.find(c => c.text().includes('Build Analytics'))!
     expect(gee.attributes('disabled')).toBeUndefined()
@@ -178,9 +178,9 @@ describe('Dashboard', () => {
       .mockResolvedValueOnce('job_2')
     const wrapper = await mountPage()
 
-    await wrapper.findAll('.action-card').find(c => c.text().includes('Import GEE'))!.trigger('click')
+    await wrapper.findAll('[data-test="action-card"]').find(c => c.text().includes('Import GEE'))!.trigger('click')
     await flushPromises()
-    const dialog = wrapper.find('.impact-dialog')
+    const dialog = wrapper.find('[data-test="impact-dialog"]')
     expect(dialog.text()).toContain('forecast, system_update')
     const confirmButton = dialog.findAll('button').find(b => b.text() === 'Confirm')!
     expect(confirmButton.attributes('disabled')).toBeDefined()
@@ -197,10 +197,10 @@ describe('Dashboard', () => {
     getImportAvailability.mockReturnValue(new Promise(resolve => (answer = resolve)))
     const wrapper = await mountPage()
 
-    expect(wrapper.find('.accordion-header').findAll('button').length).toBe(0) // nothing next to the title
-    const details = wrapper.find('.imports-approval').findAll('button').find(b => b.text() === 'Details')!
+    expect(wrapper.find('[data-test="accordion-header"]').findAll('button').length).toBe(0) // nothing next to the title
+    const details = wrapper.find('[data-test="imports-approval"]').findAll('button').find(b => b.text() === 'Details')!
     await details.trigger('click')
-    expect(wrapper.find('.availability-dialog').text()).toContain('Checking DHIS2')
+    expect(wrapper.find('[data-test="availability-dialog"]').text()).toContain('Checking DHIS2')
 
     const el = { last_updated: null, error: null }
     answer({
@@ -213,14 +213,14 @@ describe('Dashboard', () => {
     })
     await flushPromises()
 
-    const dialog = wrapper.find('.availability-dialog')
+    const dialog = wrapper.find('[data-test="availability-dialog"]')
     expect(dialog.text()).toContain('Import Pivot COM')
     const malaria = dialog.find('tr[data-code="pridec_historic_COMMalaria"]')
     expect(malaria.findAll('td').map(td => td.text())).toEqual(['67 60', 'N/A', '✗'])
-    expect(malaria.find('.is-ko').exists()).toBe(true)
+    expect(malaria.find('[aria-label="Not imported"]').exists()).toBe(true)
     expect(dialog.find('tr[data-code="pridec_historic_COMDiarrhea"] .is-ok').text()).toBe('✓')
     expect(dialog.text()).toContain('pridec_historic_COMMalaria: analytics behind the stored values, run Build Analytics.')
-    expect(dialog.find('.availability-origin').text()).toMatch(/^reused checked .* by jdoe · pass 3f9c1a2b$/) // shared by another user
+    expect(dialog.find('[data-test="availability-origin"]').text()).toMatch(/^reused checked .* by jdoe · pass 3f9c1a2b$/) // shared by another user
 
     await dialog.findAll('button').find(b => b.text() === 'Refresh')!.trigger('click')
     expect(getImportAvailability).toHaveBeenLastCalledWith(true)
@@ -231,7 +231,7 @@ describe('Dashboard', () => {
     getImportAvailability.mockRejectedValue(new Error('500'))
     const wrapper = await mountPage()
 
-    await wrapper.find('.imports-approval').findAll('button').find(b => b.text() === 'Details')!.trigger('click')
+    await wrapper.find('[data-test="imports-approval"]').findAll('button').find(b => b.text() === 'Details')!.trigger('click')
     await flushPromises()
 
     expect(wrapper.find('.availability-dialog [role="alert"]').text()).toBe('Could not check the imported data')
@@ -248,18 +248,18 @@ describe('Dashboard', () => {
     getImportAvailability.mockResolvedValue({ dhis_url: 'http://dhis2.test', last_analytics: null, imports: [] })
     const wrapper = await mountPage()
 
-    expect(wrapper.findAll('.action-card').map(c => c.text()).some(t => t.includes('approve_imports'))).toBe(false)
-    expect(wrapper.find('.imports-approval').findAll('button').map(b => b.text())).toEqual(['Details']) // moved under the report
-    await wrapper.find('.imports-approval button').trigger('click')
+    expect(wrapper.findAll('[data-test="action-card"]').map(c => c.text()).some(t => t.includes('approve_imports'))).toBe(false)
+    expect(wrapper.find('[data-test="imports-approval"]').findAll('button').map(b => b.text())).toEqual(['Details']) // moved under the report
+    await wrapper.find('[data-test="imports-approval"] button').trigger('click')
     await flushPromises()
-    expect(wrapper.find('.availability-dialog').attributes('open')).toBeDefined()
-    const footer = wrapper.find('.availability-dialog .preview-footer')
+    expect(wrapper.find('[data-test="availability-dialog"]').attributes('open')).toBeDefined()
+    const footer = wrapper.find('[data-test="availability-dialog"] [data-test="preview-footer"]')
     expect(footer.findAll('button').map(b => [b.text(), b.attributes('disabled') !== undefined])).toEqual([
       ['Reject', true], ['Approve imports', false]]) // nothing approved yet: nothing to reject
     await footer.findAll('button')[1].trigger('click')
     await flushPromises()
     expect(decideImports).toHaveBeenCalledWith('approve')
-    expect(wrapper.find('.availability-dialog').attributes('open')).toBeUndefined() // closed before the decision
+    expect(wrapper.find('[data-test="availability-dialog"]').attributes('open')).toBeUndefined() // closed before the decision
     wrapper.unmount()
   })
 
@@ -273,56 +273,56 @@ describe('Dashboard', () => {
     getCheckpoints.mockResolvedValue(forecast)
     const wrapper = await mountPage()
 
-    const runs = wrapper.find('.forecast-runs')
-    expect(runs.find('.todo').text()).toContain('launch “Disease data” for Malaria · Community sites (COM).')
-    expect(runs.findAll('.disease-card')).toHaveLength(3)
-    const nav = () => runs.findAll('.disease-nav a').map(a => a.classes().includes('is-active'))
+    const runs = wrapper.find('[data-test="forecast-runs"]')
+    expect(runs.find('[data-test="todo"]').text()).toContain('launch “Disease data” for Malaria · Community sites (COM).')
+    expect(runs.findAll('[data-test="disease-card"]')).toHaveLength(3)
+    const nav = () => runs.findAll('[data-test="disease-nav"] a').map(a => a.attributes('aria-current') === 'true')
     expect(nav()).toEqual([true, false, false])
-    const carousel = runs.find('.carousel').element as HTMLElement
+    const carousel = runs.find('[data-test="carousel"]').element as HTMLElement
     Object.defineProperty(carousel, 'clientWidth', { value: 800 })
     carousel.scrollLeft = 1600
-    await runs.find('.carousel').trigger('scroll')
+    await runs.find('[data-test="carousel"]').trigger('scroll')
     expect(nav()).toEqual([false, false, true])
     const malaria = runs.find('#forecast-Malaria')
     expect(malaria.text()).toContain('1 of 3 levels published')
     // Only the open run has steps to show: its whole card opens them, highlighted.
-    expect(malaria.findAll('.dropzone').every(d => d.element.closest('dialog.steps-dialog'))).toBe(true)
-    const [adj, com, csb] = malaria.findAll('.level-column')
+    expect(malaria.findAll('[data-test="dropzone"]').every(d => d.element.closest('dialog.steps-dialog'))).toBe(true)
+    const [adj, com, csb] = malaria.findAll('[data-test="level-column"]')
     expect(malaria.findAll('button').some(b => b.text() === 'Steps')).toBe(false)
-    expect([adj, com, csb].map(l => l.classes().includes('is-open'))).toEqual([false, true, false])
-    expect([adj, com, csb].map(l => l.find('.card-steps').exists())).toEqual([false, true, false])
+    expect([adj, com, csb].map(l => l.attributes('aria-current') === 'true')).toEqual([false, true, false])
+    expect([adj, com, csb].map(l => l.find('[data-test="card-steps"]').exists())).toEqual([false, true, false])
     expect([adj, csb].map(l => l.find('dialog').exists())).toEqual([false, false])
-    await com.find('.card-steps').trigger('click')
-    expect(com.find('dialog .steps-close').attributes('aria-label')).toBe('Close the steps')
+    await com.find('[data-test="card-steps"]').trigger('click')
+    expect(com.find('dialog [data-test="steps-close"]').attributes('aria-label')).toBe('Close the steps')
     expect(com.find('dialog').findAll('button').some(b => b.text() === 'Close')).toBe(false)
     // The run's input files first, then its jobs.
-    const inputs = com.findAll('.item').filter(i => i.find('.dropzone').exists())
-    expect(inputs.map(i => i.find('.item-tech').text())).toEqual(['config/Malaria', 'external_data/fkt'])
+    const inputs = com.findAll('[data-test="item"]').filter(i => i.find('[data-test="dropzone"]').exists())
+    expect(inputs.map(i => i.find('[data-test="item-tech"]').text())).toEqual(['config/Malaria', 'external_data/fkt'])
     expect(inputs[0].text()).toContain('config_malaria.json')
     expect(inputs[0].text()).toContain('✓ provided · same file for the 3 Malaria runs')
-    expect(inputs.map(i => i.find('.dropzone').classes().includes('is-disabled'))).toEqual([false, false])
+    expect(inputs.map(i => i.find('[data-test="dropzone"]').attributes('aria-disabled') === 'true')).toEqual([false, false])
     // The repo's defaults: offered under each input.
-    const useDefault = (input: typeof inputs[0]) => input.findAll('.default-status button').find(b => b.text() === 'Use default')
-    expect(inputs[0].find('.default-status').text()).toContain('config_malaria.json')
-    expect(inputs[1].find('.default-status').exists()).toBe(false) // no default for fkt in this mock
+    const useDefault = (input: typeof inputs[0]) => input.findAll('[data-test="default-status"] button').find(b => b.text() === 'Use default')
+    expect(inputs[0].find('[data-test="default-status"]').text()).toContain('config_malaria.json')
+    expect(inputs[1].find('[data-test="default-status"]').exists()).toBe(false) // no default for fkt in this mock
     applyDefaultFile.mockResolvedValue('input/config.json')
     await useDefault(inputs[0])!.trigger('click')
     await flushPromises()
     expect(applyDefaultFile).toHaveBeenCalledWith('config', false)
     expect(adj.text()).toContain('Published')
-    expect(com.findAll('.item')).toHaveLength(8) // 2 input files + 6 jobs: the data check is a button
+    expect(com.findAll('[data-test="item"]')).toHaveLength(8) // 2 input files + 6 jobs: the data check is a button
     // Stage 1 until the data check succeeds: its button waits for the 5 items, stage 2 is locked.
-    const tiles = com.findAll('.steps-tile')
+    const tiles = com.findAll('[data-test="steps-tile"]')
     expect(tiles.map(t => t.isVisible())).toEqual([true, false])
-    expect(tiles[0].findAll('.item-tech').map(t => t.text())).toEqual(
+    expect(tiles[0].findAll('[data-test="item-tech"]').map(t => t.text())).toEqual(
       ['config/Malaria', 'external_data/fkt', 'fetch_disease', 'fetch_climate', 'fetch_geojson'])
-    expect(tiles[1].findAll('.item-tech').map(t => t.text())).toEqual(['forecast', 'approve', 'post_forecast'])
-    expect(tiles[0].find('.data-check').text()).toContain('Available once the 5 items above are done')
-    expect(tiles[0].findAll('.data-check button').map(b => [b.text(), b.attributes('disabled') !== undefined]))
+    expect(tiles[1].findAll('[data-test="item-tech"]').map(t => t.text())).toEqual(['forecast', 'approve', 'post_forecast'])
+    expect(tiles[0].find('[data-test="data-check"]').text()).toContain('Available once the 5 items above are done')
+    expect(tiles[0].findAll('[data-test="data-check"] button').map(b => [b.text(), b.attributes('disabled') !== undefined]))
       .toEqual([['Run the data check', true], ['Next →', true]])
     expect(com.text()).toContain('Disease data')
     expect(com.text()).toContain('fetch_disease')
-    expect(com.findAll('.item-time').map(t => t.text())).toEqual(['Last update: 2026-10-13 14:02']) // a success only
+    expect(com.findAll('[data-test="item-time"]').map(t => t.text())).toEqual(['Last update: 2026-10-13 14:02']) // a success only
     expect(csb.text()).toContain('Available once the open run is done')
 
     expect(adj.find('progress').attributes()).toMatchObject({ value: '3', max: '9' }) // both shared files are provided
@@ -342,23 +342,23 @@ describe('Dashboard', () => {
     }))
     const wrapper = await mountPage()
 
-    expect(wrapper.find('.todo').text()).toContain('approve Malaria · Community sites (COM).')
-    const com = wrapper.find('#forecast-Malaria').findAll('.level-column')[1]
+    expect(wrapper.find('[data-test="todo"]').text()).toContain('approve Malaria · Community sites (COM).')
+    const com = wrapper.find('#forecast-Malaria').findAll('[data-test="level-column"]')[1]
     expect(com.text()).toContain('To approve')
-    await com.find('.card-steps').trigger('click')
+    await com.find('[data-test="card-steps"]').trigger('click')
     // The data check succeeded: the dialog shows stage 2, and stage 1 stays reachable to relaunch it.
-    expect(com.findAll('.steps-tile').map(t => t.isVisible())).toEqual([false, true])
-    expect(com.find('.data-check button').text()).toBe('Relaunch the data check')
+    expect(com.findAll('[data-test="steps-tile"]').map(t => t.isVisible())).toEqual([false, true])
+    expect(com.find('[data-test="data-check"] button').text()).toBe('Relaunch the data check')
     expect(com.text()).toContain('Waiting for your decision')
-    await com.find('.tile-nav button').trigger('click') // ← Previous
-    expect(com.findAll('.steps-tile').map(t => t.isVisible())).toEqual([true, false])
+    await com.find('[data-test="tile-nav"] button').trigger('click') // ← Previous
+    expect(com.findAll('[data-test="steps-tile"]').map(t => t.isVisible())).toEqual([true, false])
     // Next: active once the data check succeeded, back to stage 2.
-    const next = com.findAll('.data-check button').find(b => b.text() === 'Next →')!
+    const next = com.findAll('[data-test="data-check"] button').find(b => b.text() === 'Next →')!
     expect(next.attributes('disabled')).toBeUndefined()
     await next.trigger('click')
-    expect(com.findAll('.steps-tile').map(t => t.isVisible())).toEqual([false, true])
+    expect(com.findAll('[data-test="steps-tile"]').map(t => t.isVisible())).toEqual([false, true])
     // Read and approve: on the card, and on the approval item of the dialog.
-    const approveItem = com.find('dialog .job-approve')
+    const approveItem = com.find('dialog [data-job="approve"]')
     expect(approveItem.find('button').text()).toBe('Read and approve')
     await approveItem.find('button').trigger('click')
     await flushPromises()
@@ -375,8 +375,8 @@ describe('Dashboard', () => {
     getCheckpoints.mockResolvedValue(forecastState(null, { 'ADJ/Malaria:post_forecast': ['success'] }))
     const wrapper = await mountPage()
 
-    const [adj, com] = wrapper.find('#forecast-Malaria').findAll('.level-column')
-    expect(adj.find('.card-steps').exists()).toBe(false) // no open run: no steps to show
+    const [adj, com] = wrapper.find('#forecast-Malaria').findAll('[data-test="level-column"]')
+    expect(adj.find('[data-test="card-steps"]').exists()).toBe(false) // no open run: no steps to show
     await com.findAll('button').find(b => b.text() === 'Open')!.trigger('click')
     await flushPromises()
     expect(openRun).toHaveBeenCalledWith('COM', 'Malaria', false)
@@ -391,12 +391,12 @@ describe('Dashboard', () => {
     abandonRun.mockResolvedValue('COM/Malaria')
     getCheckpoints.mockResolvedValue(forecastState('COM/Malaria'))
     let wrapper = await mountPage()
-    expect(wrapper.find('.admin-zone').exists()).toBe(false)
+    expect(wrapper.find('[data-test="admin-zone"]').exists()).toBe(false)
     wrapper.unmount()
 
     useAuthStore().setUser({ id: 'u1', email: null, username: 'admin', displayName: 'Admin', is_admin: true })
     wrapper = await mountPage()
-    await wrapper.find('.admin-zone').findAll('button').find(b => b.text() === 'Abandon the open forecast run')!.trigger('click')
+    await wrapper.find('[data-test="admin-zone"]').findAll('button').find(b => b.text() === 'Abandon the open forecast run')!.trigger('click')
     await flushPromises()
     expect(abandonRun).toHaveBeenCalled()
     wrapper.unmount()

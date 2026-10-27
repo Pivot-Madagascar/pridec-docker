@@ -1,7 +1,7 @@
 <template>
-  <div class="file-input">
+  <div class="file-input" data-test="file-input">
     <!-- File already in input/ on the server. -->
-    <div v-if="serverFile" class="status-row" :class="{ 'is-present': serverFile.exists }">
+    <div v-if="serverFile" class="status-row" data-test="status-row" :class="{ 'is-present': serverFile.exists }">
       <template v-if="serverFile.exists">
         <span class="status-dot" aria-hidden="true"></span>
         <span class="status-text">
@@ -22,6 +22,7 @@
     <!-- Local file: drop or browse, then preview / replace / remove / upload. -->
     <div
       class="dropzone"
+      data-test="dropzone"
       :class="{ 'is-dragging': dragging, 'has-file': modelValue, 'has-error': error, 'is-disabled': disabled }"
       :aria-disabled="disabled"
       @dragover.prevent="dragging = !disabled"
@@ -73,7 +74,7 @@
     </div>
 
     <!-- The file of the repo (assets/) offered for this item, until a file is on the server: delete that one to get it back. -->
-    <div v-if="defaultFile && !serverFile?.exists" class="status-row is-present default-status">
+    <div v-if="defaultFile && !serverFile?.exists" class="status-row is-present default-status" data-test="default-status">
       <span class="status-text">Default · {{ defaultFile.filename }} · {{ formatSize(defaultFile.size) }}</span>
       <button type="button" class="btn btn-sm btn-preview" :aria-label="`Preview the default ${label}`" @click="emit('preview-default')">
         <Icon :path="ICONS.eye" class="btn-icon" />

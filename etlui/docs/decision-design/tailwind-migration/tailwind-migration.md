@@ -228,7 +228,7 @@ One phase = one commit (or one PR), app working at every step. Before and after 
 
 | Phase | Content | Visual change |
 |---|---|---|
-| **1. Test hooks** | Add `data-test` / `aria-current` / `aria-disabled` / `data-state` to the components of § 3.5, rewrite the specs to use them. Styling classes untouched. | none |
+| **1. Test hooks** | Add `data-test` / `aria-current` / `aria-disabled` / `data-state` to the components of § 3.5, rewrite the specs to use them. Styling classes untouched. **Done 2026-10-27** (shadcn-migration lot 2). | none |
 | **2. Foundation** | `base.css`: tokens, dark override, `@custom-variant dark`, component classes (§ 3.3), delete the dead classes. `index.html` script, toggle in `App.vue`. `#app` background → `bg-canvas`. (`JobStatus.vue` already deleted, 2026-10-23.) | header, global background, every page using a deleted `base.css` class (fix them in this phase) |
 | **3. Shell and simple pages** | `App`, `Drawer`, `LoginForm`, `ParametersPage`, `ConfigView`, `LogsStreamPage`, `TrackerView/*` (replace raw `gray-*` utilities with tokens). | small |
 | **4. Dialogs** | `BaseDialog` (box + backdrop stay CSS, colors → tokens), `ConfirmDialog`, `ImpactDialog`, `PreviewDialog`, `ConfigPreview`, `CsvPreview`, `ForecastReportModal`. | small |

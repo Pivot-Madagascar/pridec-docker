@@ -1,12 +1,12 @@
 <template>
   <!-- One run (level x disease): its status and a progress bar. Once the run is open, the whole card opens the
        "Steps" dialog: its input files, every item and its launch button. -->
-  <section class="level-column" :class="{ 'is-open': isOpen }" :aria-labelledby="titleId">
+  <section class="level-column" :class="{ 'is-open': isOpen }" data-test="level-column" :aria-current="isOpen ? 'true' : undefined" :aria-labelledby="titleId">
     <!-- Covers the card; the actions below sit above it (.level-action). -->
     <button
       v-if="isOpen"
       type="button"
-      class="card-steps"
+      class="card-steps" data-test="card-steps"
       :aria-label="`Steps of ${LEVEL_NAMES[source]} · ${disease}`"
       @click="showSteps = true"
     ></button>
@@ -21,19 +21,19 @@
     <BaseDialog v-if="isOpen" :open="showSteps" backdrop-close class="steps-dialog" :aria-label="`${LEVEL_NAMES[source]} · ${disease}`" @dismiss="showSteps = false">
       <header class="steps-header">
         <h5 class="level-title">{{ LEVEL_NAMES[source] }} <span class="level-code">{{ source }}</span> · {{ disease }}</h5>
-        <button type="button" class="steps-close" aria-label="Close the steps" @click="showSteps = false">
+        <button type="button" class="steps-close" data-test="steps-close" aria-label="Close the steps" @click="showSteps = false">
           <Icon :path="ICONS.close" class="steps-close-icon" />
         </button>
       </header>
       <!-- Two stages: preparing the data, then the forecast. Stage 2 opens once the data check succeeds (Next / Previous). -->
-      <section v-for="tile in tiles" v-show="shown === tile.n" :key="tile.n" class="steps-tile" :aria-label="tile.title">
+      <section v-for="tile in tiles" v-show="shown === tile.n" :key="tile.n" class="steps-tile" data-test="steps-tile" :aria-label="tile.title">
         <ol class="item-list">
           <!-- The run's input files: etlhub keeps one per disease (config) and one per level (external_data), shared by those runs. -->
-          <li v-for="input in tile.n === 1 ? inputs : []" :key="input.item" class="item item-input" :class="`item-${input.status}`">
+          <li v-for="input in tile.n === 1 ? inputs : []" :key="input.item" class="item item-input" data-test="item" :class="`item-${input.status}`">
             <span class="item-dot" aria-hidden="true"></span>
             <span class="item-text">
               <span class="item-label">{{ input.label }}</span>
-              <code class="item-tech">{{ input.item }}</code>
+              <code class="item-tech" data-test="item-tech">{{ input.item }}</code>
               <span class="item-state">{{ FILE_STATUS[input.status] }} · {{ input.shared }}</span>
             </span>
             <FileDropzone
@@ -54,13 +54,13 @@
               @use-default="emit('use-default', input.name)"
             />
           </li>
-          <li v-for="row in tile.rows" :key="row.item" class="item" :class="[`item-${row.look}`, `job-${row.job}`]">
+          <li v-for="row in tile.rows" :key="row.item" class="item" :class="[`item-${row.look}`, `job-${row.job}`]" data-test="item" :data-job="row.job">
             <span class="item-dot" aria-hidden="true"></span>
             <span class="item-text">
               <span class="item-label">{{ row.label }}</span>
-              <code class="item-tech">{{ row.job }}</code>
+              <code class="item-tech" data-test="item-tech">{{ row.job }}</code>
               <span class="item-state">{{ LOOK_TEXT[row.look] }}</span>
-              <span v-if="row.updated" class="item-state item-time">{{ row.updated }}</span>
+              <span v-if="row.updated" class="item-state item-time" data-test="item-time">{{ row.updated }}</span>
             </span>
             <button
               v-if="row.launch"
@@ -85,7 +85,7 @@
           </li>
         </ol>
         <!-- The data check is a button, not a card: it closes stage 1. -->
-        <div v-if="tile.n === 1 && check" class="data-check" :class="`item-${check.look}`">
+        <div v-if="tile.n === 1 && check" class="data-check" data-test="data-check" :class="`item-${check.look}`">
           <span class="item-text">
             <span class="item-label">{{ check.label }}</span>
             <span class="item-state">
@@ -97,7 +97,7 @@
           </button>
           <button type="button" class="btn" :disabled="!checked" @click="shown = 2">Next →</button>
         </div>
-        <div v-if="tile.n === 2" class="tile-nav">
+        <div v-if="tile.n === 2" class="tile-nav" data-test="tile-nav">
           <button type="button" class="btn" @click="shown = 1">← Previous</button>
         </div>
       </section>

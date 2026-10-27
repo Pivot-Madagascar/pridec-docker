@@ -109,7 +109,7 @@ describe('TrackerView', () => {
     expect(wrapper.findAll('dialog th').map((th) => th.text())).toEqual(['Method', 'Status', 'URL', 'Duration', 'Job ID'])
     expect(wrapper.findAll('dialog tbody tr')).toHaveLength(1)
     expect(getJobLogs).toHaveBeenCalledWith('import_gee_1234abcd')
-    expect(wrapper.find('.job-logs-section').text()).toContain('step 1')
+    expect(wrapper.find('[data-test="job-logs-section"]').text()).toContain('step 1')
     expect(wrapper.text()).toContain('success')
   })
 
@@ -118,7 +118,7 @@ describe('TrackerView', () => {
     const wrapper = mount(TrackerView)
     await flushPromises()
 
-    expect(wrapper.find('.detail-btn').exists()).toBe(false)
+    expect(wrapper.find('[data-test="detail-btn"]').exists()).toBe(false)
     await wrapper.find('tbody tr').trigger('click')
     await flushPromises()
 
@@ -148,7 +148,7 @@ describe('TrackerView', () => {
 
     const socket = FakeWebSocket.instances[0]
     expect(socket.url).toBe('ws://localhost:8111/api/tracking/etl-logs/import_gee_1234abcd')
-    expect(wrapper.find('.live-badge').exists()).toBe(true)
+    expect(wrapper.find('[data-test="live-badge"]').exists()).toBe(true)
 
     socket.send({ type: 'etl_log_history', job_id: 'import_gee_1234abcd', logs: '' })
     socket.send({ type: 'etl_log_entry', job_id: 'import_gee_1234abcd', message: 'fetching GEE' })
@@ -161,7 +161,7 @@ describe('TrackerView', () => {
 
     expect(getJobLogs).toHaveBeenCalledTimes(2)
     expect(socket.closed).toBe(true)
-    expect(wrapper.find('.live-badge').exists()).toBe(false)
+    expect(wrapper.find('[data-test="live-badge"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('GEE import completed')
   })
 
@@ -187,7 +187,7 @@ describe('TrackerView', () => {
     await wrapper.findAll('button').find((b) => b.text() === 'Close')!.trigger('click')
 
     expect(FakeWebSocket.instances[0].closed).toBe(true)
-    expect(wrapper.find('.live-badge').exists()).toBe(false)
+    expect(wrapper.find('[data-test="live-badge"]').exists()).toBe(false)
   })
 
   it('shows why the pipeline refused a request, though it started no job', async () => {

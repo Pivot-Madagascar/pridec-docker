@@ -56,7 +56,7 @@
             <!-- Only requests that started a job (their logs) or were refused by the pipeline (the reason) have something to show -->
             <button
               v-if="hasDetail(req)"
-              class="detail-btn text-xs text-blue-400 hover:text-blue-300"
+              data-test="detail-btn" class="detail-btn text-xs text-blue-400 hover:text-blue-300"
               @click.stop="$emit('select', req.request_id)"
             >
               Detail

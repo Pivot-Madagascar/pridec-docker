@@ -68,6 +68,7 @@ Run from `etlui/`. Yarn 1 is the package manager (`yarn.lock`; the `Dockerfile` 
 
 - Work with the **ponytail** skill (root `CLAUDE.md`): native HTML/CSS before a component or a dependency (`BaseDialog` is a native `<dialog>`), reuse `src/config`, services and composables before adding one; mark deliberate shortcuts with `ponytail:`. Dependencies: yarn only.
 - Behaviour and its test ship in the same commit. For a new composable, store action, service call or bug fix, write the failing test first. If you did not, say what you did instead of claiming TDD.
+- Specs select with `[data-test="…"]`, a role / tag or an ARIA attribute, never a styling class or `classes()` (since 2026-10-27: shadcn components replace those classes).
 - Test behaviour, not implementation: state after a call, the request sent (endpoint, params vs body, headers), what the user sees. Mock `@/services/api` (or `WebSocket`), never the backend. Templates: `services/__tests__/inputs.spec.ts` (request sent), `composables/__tests__/usePipeline.spec.ts` (service mocked, state + notification + confirmation), `views/Dashboard/__tests__/Dashboard.spec.ts` (what the user sees), `utils/__tests__/preview.spec.ts` (pure functions).
 - `router/__tests__/guard.spec.ts` redefines the guard inside the test instead of importing `@/router`: it does not test the real guard. Do not copy that pattern.
 - New or changed functions and composables: at most 50 lines and 4 parameters, typed (no new `any`), no empty `catch {}`, no `console.log` (the TS equivalents of `except … pass` and `print(`).

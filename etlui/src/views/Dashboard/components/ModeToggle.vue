@@ -14,10 +14,10 @@
       </span>
     </div>
     <div class="mode-buttons" role="group" aria-label="Test mode">
-      <button type="button" :class="['mode-btn', { active: testMode === false }]" :disabled="disabled || testMode === false" @click="emit('change', false)">
+      <button type="button" data-test="mode-btn" :class="['mode-btn', { active: testMode === false }]" :disabled="disabled || testMode === false" @click="emit('change', false)">
         NO
       </button>
-      <button type="button" :class="['mode-btn', { active: testMode === true }]" :disabled="disabled || testMode === true" @click="emit('change', true)">
+      <button type="button" data-test="mode-btn" :class="['mode-btn', { active: testMode === true }]" :disabled="disabled || testMode === true" @click="emit('change', true)">
         YES
       </button>
     </div>

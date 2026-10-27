@@ -11,7 +11,7 @@
     </div>
     <div class="dialog-actions">
       <button type="button" class="dialog-btn" :disabled="busy" autofocus @click="emit('cancel')">Cancel</button>
-      <button type="button" class="dialog-btn dialog-btn-danger" :disabled="busy" @click="emit('confirm')">
+      <button type="button" class="dialog-btn dialog-btn-danger" data-test="confirm-btn" :disabled="busy" @click="emit('confirm')">
         <span v-if="busy" class="confirm-spinner animate-spin" aria-hidden="true"></span>
         {{ busy ? 'Deleting…' : confirmLabel }}
       </button>

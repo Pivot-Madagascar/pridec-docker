@@ -1,6 +1,6 @@
 # UI components: migration to shadcn-vue
 
-> Status: **decided 2026-10-27, lot 1 implemented.** Replaces parts of
+> Status: **decided 2026-10-27, lots 1 and 2 implemented.** Replaces parts of
 > `../tailwind-migration/tailwind-migration.md` (see § 2).
 
 ## 1. What
@@ -48,7 +48,7 @@ touched pages in light and dark (OS setting) with `yarn dev`.
 | Lot | Content | Status |
 |---|---|---|
 | **1. Foundation + Button** | init, gray + indigo tokens, `.dark` from the OS, `Button` in `LoginForm`, `HomeView`, `ConfigView`. | done, not checked by eye |
-| **2. Test hooks** | tailwind-migration phase 1 (§ 3.5): `data-test` / `aria-*` instead of class selectors in specs. Needed before lot 4: shadcn components drop the classes the specs select. | todo |
+| **2. Test hooks** | tailwind-migration phase 1 (§ 3.5): `data-test` / `aria-*` instead of class selectors in specs. Needed before lot 4: shadcn components drop the classes the specs select. Names = the old class names; `confirm-btn` (ConfirmDialog), `data-job` on step items, `[aria-label="Not imported"]`; open run = `aria-current` on `level-column`. | done |
 | **3. Buttons, inputs, badges, cards** | `Button` everywhere else, `Input`, `Label`, `Badge`, `Card`; delete the matching `base.css` and scoped CSS. | todo |
 | **4. Dialogs, all together** | `Dialog` for `BaseDialog` / `PreviewDialog` / `ForecastReportModal` / `RequestDialog` / Steps dialog, `AlertDialog` for `ConfirmDialog` / `ImpactDialog`. | todo |
 | **5. Other widgets** | `Accordion`, `Sheet` (`Drawer`), `Switch` (`ModeToggle`), `Table` (`RequestTable`, journal), `Progress`. | todo |

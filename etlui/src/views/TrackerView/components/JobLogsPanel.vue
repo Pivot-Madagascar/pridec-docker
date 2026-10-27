@@ -1,9 +1,9 @@
 <template>
-  <section class="job-logs-section space-y-2">
+  <section data-test="job-logs-section" class="job-logs-section space-y-2">
     <div class="flex items-center justify-between gap-4">
       <h3 class="flex items-center gap-2 text-sm font-semibold text-gray-100">
         Logs
-        <span v-if="live" class="live-badge rounded bg-green-900 px-2 py-0.5 text-xs text-green-300">● Live</span>
+        <span v-if="live" data-test="live-badge" class="live-badge rounded bg-green-900 px-2 py-0.5 text-xs text-green-300">● Live</span>
       </h3>
       <button
         class="rounded-md px-3 py-1 text-sm bg-gray-700 text-gray-300 hover:bg-gray-600"

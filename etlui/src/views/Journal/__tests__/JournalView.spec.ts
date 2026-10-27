@@ -122,7 +122,7 @@ describe('JournalView', () => {
 
     await wrapper.findAll('button').find(b => b.text() === 'Abandon')!.trigger('click')
     expect(abandonPass).not.toHaveBeenCalled()
-    await wrapper.findAll('.dialog-btn-danger')[0].trigger('click')
+    await wrapper.findAll('[data-test="confirm-btn"]')[0].trigger('click')
     await flushPromises()
     expect(abandonPass).toHaveBeenCalledWith('bbbb2222')
     wrapper.unmount()
@@ -130,8 +130,8 @@ describe('JournalView', () => {
     query.pass = 'cccc3333'
     const complete = mount(JournalView)
     await flushPromises()
-    expect(complete.findAll('button').filter(b => ['Resume', 'Abandon'].includes(b.text())).map(b => b.classes())).toEqual([
-      ['dialog-btn', 'dialog-btn-danger']]) // only the closed dialog's own button
+    expect(complete.findAll('button').filter(b => ['Resume', 'Abandon'].includes(b.text())).map(b => b.attributes('data-test'))).toEqual([
+      'confirm-btn']) // only the closed dialog's own button
   })
 
   it('offers the CSV export to administrators only', async () => {

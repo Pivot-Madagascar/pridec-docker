@@ -1,7 +1,7 @@
 <template>
   <button
     :disabled="disabled"
-    class="action-card"
+    class="action-card" data-test="action-card"
     :class="{ 'card-success': action.success }"
     @click="handleClick"
   >

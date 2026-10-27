@@ -1,9 +1,9 @@
 <template>
-  <div class="forecast-runs">
-    <p class="todo" role="status"><strong>To do now:</strong> {{ todo }}</p>
+  <div class="forecast-runs" data-test="forecast-runs">
+    <p class="todo" data-test="todo" role="status"><strong>To do now:</strong> {{ todo }}</p>
 
     <!-- The carousel has no scrollbar: these buttons (and each card's "Next disease") move between diseases. -->
-    <nav class="disease-nav" aria-label="Diseases">
+    <nav class="disease-nav" data-test="disease-nav" aria-label="Diseases">
       <a
         v-for="(disease, i) in DISEASES"
         :key="disease"
@@ -15,7 +15,7 @@
         {{ DISEASE_NAMES[disease] }}
       </a>
     </nav>
-    <div class="carousel" tabindex="0" aria-label="Forecasts by disease" @scroll="onScroll">
+    <div class="carousel" data-test="carousel" tabindex="0" aria-label="Forecasts by disease" @scroll="onScroll">
       <DiseaseCard
         v-for="(disease, i) in DISEASES"
         :id="`forecast-${disease}`"
@@ -25,7 +25,7 @@
       />
     </div>
 
-    <details v-if="isAdmin" class="admin-zone">
+    <details v-if="isAdmin" class="admin-zone" data-test="admin-zone">
       <summary>Administration</summary>
       <div class="admin-actions">
         <button type="button" class="btn btn-danger" :disabled="busy || !state?.lock" @click="emit('release')">Release the lock</button>
