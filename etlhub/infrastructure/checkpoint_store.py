@@ -15,9 +15,9 @@ from etlhub.core.request_context import request_context
 from etlhub.domain import pipeline
 from etlhub.domain.exceptions import ConfirmationRequiredError, ETLException, PipelineBlockedError
 from etlhub.domain.pipeline import (
-    IMPORT_TASKS, accessible_steps, blocking_reason, config_item, dependents, disease_of, external_data_item,
-    impact, level_of, progress, require_confirmation, require_input_confirmation, resolve_slot, run_context,
-    run_items, status,
+    COUPLES, DISEASES, IMPORT_TASKS, LEVEL, accessible_steps, blocking_reason, config_item, dependents,
+    external_data_item, impact, progress, require_confirmation, require_input_confirmation, resolve_slot,
+    run_context, run_items, status,
 )
 from etlhub.infrastructure.config_store import ConfigStore
 from etlhub.infrastructure.redis_client import get_redis
@@ -101,6 +101,12 @@ _RUN_COLUMNS = ("pass_id", "couple", "state", "disease_code", "ou_level", "alert
 _EVENT_COLUMNS = ("cycle", "pass_id", "at", "step", "item", "event", "job_id", "actor", "request_id", "detail")
 _PASS_COLUMNS = ("id", "cycle", "state", "started_at", "started_by")
 _AVAILABILITY_DAYS = 30  # a stored check older than this is checked again (decision 2026-10-26)
+# Pass folders (etlhub/docs/decision-design/pass-folders/pass-folders.md): input/<cycle>/<pass>/ and output/<cycle>/<pass>/.
+# They keep the uploads (item -> file name) and the reports of closed runs for good, and a copy of the working files
+# (the rest of input/ and output/) while the pass is not active.
+_KEPT_INPUTS = {**{f"config/{d}": f"config_{d}.json" for d in DISEASES},
+                **{f"external_data/{lv}": f"external_data_{lv}.csv" for lv in sorted(set(LEVEL.values()))}}
+_KEPT = set(_KEPT_INPUTS.values()) | {f"report_{c.replace('/', '_')}.html" for c in COUPLES}
 
 
 def _now() -> str:
@@ -165,6 +171,39 @@ def _migrate_to_passes(conn: sqlite3.Connection, uploads: Path) -> None:
             for f in kept:
                 (uploads / month / passes[-1]["id"]).mkdir(parents=True, exist_ok=True)
                 f.rename(uploads / month / passes[-1]["id"] / f.name)
+
+
+def _is_cycle(name: str) -> bool:
+    """input/<cycle>/ and output/<cycle>/ hold the pass folders; everything else there is working files."""
+    return len(name) == 6 and name.isdigit()
+
+
+def _is_kept(name: str) -> bool:
+    return name in _KEPT
+
+
+def _clear(directory: Path, skip: Callable[[str], bool]) -> None:
+    """Deletes what directory holds, except the names skip keeps."""
+    for path in directory.iterdir() if directory.is_dir() else ():
+        if skip(path.name):
+            continue
+        if path.is_dir() and not path.is_symlink():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+
+
+def _copy_work(src: Path, dst: Path, skip_src: Callable[[str], bool], skip_dst: Callable[[str], bool]) -> None:
+    """Replaces the working files of dst by those of src (skipped names are left as they are on both sides)."""
+    _clear(dst, skip_dst)
+    dst.mkdir(parents=True, exist_ok=True)
+    for path in src.iterdir() if src.is_dir() else ():
+        if skip_src(path.name):
+            continue
+        if path.is_dir() and not path.is_symlink():
+            shutil.copytree(path, dst / path.name, symlinks=True)
+        else:
+            shutil.copy2(path, dst / path.name, follow_symlinks=False)
 
 
 def apply_to_config_store(context: dict[str, str | None]) -> None:
@@ -242,15 +281,10 @@ class CheckpointStore:
         self._db_path = Path(db_path or Path(settings.logs_dir) / "etlhub.db")
         data_dir = Path(data_dir or settings.data_dir)
         self._input_dir, self._output_dir = data_dir / "input", data_dir / "output"
-        # Uploaded files kept per cycle: input/ is emptied at each run, these are copied back into it.
-        self._uploads_root = data_dir / "uploads"
+        self._uploads_root = data_dir / "uploads"  # before the pass folders (2026-10-27): read by the migrations only
         self._apply_context = apply_context
 
     # --- helpers (inside a transaction) ---------------------------------------------------
-
-    @property
-    def _uploads_dir(self) -> Path:
-        return self._uploads_root / "dry_run" if self._test_mode() else self._uploads_root
 
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:
@@ -269,6 +303,7 @@ class CheckpointStore:
             conn.executescript(_SCHEMA)
             conn.execute("BEGIN")
             try:
+                self._migrate_files(conn, self._uploads_root / "dry_run")
                 yield conn
                 conn.execute("COMMIT")
             except BaseException:
@@ -292,6 +327,7 @@ class CheckpointStore:
             conn.executescript(_SCHEMA)
             conn.execute("BEGIN IMMEDIATE")
             try:
+                self._migrate_files(conn, self._uploads_root)
                 yield conn
                 conn.execute("COMMIT")
             except BaseException:
@@ -336,6 +372,8 @@ class CheckpointStore:
     def _set_state(self, conn: sqlite3.Connection, p: dict, state: str, cause: str, actor: str | None = None) -> None:
         conn.execute("UPDATE passes SET state = ? WHERE id = ?", (state, p["id"]))
         p["state"] = state
+        if state == "paused":  # the working files go with the pass, to come back on resume
+            self._save_work(p)
         self._event(conn, p, "resumed" if state == "active" else state, detail={"cause": cause}, actor=actor)
 
     def _settle(self, conn: sqlite3.Connection) -> None:
@@ -347,8 +385,8 @@ class CheckpointStore:
     def _current(self, conn: sqlite3.Connection, confirm: bool | None = None) -> dict:
         """The active pass, which every write goes to. Raises PipelineBlockedError without one.
 
-        A launch (confirm not None) starts a pass on the target month when it has no paused one;
-        after a complete pass, only with confirm=true (ConfirmationRequiredError otherwise).
+        A launch (confirm not None) starts a pass on the target month; after a complete or paused pass, only with
+        confirm=true (ConfirmationRequiredError otherwise). A paused pass stays paused, to resume from the Journal.
         """
         self._settle(conn)
         active = self._active(conn)
@@ -356,16 +394,19 @@ class CheckpointStore:
             return active
         cycle = self._target(conn)
         last = next(reversed(self._passes(conn, "cycle = ?", (cycle,))), None)
-        if last and last["state"] == "paused":
-            raise PipelineBlockedError(f"Pass {last['id']} of cycle {cycle} is paused: resume it from the Journal, "
-                                       "or choose another cycle")
+        paused = last is not None and last["state"] == "paused"
         if confirm is None:
-            raise PipelineBlockedError(f"No active pass in cycle {cycle}: launch a job of step data_import to start one")
-        redo = last is not None and last["state"] == "complete"
+            raise PipelineBlockedError(
+                f"Pass {last['id']} of cycle {cycle} is paused: resume it from the Journal, or launch a job of step "
+                "data_import to start a new pass" if paused else
+                f"No active pass in cycle {cycle}: launch a job of step data_import to start one")
+        redo = last is not None and last["state"] in ("complete", "paused")
         if redo and not confirm:
             raise ConfirmationRequiredError(
+                f"Pass {last['id']} of cycle {cycle} is paused: resend with confirm=true to start a new pass "
+                "(it stays paused, to resume from the Journal)" if paused else
                 f"Cycle {cycle} is complete: resend with confirm=true to start a new pass (the complete one is kept)",
-                {"cycle": cycle, "complete_pass": last["id"]})
+                {"cycle": cycle, "paused_pass" if paused else "complete_pass": last["id"]})
         p = {"id": uuid.uuid4().hex[:8], "cycle": cycle, "state": "active", "started_at": _now_us(),
              "started_by": _actor()}
         conn.execute(f"INSERT INTO passes ({', '.join(_PASS_COLUMNS)}) VALUES ({', '.join('?' * len(_PASS_COLUMNS))})",
@@ -430,17 +471,52 @@ class CheckpointStore:
             if conn.execute("PRAGMA database_list").fetchone()[2]:  # a file: production (test mode is in memory)
                 context["journal"] = True
 
-    def _pass_dir(self, p: dict) -> Path:
-        """Files kept per pass: uploads/<cycle>/<pass>/ (uploads/dry_run/… in test mode)."""
-        return self._uploads_dir / p["cycle"] / p["id"]
+    def _pass_dir(self, p: dict, root: Path | None = None) -> Path:
+        """The pass folder: input/<cycle>/<pass>/ (uploads), or output/<cycle>/<pass>/ (reports) with root=output/."""
+        return (root or self._input_dir) / p["cycle"] / p["id"]
 
     def _kept_file(self, p: dict, name: str, couple: str) -> Path:
         """config.json is kept per disease, external_data.csv per org unit level (fkt or csb)."""
-        key = f"config_{disease_of(couple)}.json" if name == "config" else f"external_data_{level_of(couple)}.csv"
-        return self._pass_dir(p) / key
+        return self._pass_dir(p) / _KEPT_INPUTS[self._input_item(name, couple)]
 
     def _report_path(self, p: dict, couple: str) -> Path:
-        return self._pass_dir(p) / f"report_{couple.replace('/', '_')}.html"
+        return self._pass_dir(p, self._output_dir) / f"report_{couple.replace('/', '_')}.html"
+
+    def _save_work(self, p: dict) -> None:
+        """Copies the working files of input/ and output/ into the pass folders (pause, complete)."""
+        for root in (self._input_dir, self._output_dir):
+            _copy_work(root, self._pass_dir(p, root), _is_cycle, _is_kept)
+
+    def _restore_work(self, p: dict) -> None:
+        """Puts the working files saved in the pass folders back into input/ and output/ (resume)."""
+        for root in (self._input_dir, self._output_dir):
+            _copy_work(self._pass_dir(p, root), root, _is_kept, _is_cycle)
+
+    def _migrate_files(self, conn: sqlite3.Connection, uploads: Path) -> None:
+        """One-time move to the pass folders (2026-10-27): uploads/<cycle>/<pass>/ goes to input/<cycle>/<pass>/ and
+        the reports to output/<cycle>/<pass>/. Without an active pass, the working files of input/ and output/ are
+        copied into the last paused pass (with an active pass they are its own: they stay where they are). Any other
+        paused pass with an open run, or one whose files another run emptied since, will fetch again: its run is reset.
+
+        ponytail: delete once every store (etlhub.db, the test blob) ran it; the emptied uploads/ folders are left.
+        """
+        if conn.execute("PRAGMA user_version").fetchone()[0] >= 1:
+            return
+        for p in self._passes(conn):
+            for f in sorted((uploads / p["cycle"] / p["id"]).glob("*")):
+                folder = self._pass_dir(p, self._output_dir if f.name.startswith("report_") else None)
+                folder.mkdir(parents=True, exist_ok=True)
+                shutil.move(f, folder / f.name)
+        paused = self._passes(conn, "state = 'paused'")
+        owner = None if self._active(conn) else next(reversed(paused), None)
+        if owner:
+            self._save_work(owner)
+        for p in paused:
+            run = self._open_run(conn, p["id"])
+            if run and (p is not owner or conn.execute("SELECT 1 FROM forecast_runs WHERE opened_at > ?",
+                                                       (run["opened_at"],)).fetchone()):
+                self._reset(conn, p, list(run_items(run["couple"])), "pass_folders")
+        conn.execute("PRAGMA user_version = 1")
 
     def _archive_report(self, p: dict, couple: str) -> None:
         """Keeps the report of a closed run: the next run empties output/."""
@@ -462,15 +538,9 @@ class CheckpointStore:
         return self._active(conn) or next(reversed(self._passes(conn, "cycle = ?", (self._target(conn),))), None)
 
     def _clear_workdirs(self) -> None:
-        """Empties input/ and output/ so that a run never reads another couple's files."""
+        """Empties the working files of input/ and output/ (not the pass folders): a run never reads another's files."""
         for directory in (self._input_dir, self._output_dir):
-            if not directory.is_dir():
-                continue
-            for path in directory.iterdir():
-                if path.is_dir() and not path.is_symlink():
-                    shutil.rmtree(path)
-                else:
-                    path.unlink()
+            _clear(directory, _is_cycle)
 
     # --- jobs ----------------------------------------------------------------------------
 
@@ -492,6 +562,8 @@ class CheckpointStore:
             couple = run["couple"] if run else None
             step, item = resolve_slot(task, rows, couple)
             require_confirmation(step, item, rows, confirm)
+            if p.get("new"):
+                self._begin(conn, p)
             self._take_lock(conn, job_id, task)
             self._upsert(conn, p, step, item, job_id, "running")
             self._event(conn, p, "launched", step, item, job_id,
@@ -503,7 +575,28 @@ class CheckpointStore:
                 self._reset(conn, p, dependents(item), "relaunch", job_id)
                 self._apply_context(run_context(couple))  # inside the transaction: a failure writes nothing
 
-    def _carry_over(self, conn: sqlite3.Connection, p: dict, params: dict[str, dict], launched: str) -> None:
+    def _begin(self, conn: sqlite3.Connection, p: dict) -> None:
+        """A new pass: its folders, empty working files (the previous pass saved or dropped them when it left), and
+        the config / external_data uploads of the previous pass of the cycle when it is paused or complete (carried
+        as success, like the imports). pass-folders.md.
+
+        ponytail: test and production share the working files: a production pass left active while a test pass starts
+        loses them (its run fetches again). Save and restore them on mode switch if that matters.
+        """
+        self._clear_workdirs()
+        for root in (self._input_dir, self._output_dir):
+            self._pass_dir(p, root).mkdir(parents=True, exist_ok=True)
+        prev = next(reversed(self._passes(conn, "cycle = ? AND id != ?", (p["cycle"], p["id"]))), None)
+        if prev is None or prev["state"] not in ("paused", "complete"):
+            return
+        rows = self._rows(conn, prev["id"])
+        for item, file_name in _KEPT_INPUTS.items():
+            row, kept = rows.get(("forecast", item)), self._pass_dir(prev) / file_name
+            if row and row["status"] == "success" and kept.is_file():
+                shutil.copyfile(kept, self._pass_dir(p) / file_name)
+                self._carry(conn, p, "forecast", item, {"pass_id": prev["id"], **row}, {})
+
+    def _carry_over(self, conn: sqlite3.Connection, p: dict, params: dict[str, dict], launched: str | None) -> None:
         """A new pass: each import whose latest success in another pass of the cycle (any state) was launched with the
         same parameters and DRYRUN as now is success at once; approve_imports too, when both its prerequisites are
         carried. The launched item is relaunched, not carried. The operator relaunches a carried item with confirm=true,
@@ -513,10 +606,10 @@ class CheckpointStore:
         for item in IMPORT_TASKS:
             prev = self._last_success(conn, p, item) if item != launched and item in params else None
             if prev and prev["launch"].get("dry_run") == dry_run and prev["launch"].get("params") == params[item]:
-                self._carry(conn, p, item, prev, {"dry_run": dry_run})
+                self._carry(conn, p, "data_import", item, prev, {"dry_run": dry_run})
                 carried.add(item)
         if {"import_pivot_com", "import_pivot_csb"} <= carried and (prev := self._last_success(conn, p, "approve_imports")):
-            self._carry(conn, p, "approve_imports", prev, {})
+            self._carry(conn, p, "data_import", "approve_imports", prev, {})
 
     @staticmethod
     def _last_success(conn: sqlite3.Connection, p: dict, item: str) -> dict | None:
@@ -532,9 +625,9 @@ class CheckpointStore:
         return {"pass_id": row[0], "job_id": row[1], "updated_at": row[2],
                 "launch": json.loads(launch[0]) if launch and launch[0] else {}}
 
-    def _carry(self, conn: sqlite3.Connection, p: dict, item: str, prev: dict, extra: dict) -> None:
-        self._upsert(conn, p, "data_import", item, prev["job_id"], "success")
-        self._event(conn, p, "carried_over", "data_import", item, prev["job_id"],
+    def _carry(self, conn: sqlite3.Connection, p: dict, step: str, item: str, prev: dict, extra: dict) -> None:
+        self._upsert(conn, p, step, item, prev["job_id"], "success")
+        self._event(conn, p, "carried_over", step, item, prev["job_id"],
                     {"from_pass": prev["pass_id"], "status": "success", "updated_at": prev["updated_at"], **extra})
 
     def finish(self, job_id: str, state: str) -> None:
@@ -560,6 +653,7 @@ class CheckpointStore:
             if state == "success" and p.get("state") == "active" and progress(self._rows(conn, p["id"]))["current_step"] is None:
                 conn.execute("UPDATE passes SET state = 'complete' WHERE id = ?", (p["id"],))
                 self._event(conn, p, "cycle_closed", job_id=job_id)
+                self._save_work(p)  # a complete pass keeps its folders
 
     @staticmethod
     def _launched(conn: sqlite3.Connection, job_id: str) -> tuple[str, str, str] | None:
@@ -603,7 +697,7 @@ class CheckpointStore:
 
         config is the item config/<disease>, shared by the disease's 3 runs; external_data is the item
         external_data/<level>, shared by the runs of its org unit level. The file written in input/ is also kept in
-        uploads/<cycle>/<pass>/ and copied back when another run of the same disease (config) or level (external_data) opens.
+        input/<cycle>/<pass>/ and copied back when another run of the same disease (config) or level (external_data) opens.
         A change resets the open run from validate_inputs on, and needs confirm once that file was used.
         """
         action = "delete" if removed else "upload"
@@ -666,6 +760,22 @@ class CheckpointStore:
 
     # --- passes --------------------------------------------------------------------------------
 
+    def start_pass(self, confirm: bool = False, carry_over: dict[str, dict] | None = None) -> dict:
+        """Starts a pass on the target month at once (Home, "New pass"): its folders, and what is carried over from
+        the cycle (uploads, and imports with the same parameters `carry_over`). After a complete or paused pass, only
+        with confirm=true. Refused while a job runs or a pass is active. pass-folders.md § 6.
+        """
+        with self._transaction() as conn:
+            self._check_lock_free(conn)
+            self._settle(conn)
+            if active := self._active(conn):
+                raise PipelineBlockedError(f"Pass {active['id']} ({active['cycle']}) is active: pause or abandon it first")
+            p = self._current(conn, confirm)
+            self._begin(conn, p)
+            if carry_over:
+                self._carry_over(conn, p, carry_over, None)
+        return {c: p[c] for c in _PASS_COLUMNS}
+
     def pause(self) -> dict:
         """Pauses the active pass: its checkpoints and open forecast run stay as they are, to resume from the Journal."""
         with self._transaction() as conn:
@@ -684,18 +794,15 @@ class CheckpointStore:
             if active:
                 raise PipelineBlockedError(f"Pass {active['id']} ({active['cycle']}) is active: pause or abandon it first")
             self._set_target(conn, p["cycle"])
-            self._set_state(conn, p, "active", "manual")
-            run = self._open_run(conn, p["id"])
-            later = run and conn.execute("SELECT 1 FROM forecast_runs WHERE opened_at > ?", (run["opened_at"],)).fetchone()
-            # ponytail: only runs of this mode are seen; test and production share input/ and output/ (known limit).
-            if later:  # another run emptied input/ and output/ meanwhile: what the open run fetched is gone
-                self._reset(conn, p, list(run_items(run["couple"])), "resume")
-                self._clear_workdirs()
+            self._restore_work(p)
+            if run := self._open_run(conn, p["id"]):  # its uploads too (a pass reset by the migration saved nothing)
                 self._restore(p, run["couple"], self._rows(conn, p["id"]))
+            self._set_state(conn, p, "active", "manual")
         return p
 
     def abandon(self, pass_id: str) -> dict:
-        """Abandons an active or paused pass for good: its open run is abandoned, nothing else changes."""
+        """Abandons an active or paused pass for good: its open run is abandoned, its files are deleted except the
+        reports of its closed runs (its checkpoints and journal stay readable)."""
         with self._transaction() as conn:
             self._check_lock_free(conn)
             self._settle(conn)
@@ -705,7 +812,11 @@ class CheckpointStore:
                 conn.execute("UPDATE forecast_runs SET state = 'abandoned', closed_at = ? WHERE state = 'open' AND pass_id = ?",
                              (_now(), p["id"]))
                 self._event(conn, p, "run_abandoned", "forecast", detail={"couple": run["couple"], "by": "pass_abandoned"})
+            if p["state"] == "active":  # the working files are its own
+                self._clear_workdirs()
             self._set_state(conn, p, "abandoned", "manual")
+            shutil.rmtree(self._pass_dir(p), ignore_errors=True)
+            _clear(self._pass_dir(p, self._output_dir), _is_kept)
         return p
 
     def _paused_or_active(self, conn: sqlite3.Connection, pass_id: str, action: str, states: tuple[str, ...]) -> dict:

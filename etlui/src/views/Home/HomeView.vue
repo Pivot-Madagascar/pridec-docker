@@ -11,32 +11,19 @@
     <form v-else class="space-y-6" @submit.prevent="start">
       <Label>
         Cycle
-        <!-- A pass is active: the server refuses another month until it is paused or abandoned. -->
-        <Input
-          v-model="month"
-          type="month"
-          required
-          :max="thisMonth"
-          :disabled="busy || active != null"
-          :title="active ? 'Pause or abandon the active pass first (on the forecast page)' : 'Month of the pass'"
-          class="w-auto"
-        />
+        <Input v-model="month" type="month" required :max="thisMonth" :disabled="busy" title="Month of the pass" class="w-auto" />
       </Label>
 
       <fieldset v-if="month" class="space-y-2 text-sm text-foreground">
         <legend class="mb-2 font-semibold">Pass</legend>
-        <p v-if="active">
-          Pass <span class="font-mono">{{ active.id }}</span> is active, started {{ formatTime(active.started_at) }} by
-          {{ active.started_by ?? '-' }}: Start continues it.
-        </p>
-        <RadioGroup v-else v-model="choice">
+        <RadioGroup v-model="choice">
           <Label class="font-normal">
-            <RadioGroupItem value="new" :disabled="paused.length > 0" />
+            <RadioGroupItem value="new" />
             New pass
             <span class="text-xs text-muted-foreground">
-              <template v-if="paused.length">· resume or abandon (Journal) the paused pass first</template>
-              <template v-else-if="complete">· the month is complete: the first launch asks to confirm a new pass</template>
-              <template v-else>· starts at the first launch</template>
+              <template v-if="paused.length">· the paused pass stays paused: Start asks to confirm a new pass</template>
+              <template v-else-if="complete">· the month is complete: Start asks to confirm a new pass</template>
+              <template v-else>· starts now, from Data Import</template>
             </span>
           </Label>
           <Label v-for="p in paused" :key="p.id" class="font-normal">
@@ -66,12 +53,14 @@
         <Button type="submit" size="lg" :disabled="busy || !month">Start</Button>
       </div>
     </form>
+    <ImpactDialog :pending="pending" :busy="busy" @confirm="confirmNew" @cancel="cancel" />
   </Card>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import ImpactDialog from '@/views/Dashboard/components/ImpactDialog.vue'
 import ModeToggle from '@/views/Dashboard/components/ModeToggle.vue'
 import { useJournal } from '@/composables/useJournal'
 import { usePipeline } from '@/composables/usePipeline'
@@ -83,7 +72,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useConfigStore } from '@/stores/config'
 
 const router = useRouter()
-const { state, busy, refresh, setCycle, setMode, resume } = usePipeline(() => {}) // no Recent Activity on this page
+const { state, busy, pending, refresh, setCycle, setMode, resume, startPass, confirm, cancel } = usePipeline(() => {}) // no Recent Activity on this page
 const { cycles, loadCycles } = useJournal()
 const configStore = useConfigStore()
 
@@ -92,7 +81,8 @@ const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,
 const month = ref('') // 'YYYY-MM' of <input type="month">
 const choice = ref('new') // 'new' or the id of a paused pass
 
-const active = computed(() => (state.value?.pass?.state === 'active' ? state.value.pass : null))
+// A pass is active: Home has nothing to start, the forecast page takes over (replace: Back does not loop here).
+watch(() => state.value?.pass?.state, s => { if (s === 'active') void router.replace({ name: 'Dashboard' }) })
 const cycle = computed(() => month.value.replace('-', ''))
 // A pass lives in one mode: only the passes of the current mode can be resumed. Newest first (GET /pipeline/cycles).
 const passes = computed(() => {
@@ -102,17 +92,14 @@ const passes = computed(() => {
 const paused = computed(() => passes.value.filter(p => p.state === 'paused'))
 const complete = computed(() => passes.value[0]?.state === 'complete')
 
-// The target month of the server, or the active pass's month, until the user picks one.
-watch(() => active.value?.cycle ?? state.value?.cycle, c => {
-  if (c && (!month.value || active.value)) month.value = `${c.slice(0, 4)}-${c.slice(4)}`
+// The target month of the server, until the user picks one.
+watch(() => state.value?.cycle, c => {
+  if (c && !month.value) month.value = `${c.slice(0, 4)}-${c.slice(4)}`
 })
-// A month with a paused pass refuses a new one: resuming is the default.
+// A month with a paused pass: resuming is the default (a new pass needs a confirm, the paused one stays).
 watch(paused, list => { choice.value = list[0]?.id ?? 'new' })
 
-const passLabel = computed(() => {
-  if (active.value) return `continue ${active.value.id}`
-  return choice.value === 'new' ? 'new pass' : `resume ${choice.value}`
-})
+const passLabel = computed(() => (choice.value === 'new' ? 'new pass' : `resume ${choice.value}`))
 const parameters = computed(() => {
   const config = configStore.config
   return [
@@ -133,14 +120,18 @@ const changeMode = async (testMode: boolean) => {
   await loadCycles() // leaving test mode pauses the active test pass
 }
 
-// Each call shows its own toast; a refusal keeps the user here.
+// Each call shows its own toast; a refusal keeps the user here. A new pass is started now, so the forecast page
+// shows it (not the month's last pass); after a complete or paused pass, ImpactDialog asks to confirm first.
 async function start(): Promise<void> {
-  const ok = active.value
-    ? true
-    : choice.value !== 'new'
+  const ok =
+    choice.value !== 'new'
       ? await resume(choice.value)
-      : cycle.value === state.value?.cycle || (await setCycle(cycle.value))
+      : (cycle.value === state.value?.cycle || (await setCycle(cycle.value))) && (await startPass())
   if (ok) await router.push({ name: 'Dashboard' })
+}
+
+async function confirmNew(): Promise<void> {
+  if (await confirm()) await router.push({ name: 'Dashboard' })
 }
 
 const formatTime = (at: string) => new Date(at).toLocaleString()

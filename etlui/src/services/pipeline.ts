@@ -76,6 +76,12 @@ export async function pausePass(): Promise<void> {
   await api.post('/pipeline/passes/current/pause')
 }
 
+// POST /pipeline/passes: starts a new pass on the target month at once (409 confirmation_required after a complete
+// or paused pass of that month: the paused one stays paused).
+export async function startPass(confirm = false): Promise<void> {
+  await api.post('/pipeline/passes', undefined, withConfirm(confirm))
+}
+
 // POST /pipeline/passes/{id}/resume: a paused pass of the current mode becomes active again.
 export async function resumePass(passId: string): Promise<void> {
   await api.post(`/pipeline/passes/${passId}/resume`)

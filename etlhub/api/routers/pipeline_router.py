@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from etlhub.api.auth import require_admin
 from etlhub.api.routers import ADMIN_ONLY, BLOCKED, error_doc
+from etlhub.application.use_cases.ingestion_service import current_import_params
 from etlhub.application.use_cases.journal_service import JournalService
 from etlhub.core.dependencies import get_job_repository, get_journal_service, get_pipeline_gate
 from etlhub.domain.interfaces.job_repository import JobRepository
@@ -170,6 +171,25 @@ def set_mode(body: Mode, gate: PipelineGate = Depends(get_pipeline_gate)) -> dic
 )
 def set_cycle(body: Cycle, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
     return gate.set_cycle(body.cycle)
+
+
+@router.post(
+    "/passes",
+    status_code=201,
+    summary="Start a new pass",
+    description=(
+        "Home, \"New pass\": starts a pass on the target month at once, from data_import, with its folders "
+        "input/<cycle>/<pass>/ and output/<cycle>/<pass>/. The config and external_data of the month's previous pass "
+        "(paused or complete) are carried over, and so are the imports done in the month with the same parameters. "
+        "A month whose last pass is complete or paused needs confirm=true (409 confirmation_required, impact "
+        "complete_pass or paused_pass; a paused pass stays paused). Refused while a job runs or a pass is active."
+    ),
+    responses={201: {"content": {"application/json": {"example": {
+        "id": "3f9c1a2b", "cycle": "202610", "state": "active", "started_at": "2026-10-27T09:00:00.000000",
+        "started_by": "jdoe"}}}}, **BLOCKED},
+)
+def start_pass(confirm: bool = CONFIRM, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
+    return gate.start_pass(confirm, current_import_params())
 
 
 @router.post(
