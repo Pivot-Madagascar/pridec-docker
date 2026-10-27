@@ -13,16 +13,24 @@
 #vs code things
 .vscode/
 #python files
+# env files (.env, .env.debug): secrets, never committed
 .env*
+*/.env*
+# virtual environments
 .venv/
 venv/
-*/.env*
-*/.venv/
 */venv/
-**/__pycache__/
 test-venv/
-**__pychache__/
+etlhub_env/
+# bytecode, packaging and test caches
+**/__pycache__/
+__pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# credentials (Google OAuth client, GEE service account keys)
 client_secret.json
 .gee-private-key.json
 */.gee-private-key.json
@@ -39,8 +47,34 @@ build.log
 #output of docker workflow
 output/
 input/
+# shadcn-vue's Input component, not pipeline files
+!etlui/src/components/ui/input/
+# etlhub uploaded pipeline files (config, external data)
+uploads/
+# leftover of the removed DELETE /output/reset (see etlhub/docs/known-issues.md)
+.output_sig
 */output/
 */input/
 logs/
 
+# Node modules
 */node_modules
+
+# Redis Database backup
+dump.rdb
+
+# etlui production build
+etlui/dist/
+# personal notes and drafts, not shared
+local-docs/
+
+# local graphify knowledge graph
+graphify/
+graphify-out/
+# Redis (see redis.conf)
+redis-data/
+redis-secret.conf
+# Claude Code local settings, skills and session data
+.claude/
+# oh-my-claudecode local state
+.omc/

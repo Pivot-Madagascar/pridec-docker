@@ -43,15 +43,15 @@ services:
     cap_add:
       - SYS_NICE  
     volumes:
-     - type: bind
-       source: ${HOST_PWD:-.}/input
-       target: /app/input
-       bind:
+      - type: bind
+        source: ${HOST_PWD:-.}/input
+        target: /app/input
+        bind:
           create_host_path: true
-       read_only: false
-     - type: bind
-       source: ${HOST_PWD:-.}/output
-       target: /app/output
-       bind:
+        read_only: false
+      - type: bind
+        source: ${HOST_PWD:-.}/output
+        target: /app/output
+        bind:
           create_host_path: true
-       read_only: false
+        read_only: false

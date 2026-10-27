@@ -1,4 +1,7 @@
-import argparse
+from pivot_dhis_tools import post_dataElements
+import os
+import json
+import logging
 
 def print_help():
     print(f"""
@@ -11,40 +14,50 @@ Notes:
 -   None
 """)
 
-parser = argparse.ArgumentParser(add_help=False)  # disable default help
-parser.add_argument("--help", "-h", action="store_true")
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)  # disable default help
+    parser.add_argument("--help", "-h", action="store_true")
+    return parser.parse_args()
 
-args = parser.parse_args()
+def post_forecast():
+    from .config import get_dhis_token, get_dhis_url, get_dry_run, setup_logging, check_envvars
 
-if args.help:
-    print_help()
-    exit(0)
+    DHIS_TOKEN = get_dhis_token()
+    DHIS_URL = get_dhis_url()
+    DRYRUN = get_dry_run()
 
-from config import DHIS_TOKEN, DHIS_URL, dryRun, setup_logging, check_envvars
-from pivot_dhis_tools import post_dataElements
-import os
-import json
+    setup_logging()
 
-import logging
+    logger = logging.getLogger("post_forecasts")
 
-setup_logging()
+    check_envvars(required_vars = {
+                'DHIS_TOKEN': DHIS_TOKEN,
+                'DHIS_URL': DHIS_URL})
 
-logger = logging.getLogger("post_forecasts")
+    logger.info("Posting forecasts to %s", DHIS_URL)
 
+    output_dir = os.path.join(os.getcwd(), 'output')
+    os.makedirs(output_dir, exist_ok=True)
 
-check_envvars(required_vars = {
-            'DHIS_TOKEN': DHIS_TOKEN,
-            'DHIS_URL': DHIS_URL})
+    try:
+        os.chmod(output_dir, 0o755)
+    except PermissionError:
+        pass
 
-logger.info("Posting forecasts to %s", DHIS_URL)
+    try:
+        with open('output/forecast.json', 'r') as file:
+            json_payload = json.load(file)
+    except FileNotFoundError as e:
+            logger.error("The file 'output/forecast.json' was not found. Run the forecast step first.")
+            raise e
 
-try:
-    with open('output/forecast.json', 'r') as file:
-        json_payload = json.load(file)
-except FileNotFoundError as e:
-        logger.error("The file 'output/forecast.json' was not found. Run the forecast step first.")
-        raise SystemExit(1) from e
+    post_dataElements(dhis_url = DHIS_URL, payload = json_payload,
+                       token= DHIS_TOKEN, dryRun=DRYRUN)
 
-post_dataElements(dhis_url = DHIS_URL, payload = json_payload,
-                   token= DHIS_TOKEN, dryRun=dryRun)
-
+if __name__ == "__main__":
+    args = parse_args()
+    if args.help:
+        print_help()
+        exit(0)
+    post_forecast()

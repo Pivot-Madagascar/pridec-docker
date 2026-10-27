@@ -1,0 +1,13 @@
+from typing import Protocol
+
+
+class ConfigRepository(Protocol):
+    """The editable dynamic configuration (PARENT_OU, OU_LEVEL, ...). Writes return False on failure."""
+
+    def get_all(self) -> dict: ...
+
+    def set_all(self, config: dict) -> bool: ...
+
+    def delete_keys(self, keys: list) -> bool: ...
+
+    def load_env(self) -> bool: ...
