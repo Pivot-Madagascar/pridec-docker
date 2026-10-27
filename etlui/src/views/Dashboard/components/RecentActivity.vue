@@ -15,7 +15,7 @@
           <!-- Only activities that started a job have something to show: their request and logs -->
           <button
             v-if="entry.jobId"
-            class="detail-btn text-xs text-blue-400 hover:text-blue-300"
+            data-test="detail-btn" class="detail-btn text-xs text-blue-400 hover:text-blue-300"
             @click="openDetail(entry)"
           >
             Detail

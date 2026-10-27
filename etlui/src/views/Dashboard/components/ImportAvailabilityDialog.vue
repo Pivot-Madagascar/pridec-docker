@@ -7,6 +7,7 @@
     :error="error"
     loading-label="Checking DHIS2…"
     class="availability-dialog"
+    data-test="availability-dialog"
     @close="emit('close')"
   >
     <template #actions>
@@ -25,7 +26,7 @@
 
       <section v-for="imp in report.imports" :key="imp.task" class="availability-section">
         <h4 class="availability-task">{{ labelOf(imp.task) }} <span class="availability-ou">{{ imp.org_units }}</span></h4>
-        <p class="availability-origin">
+        <p class="availability-origin" data-test="availability-origin">
           <span v-if="imp.reused" class="availability-badge">reused</span>
           checked {{ new Date(imp.checked_at).toLocaleString() }}<template v-if="imp.checked_by"> by {{ imp.checked_by }}</template>
           <template v-if="imp.pass_id"> · pass {{ imp.pass_id }}</template>

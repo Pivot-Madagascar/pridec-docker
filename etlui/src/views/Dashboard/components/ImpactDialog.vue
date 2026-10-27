@@ -1,6 +1,6 @@
 <template>
   <!-- Modal of rule R5: built only from the `impact` etlhub sends with a 409 confirmation_required. -->
-  <BaseDialog :open="!!pending" class="impact-dialog" :aria-labelledby="titleId" @dismiss="!busy && emit('cancel')">
+  <BaseDialog :open="!!pending" class="impact-dialog" data-test="impact-dialog" :aria-labelledby="titleId" @dismiss="!busy && emit('cancel')">
     <div v-if="pending" class="impact-body">
       <h3 :id="titleId" class="impact-title">{{ pending.label }}: confirmation required</h3>
       <p class="impact-message">{{ pending.message }}</p>

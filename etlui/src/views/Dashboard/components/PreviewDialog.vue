@@ -24,7 +24,7 @@
       <div v-else-if="error" class="preview-state is-error" role="alert">{{ error }}</div>
       <slot v-else />
     </div>
-    <div v-if="$slots.footer" class="preview-footer"><slot name="footer" /></div>
+    <div v-if="$slots.footer" class="preview-footer" data-test="preview-footer"><slot name="footer" /></div>
   </BaseDialog>
 </template>
 

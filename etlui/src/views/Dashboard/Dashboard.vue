@@ -29,7 +29,7 @@
           <div class="action-grid">
             <ActionCard v-for="card in cards('data_import')" :key="card.key" :action="card" @action-click="launchItem" />
           </div>
-          <div class="imports-approval">
+          <div class="imports-approval" data-test="imports-approval">
             <span class="approval-text">
               Imports approval: <strong :class="`status-${approveImports?.status ?? 'pending'}`">{{ approveImports?.status ?? 'pending' }}</strong>
               · check the case counts first: COM &lt; 100, CSB under the limit, then approve or reject under the Details

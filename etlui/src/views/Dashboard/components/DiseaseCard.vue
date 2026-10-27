@@ -1,6 +1,6 @@
 <template>
   <!-- One disease: its 3 runs (ADJ, COM, CSB) side by side; their input files are in each run's "Steps" dialog. -->
-  <article class="disease-card" :aria-labelledby="titleId">
+  <article class="disease-card" data-test="disease-card" :aria-labelledby="titleId">
     <header class="card-header">
       <h4 :id="titleId" class="card-title">{{ DISEASE_NAMES[disease] }}</h4>
       <p class="card-progress">

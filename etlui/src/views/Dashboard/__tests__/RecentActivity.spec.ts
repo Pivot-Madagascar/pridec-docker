@@ -29,17 +29,17 @@ describe('RecentActivity', () => {
     getRequest.mockResolvedValue({ data: REQUEST })
     const wrapper = mount(RecentActivity, { props: { activityLog: [entry(1, 'import_gee_1234abcd', 'req-1'), entry(2)] } })
 
-    expect(wrapper.findAll('.detail-btn')).toHaveLength(1)
-    await wrapper.find('.detail-btn').trigger('click')
+    expect(wrapper.findAll('[data-test="detail-btn"]')).toHaveLength(1)
+    await wrapper.find('[data-test="detail-btn"]').trigger('click')
     await flushPromises()
 
     expect(getRequest).toHaveBeenCalledWith('req-1')
     expect(wrapper.text()).toContain('/import_gee')
     expect(wrapper.text()).toContain('202')
     expect(getJobLogs).toHaveBeenCalledWith('import_gee_1234abcd')
-    expect(wrapper.find('.job-logs-section').text()).toContain('step 1')
+    expect(wrapper.find('[data-test="job-logs-section"]').text()).toContain('step 1')
 
     await wrapper.findAll('button').find((b) => b.text() === 'Close')!.trigger('click')
-    expect(wrapper.find('.job-logs-section').exists()).toBe(false)
+    expect(wrapper.find('[data-test="job-logs-section"]').exists()).toBe(false)
   })
 })

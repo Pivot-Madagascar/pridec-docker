@@ -6,7 +6,7 @@
       class="accordion-item"
     >
       <button
-        class="accordion-header"
+        class="accordion-header" data-test="accordion-header"
         @click="toggle(index)"
       >
         <span class="accordion-title">{{ item.title }}</span>
