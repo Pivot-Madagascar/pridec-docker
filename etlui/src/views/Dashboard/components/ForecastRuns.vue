@@ -42,7 +42,7 @@
 import { computed, provide, ref } from 'vue'
 import DiseaseCard from '@/views/Dashboard/components/DiseaseCard.vue'
 import { Button } from '@/components/ui/button'
-import { DISEASE_NAMES, ITEM_NAMES, coupleName, jobOf, labelOf, openLevel, step } from '@/config/pipeline'
+import { DISEASE_NAMES, ITEM_NAMES, coupleName, jobOf, labelOf, nextItem, step } from '@/config/pipeline'
 import { DISEASES } from '@/types/pipeline'
 import { RUNS, type RunsEmit, type RunsProps } from './runs'
 
@@ -71,11 +71,7 @@ const todo = computed(() => {
     return left ? 'open a forecast run below.' : "all of this month's forecasts are published."
   }
   const name = coupleName(run.couple)
-  const disease = run.couple.split('/')[1]
-  const next = forecastStep.value.items.find(i =>
-    i.launchable && i.status !== 'success' &&
-      (i.item.startsWith(`${run.couple}:`) || i.item === `config/${disease}` || i.item === openLevel(props.state))
-  )
+  const next = nextItem(state, 'forecast')
   if (!next) return `nothing to launch for ${name}.`
   if (next.item.startsWith('config/')) return `provide the parameters of ${name} (click its card).`
   if (next.item.startsWith('external_data/')) return `provide the external data of ${name} (click its card).`

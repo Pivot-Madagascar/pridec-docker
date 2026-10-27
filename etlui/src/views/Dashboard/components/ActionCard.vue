@@ -2,6 +2,7 @@
   <button
     :disabled="disabled"
     class="action-card" data-test="action-card"
+    :data-item="action.key"
     :class="{ 'card-success': action.success }"
     @click="handleClick"
   >
