@@ -14,7 +14,7 @@
       </TableHeader>
       <TableBody>
         <TableRow
-          v-for="req in paginated"
+          v-for="req in requests"
           :key="req.request_id"
           :data-state="selectedId === req.request_id ? 'selected' : undefined"
           :style="hasDetail(req) ? 'cursor: pointer' : undefined"
@@ -62,39 +62,25 @@
         </TableRow>
       </TableBody>
     </Table>
-
-    <div class="flex items-center justify-end border-t px-4 py-2 space-x-2">
-      <Button variant="secondary" size="xs" :disabled="page <= 0" @click="$emit('update:page', page - 1)">Prev</Button>
-      <span class="text-xs text-muted-foreground">Page {{ page + 1 }} / {{ totalPages || 1 }}</span>
-      <Button variant="secondary" size="xs" :disabled="page + 1 >= totalPages" @click="$emit('update:page', page + 1)">Next</Button>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { computed } from 'vue'
 import type { RequestLog } from '@/services/api'
 import { statusColor } from '@/utils/status'
 import { Button } from '@/components/ui/button'
 
-const PAGE_SIZE = 10
-const props = defineProps<{
-  requests: RequestLog[]
+defineProps<{
+  requests: RequestLog[] // the rows of the current page (TrackerView pages them)
   selectedId?: string | null
-  page: number
 }>()
 
 const hasDetail = (req: RequestLog) => req.job_id != null || req.reason != null
 
 defineEmits<{
   (e: 'select', requestId: string): void
-  (e: 'update:page', page: number): void
 }>()
-
-const paginated = computed(() => props.requests.slice(props.page * PAGE_SIZE, (props.page + 1) * PAGE_SIZE))
-
-const totalPages = computed(() => Math.max(1, Math.ceil(props.requests.length / PAGE_SIZE)))
 
 function shortRequestId(requestId: string) {
   return requestId.length > 12 ? requestId.slice(0, 12) + '...' : requestId

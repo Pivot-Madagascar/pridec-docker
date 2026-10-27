@@ -68,12 +68,20 @@
       </div>
 
       <p class="text-xs text-muted-foreground">
-        Every change of the pass (one run of the cycle), oldest first. Refused actions (409) are not events: see Tracking.
+        Every change of the pass (one run of the cycle), newest first unless you reverse it. Refused actions (409) are not events: see Tracking.
         Not seen: the <code>pridec</code> command line, build_analytics launched from DHIS2.
         Test events stay in Redis only and disappear if Redis is flushed.
       </p>
 
       <div v-if="error" class="rounded-lg border border-destructive/40 bg-destructive/15 p-3 text-sm text-destructive">{{ error }}</div>
+
+      <TablePager
+        :sizes="PAGE_SIZES"
+        v-model:page-size="settings.pageSize"
+        v-model:newest-first="settings.newestFirst"
+        v-model:page="page"
+        :total-pages="totalPages"
+      />
 
       <div class="overflow-hidden rounded-lg border">
         <Table class="min-w-full">
@@ -89,7 +97,7 @@
           </TableHeader>
           <TableBody>
             <TableRow
-              v-for="(e, index) in shown"
+              v-for="(e, index) in rows"
               :key="index"
               :class="{ 'cursor-pointer hover:bg-muted': hasDetail(e) }"
               @click="hasDetail(e) && (selected = e)"
@@ -137,6 +145,8 @@
 <script setup lang="ts">
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { computed, onMounted, ref } from 'vue'
+import TablePager from '@/components/TablePager.vue'
+import { useTablePaging } from '@/composables/useTablePaging'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useJournal } from '@/composables/useJournal'
@@ -190,6 +200,9 @@ const passes = computed<JournalPass[]>(() => cycles.value.flatMap(c => c.passes)
 const current = computed(() => passes.value.find(p => p.id === passId.value))
 
 const shown = computed(() => events.value.filter(e => !step.value || e.step === step.value))
+// etlhub sends the journal oldest first; 0 = All, the default.
+const PAGE_SIZES = [25, 50, 100, 0]
+const { settings, page, rows, totalPages } = useTablePaging('journal', shown, { sizes: PAGE_SIZES, defaultSize: 0, sourceNewestFirst: false })
 
 const hasDetail = (e: JournalEvent) => e.request != null || (e.job_id != null && JOB_EVENTS.has(e.event))
 const formatTime = (at: string) => new Date(at).toLocaleString()
