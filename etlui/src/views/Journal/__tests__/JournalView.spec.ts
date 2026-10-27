@@ -130,8 +130,7 @@ describe('JournalView', () => {
     query.pass = 'cccc3333'
     const complete = mount(JournalView)
     await flushPromises()
-    expect(complete.findAll('button').filter(b => ['Resume', 'Abandon'].includes(b.text())).map(b => b.attributes('data-test'))).toEqual([
-      'confirm-btn']) // only the closed dialog's own button
+    expect(complete.findAll('button').filter(b => ['Resume', 'Abandon'].includes(b.text()))).toHaveLength(0) // the closed confirm dialog renders nothing
   })
 
   it('offers the CSV export to administrators only', async () => {

@@ -106,8 +106,8 @@ describe('TrackerView', () => {
 
     await openDetail(wrapper, launch)
 
-    expect(wrapper.findAll('dialog th').map((th) => th.text())).toEqual(['Method', 'Status', 'URL', 'Duration', 'Job ID'])
-    expect(wrapper.findAll('dialog tbody tr')).toHaveLength(1)
+    expect(wrapper.findAll('[role="dialog"] th').map((th) => th.text())).toEqual(['Method', 'Status', 'URL', 'Duration', 'Job ID'])
+    expect(wrapper.findAll('[role="dialog"] tbody tr')).toHaveLength(1)
     expect(getJobLogs).toHaveBeenCalledWith('import_gee_1234abcd')
     expect(wrapper.find('[data-test="job-logs-section"]').text()).toContain('step 1')
     expect(wrapper.text()).toContain('success')
