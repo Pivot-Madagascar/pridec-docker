@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Vue 3 + TypeScript front-end (Vite 7, Pinia 3, vue-router 4, axios, Tailwind 4, `vue3-hot-toast`) that drives the PRIDE-C pipeline. It calls the REST API of `etlhub` (port 8111) and follows jobs over its log WebSocket. It has no backend of its own: in production it is static files served by nginx.
+Vue 3 + TypeScript front-end (Vite 7, Pinia 3, vue-router 4, axios, Tailwind 4, shadcn-vue on `reka-ui`, `@lucide/vue`, `vue3-hot-toast`) that drives the PRIDE-C pipeline. It calls the REST API of `etlhub` (port 8111) and follows jobs over its log WebSocket. It has no backend of its own: in production it is static files served by nginx.
 
 ## Module map
 
@@ -15,6 +15,7 @@ Vue 3 + TypeScript front-end (Vite 7, Pinia 3, vue-router 4, axios, Tailwind 4, 
 - `src/config/pipeline.ts` — display of each checkpoint as an `ActionCard` (label, icon) and `jobOf` (checkpoint → job route); step 2 display names (`DISEASE_NAMES`, `LEVEL_NAMES`, `ITEM_NAMES`, `coupleName`) and `plainError` (etlhub's common refusals in plain words, used by `usePipeline` for every error toast). No rule: statuses, `launchable` and order come from etlhub
 - `src/services/pipeline.ts` + `src/types/pipeline.ts` — `/pipeline/*` routes and job launches, with `confirm`; `GET /import_availability` (`ImportAvailabilityReport`)
 - `src/utils/status.ts` — `statusColor` (badge colours of an HTTP code or a job status, used by `RequestTable`, `RequestDetail`, `JobLogsPanel`). `src/utils/preview.ts` — pure helpers, no I/O: streaming CSV parser (`createCsvParser`, `previewCsvStream`, same output shape as etlhub's preview), `formatPeriod`, `formatCell`
+- `src/components/ui/` — shadcn-vue components copied by its CLI (`Button` so far), ours to edit; `src/lib/utils.ts` re-exports `cn`. Migration by lots: `docs/decision-design/shadcn-migration/shadcn-migration.md`.
 - `src/components/` — `Drawer.vue` (right-side navigation menu, opened by the header hamburger), `JobToast.vue` (content of a job's toast), `Icons/` (inline SVG paths, `Icon` + `ICONS`). `src/styles/base.css`.
 - Tests: `__tests__/*.spec.ts` next to the code (`router/`, `services/`, `composables/`, `utils/`). The `test` block of `vite.config.ts` (no `vitest.config.ts`): `happy-dom`, `globals: true`, `src/test/setup.ts` (fresh Pinia before each test).
 
@@ -61,6 +62,7 @@ Run from `etlui/`. Yarn 1 is the package manager (`yarn.lock`; the `Dockerfile` 
 - One file: `yarn vitest run src/composables/__tests__/usePipeline.spec.ts`
 - Type-check, linter, formatter, coverage: none installed (`vue-tsc`, ESLint, Prettier and `@vitest/coverage-*` are absent). Do not invent one.
 - Docker: `docker build -t etlui etlui/` → nginx on 8000.
+- Node 22 (`.nvmrc`, same as the `Dockerfile`): `nvm use` first. Add a shadcn-vue component: `npx shadcn-vue@2.8.2 add <name>` (the CLI needs Node ≥ 22). Add only what a lot uses; review the diff of `base.css` after each `add`.
 
 ## Method for new code (adapted from `etlhub/CLAUDE.MD`, proposed)
 
@@ -81,7 +83,7 @@ Run from `etlui/`. Yarn 1 is the package manager (`yarn.lock`; the `Dockerfile` 
 
 ## Where to look next
 
-- `etlui/docs/decision-design/` — etlui design and decision docs, one folder per feature. `tailwind-migration/`: styling migration to Tailwind tokens (gray + indigo, light/dark theme, `data-test` in specs), decided, not implemented
+- `etlui/docs/decision-design/` — etlui design and decision docs, one folder per feature. `shadcn-migration/`: shadcn-vue components and tokens (gray + indigo, `.dark` class), by lots, lot 1 done. `tailwind-migration/`: gray + indigo, light/dark theme, `data-test` in specs; its tokens and component classes are superseded by shadcn-migration
 - `etlhub/CLAUDE.MD` — backend rules, frozen contracts, gotchas
 - `etlhub/docs/ARCHITECTURE.md` — runtime topology, state, pipeline order
 - `etlhub/docs/DEVELOPMENT.md` — test and clean-code state, proposed rules

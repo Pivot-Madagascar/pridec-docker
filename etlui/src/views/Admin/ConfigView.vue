@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useConfigStore } from '@/stores/config'
+import { Button } from '@/components/ui/button'
 import { LOG_LEVELS, type ConfigUpdate } from '@/types/config'
 
 const configStore = useConfigStore()
@@ -150,12 +151,12 @@ const handleReload = async () => {
       <p class="hint">Values are reset from .env each time etlhub starts.</p>
 
       <div class="button-group">
-        <button @click="handleSave" :disabled="configStore.loading" class="submit-btn">
+        <Button class="flex-1" @click="handleSave" :disabled="configStore.loading">
           {{ configStore.loading ? 'Saving...' : 'Save' }}
-        </button>
-        <button @click="handleReload" :disabled="configStore.loading" class="reload-btn">
+        </Button>
+        <Button variant="secondary" class="flex-1" @click="handleReload" :disabled="configStore.loading">
           {{ configStore.loading ? 'Loading...' : 'Reload from .env' }}
-        </button>
+        </Button>
       </div>
     </div>
   </div>
@@ -211,13 +212,5 @@ const handleReload = async () => {
 
 .button-group {
   @apply flex gap-3 mt-4;
-}
-
-.submit-btn {
-  @apply flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
-}
-
-.reload-btn {
-  @apply flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
 }
 </style>
