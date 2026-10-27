@@ -4,9 +4,7 @@
     <template v-if="open">
       <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-700 bg-gray-800 px-4 py-3">
         <h2 class="text-base font-semibold text-gray-100">{{ title ?? 'Request Detail' }}</h2>
-        <button class="rounded-md px-3 py-1 text-sm bg-gray-700 text-gray-300 hover:bg-gray-600" @click="emit('close')">
-          Close
-        </button>
+        <Button variant="secondary" size="sm" @click="emit('close')">Close</Button>
       </div>
       <div class="space-y-4 p-4">
         <RequestDetail v-if="request" :request="request" />
@@ -22,6 +20,7 @@ import type { RequestLog } from '@/services/api'
 import BaseDialog from '@/views/Dashboard/components/BaseDialog.vue'
 import RequestDetail from './RequestDetail.vue'
 import JobLogsPanel from './JobLogsPanel.vue'
+import { Button } from '@/components/ui/button'
 
 defineProps<{
   open: boolean

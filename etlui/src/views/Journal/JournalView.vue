@@ -40,26 +40,16 @@
         <div class="flex flex-wrap items-center gap-2 text-sm">
           <!-- A paused pass: resume it (the Dashboard continues it) or abandon it for good. The server has the last word. -->
           <template v-if="current?.state === 'paused'">
-            <button
-              class="rounded-md bg-blue-600 px-4 py-1.5 text-white hover:bg-blue-500 disabled:opacity-50"
-              title="Continue this cycle on the Dashboard"
-              @click="resume(current.id)"
-            >
-              Resume
-            </button>
-            <button class="rounded-md bg-gray-800 px-4 py-1.5 text-red-400 hover:bg-gray-700" @click="abandoning = true">Abandon</button>
+            <Button title="Continue this cycle on the Dashboard" @click="resume(current.id)">Resume</Button>
+            <Button variant="destructive" @click="abandoning = true">Abandon</Button>
           </template>
           <select v-model="step" aria-label="Step" class="rounded-md border border-gray-600 bg-gray-800 px-2 py-1 text-gray-200">
             <option value="">All steps</option>
             <option v-for="s in STEPS" :key="s" :value="s">{{ s }}</option>
           </select>
-          <button
-            class="rounded-md bg-gray-800 px-4 py-1.5 text-gray-300 hover:bg-gray-700"
-            :disabled="loading"
-            @click="refresh"
-          >
+          <Button variant="secondary" :disabled="loading" @click="refresh">
             {{ loading ? 'Loading...' : 'Refresh' }}
-          </button>
+          </Button>
           <!-- etlhub enforces it too (403): the CSV export is for administrators. -->
           <a
             v-if="isAdmin"
@@ -148,6 +138,7 @@ import { useJournal } from '@/composables/useJournal'
 import type { JournalEvent, JournalPass, PassState } from '@/types/pipeline'
 import RequestDialog from '@/views/TrackerView/components/RequestDialog.vue'
 import ConfirmDialog from '@/views/Dashboard/components/ConfirmDialog.vue'
+import { Button } from '@/components/ui/button'
 
 const STEPS = ['data_import', 'forecast', 'system_update']
 // Events of a real job: they have logs. Uploads and decisions have none. carried_over: the job of an earlier pass.

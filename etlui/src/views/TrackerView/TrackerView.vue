@@ -3,20 +3,17 @@
     <div class="flex items-center justify-between gap-4">
       <h1 class="text-2xl font-bold text-gray-100">Request Tracking</h1>
       <div class="flex items-center gap-2">
-        <input
+        <Input
           v-model="endpointFilter"
           type="text"
           placeholder="Filter by endpoint (e.g. /import_gee)"
           @keyup.enter="refresh"
-          class="rounded-md border border-gray-600 bg-gray-800 px-2 py-1 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+          aria-label="Filter by endpoint"
+          class="w-64"
         />
-        <button
-          class="rounded-md px-4 py-1.5 text-sm bg-gray-800 text-gray-300 hover:bg-gray-700"
-          @click="refresh"
-          :disabled="loading"
-        >
+        <Button variant="secondary" @click="refresh" :disabled="loading">
           {{ loading ? 'Loading...' : 'Refresh' }}
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -41,6 +38,8 @@ import { storeToRefs } from 'pinia'
 import { useTrackingStore } from '@/stores/useTrackingStore'
 import RequestTable from './components/RequestTable.vue'
 import RequestDialog from './components/RequestDialog.vue'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 const store = useTrackingStore()
 const showModal = ref(false)

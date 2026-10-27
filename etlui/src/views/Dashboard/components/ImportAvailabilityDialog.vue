@@ -11,7 +11,7 @@
     @close="emit('close')"
   >
     <template #actions>
-      <button type="button" class="dialog-btn" :disabled="loading" @click="emit('refresh')">Refresh</button>
+      <Button variant="outline" size="sm" :disabled="loading" @click="emit('refresh')">Refresh</Button>
     </template>
     <template v-if="report">
       <p class="availability-meta">
@@ -80,6 +80,7 @@ import { labelOf } from '@/config/pipeline'
 import type { ImportAvailabilityReport } from '@/types/pipeline'
 import { formatPeriod } from '@/utils/preview'
 import PreviewDialog from './PreviewDialog.vue'
+import { Button } from '@/components/ui/button'
 
 defineProps<{
   open: boolean

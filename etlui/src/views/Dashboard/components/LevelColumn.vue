@@ -21,9 +21,9 @@
     <BaseDialog v-if="isOpen" :open="showSteps" backdrop-close class="steps-dialog" :aria-label="`${LEVEL_NAMES[source]} · ${disease}`" @dismiss="showSteps = false">
       <header class="steps-header">
         <h5 class="level-title">{{ LEVEL_NAMES[source] }} <span class="level-code">{{ source }}</span> · {{ disease }}</h5>
-        <button type="button" class="steps-close" data-test="steps-close" aria-label="Close the steps" @click="showSteps = false">
-          <Icon :path="ICONS.close" class="steps-close-icon" />
-        </button>
+        <Button variant="ghost" size="icon-sm" data-test="steps-close" aria-label="Close the steps" @click="showSteps = false">
+          <Icon :path="ICONS.close" class="size-5" />
+        </Button>
       </header>
       <!-- Two stages: preparing the data, then the forecast. Stage 2 opens once the data check succeeds (Next / Previous). -->
       <section v-for="tile in tiles" v-show="shown === tile.n" :key="tile.n" class="steps-tile" data-test="steps-tile" :aria-label="tile.title">
@@ -62,26 +62,20 @@
               <span class="item-state">{{ LOOK_TEXT[row.look] }}</span>
               <span v-if="row.updated" class="item-state item-time" data-test="item-time">{{ row.updated }}</span>
             </span>
-            <button
+            <Button
               v-if="row.launch"
-              type="button"
-              class="btn btn-small"
+              variant="outline"
+              size="sm"
               :disabled="blocked"
               :aria-label="`${row.launch} : ${row.label}`"
               @click="emit('launch', row.item)"
             >
               {{ row.launch }}
-            </button>
+            </Button>
             <!-- The approval is a decision: read the forecast report, then approve or reject it there. -->
-            <button
-              v-else-if="row.look === 'waiting'"
-              type="button"
-              class="btn btn-small btn-primary"
-              :disabled="blocked"
-              @click="emit('validate')"
-            >
+            <Button v-else-if="row.look === 'waiting'" size="sm" :disabled="blocked" @click="emit('validate')">
               Read and approve
-            </button>
+            </Button>
           </li>
         </ol>
         <!-- The data check is a button, not a card: it closes stage 1. -->
@@ -92,25 +86,25 @@
               {{ check.look === 'pending' && !check.launch ? 'Available once the 5 items above are done' : LOOK_TEXT[check.look] }}
             </span>
           </span>
-          <button type="button" class="btn btn-primary" :disabled="blocked || !check.launch" @click="emit('launch', check.item)">
+          <Button :disabled="blocked || !check.launch" @click="emit('launch', check.item)">
             {{ check.look === 'pending' ? 'Run the data check' : 'Relaunch the data check' }}
-          </button>
-          <button type="button" class="btn" :disabled="!checked" @click="shown = 2">Next →</button>
+          </Button>
+          <Button variant="outline" :disabled="!checked" @click="shown = 2">Next →</Button>
         </div>
         <div v-if="tile.n === 2" class="tile-nav" data-test="tile-nav">
-          <button type="button" class="btn" @click="shown = 1">← Previous</button>
+          <Button variant="outline" @click="shown = 1">← Previous</Button>
         </div>
       </section>
     </BaseDialog>
 
     <div class="level-action">
-      <button v-if="status.key === 'published'" type="button" class="btn" @click="emit('report', source, disease)">View report</button>
-      <button v-else-if="status.key === 'waiting'" type="button" class="btn btn-primary" :disabled="blocked" @click="emit('validate')">
+      <Button v-if="status.key === 'published'" variant="outline" class="w-full" @click="emit('report', source, disease)">View report</Button>
+      <Button v-else-if="status.key === 'waiting'" class="w-full" :disabled="blocked" @click="emit('validate')">
         Read and approve
-      </button>
+      </Button>
       <template v-else-if="!isOpen">
         <p v-if="runs.state?.run" class="hint">Available once the open run is done</p>
-        <button v-else type="button" class="btn btn-primary" :disabled="blocked || !accessible" @click="emit('open', source, disease)">Open</button>
+        <Button v-else class="w-full" :disabled="blocked || !accessible" @click="emit('open', source, disease)">Open</Button>
       </template>
     </div>
   </section>
@@ -120,6 +114,7 @@
 import { computed, inject, reactive, ref, useId, watch } from 'vue'
 import BaseDialog from './BaseDialog.vue'
 import Icon, { ICONS } from '@/components/Icons'
+import { Button } from '@/components/ui/button'
 import FileDropzone from '@/views/Dashboard/components/FileDropzone.vue'
 import { CONFIG_FILES, DISEASE_NAMES, FILE_STATUS, ITEM_NAMES, LEVEL_NAMES, jobOf, lastUpdate, step } from '@/config/pipeline'
 import type { Disease, PipelineItem, Source } from '@/types/pipeline'

@@ -13,13 +13,7 @@
         <div class="flex-row-center space-x-2">
           <span class="activity-time">{{ entry.time }}</span>
           <!-- Only activities that started a job have something to show: their request and logs -->
-          <button
-            v-if="entry.jobId"
-            data-test="detail-btn" class="detail-btn text-xs text-blue-400 hover:text-blue-300"
-            @click="openDetail(entry)"
-          >
-            Detail
-          </button>
+          <Button v-if="entry.jobId" variant="link" size="xs" data-test="detail-btn" @click="openDetail(entry)">Detail</Button>
         </div>
       </div>
     </div>
@@ -37,6 +31,7 @@ import type { ActivityEntry } from '@/composables/useActivityLog'
 import type { RequestLog } from '@/services/api'
 import { useTrackingStore } from '@/stores/useTrackingStore'
 import RequestDialog from '@/views/TrackerView/components/RequestDialog.vue'
+import { Button } from '@/components/ui/button'
 
 defineProps<{
   activityLog: ActivityEntry[]

@@ -18,12 +18,9 @@
         </router-link>
 
         <div class="header-right">
-          <button
-            class="hamburger-btn"
-            @click="isDrawerOpen = true"
-          >
-            <Icon :path="ICONS.menu" class="icon-md" />
-          </button>
+          <Button variant="ghost" size="icon" aria-label="Open the menu" @click="isDrawerOpen = true">
+            <Icon :path="ICONS.menu" class="size-6" />
+          </Button>
 
           <Drawer
             v-model="isDrawerOpen"
@@ -110,15 +107,6 @@
   color: #9ca3af;
 }
 
-.hamburger-btn {
-  @apply p-2 rounded-md transition-colors;
-  color: #d1d5db;
-}
-
-.hamburger-btn:hover {
-  @apply bg-gray-700 text-white;
-}
-
 .header-right {
   @apply flex items-center space-x-3;
 }
@@ -151,6 +139,7 @@ import { computed, onMounted, ref } from 'vue'
 import Icon, { ICONS } from '@/components/Icons'
 import Drawer from '@/components/Drawer.vue'
 import { Toaster } from 'vue3-hot-toast'
+import { Button } from '@/components/ui/button'
 
 const toasts = ref<HTMLElement>()
 onMounted(() => toasts.value?.showPopover?.()) // without the Popover API the div simply stays in the page

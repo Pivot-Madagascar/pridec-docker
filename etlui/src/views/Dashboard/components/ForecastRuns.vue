@@ -4,16 +4,17 @@
 
     <!-- The carousel has no scrollbar: these buttons (and each card's "Next disease") move between diseases. -->
     <nav class="disease-nav" data-test="disease-nav" aria-label="Diseases">
-      <a
+      <Button
         v-for="(disease, i) in DISEASES"
         :key="disease"
-        class="btn btn-small"
-        :class="{ 'is-active': i === shown }"
+        as="a"
+        size="sm"
+        :variant="i === shown ? 'default' : 'outline'"
         :aria-current="i === shown ? 'true' : undefined"
         :href="`#forecast-${disease}`"
       >
         {{ DISEASE_NAMES[disease] }}
-      </a>
+      </Button>
     </nav>
     <div class="carousel" data-test="carousel" tabindex="0" aria-label="Forecasts by disease" @scroll="onScroll">
       <DiseaseCard
@@ -28,10 +29,10 @@
     <details v-if="isAdmin" class="admin-zone" data-test="admin-zone">
       <summary>Administration</summary>
       <div class="admin-actions">
-        <button type="button" class="btn btn-danger" :disabled="busy || !state?.lock" @click="emit('release')">Release the lock</button>
-        <button type="button" class="btn btn-danger" :disabled="busy || !!state?.lock || !state?.run" @click="emit('abandon')">
+        <Button variant="destructive" :disabled="busy || !state?.lock" @click="emit('release')">Release the lock</Button>
+        <Button variant="destructive" :disabled="busy || !!state?.lock || !state?.run" @click="emit('abandon')">
           Abandon the open forecast run
-        </button>
+        </Button>
       </div>
     </details>
   </div>
@@ -40,6 +41,7 @@
 <script setup lang="ts">
 import { computed, provide, ref } from 'vue'
 import DiseaseCard from '@/views/Dashboard/components/DiseaseCard.vue'
+import { Button } from '@/components/ui/button'
 import { DISEASE_NAMES, ITEM_NAMES, coupleName, jobOf, labelOf, openLevel, step } from '@/config/pipeline'
 import { DISEASES } from '@/types/pipeline'
 import { RUNS, type RunsEmit, type RunsProps } from './runs'
@@ -111,45 +113,11 @@ const todo = computed(() => {
   gap: 0.75rem;
 }
 
-.forecast-runs .btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.forecast-runs .btn:focus-visible,
 .forecast-runs .carousel:focus-visible,
 .forecast-runs a:focus-visible,
 .forecast-runs summary:focus-visible {
   outline: 2px solid #818cf8;
   outline-offset: 2px;
-}
-
-.forecast-runs .btn-primary {
-  background: #4f46e5;
-  border-color: #4f46e5;
-  color: #fff;
-}
-
-.forecast-runs .btn-danger {
-  background: rgba(220, 38, 38, 0.2);
-  border-color: rgba(220, 38, 38, 0.6);
-  color: #fca5a5;
-}
-
-.forecast-runs .btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 .forecast-runs .carousel {
@@ -328,29 +296,6 @@ const todo = computed(() => {
   gap: 1rem;
 }
 
-.forecast-runs .steps-close {
-  display: flex;
-  padding: 0.375rem;
-  border-radius: 0.5rem;
-  color: #94a3b8;
-  cursor: pointer;
-}
-
-.forecast-runs .steps-close:hover {
-  color: #f1f5f9;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.forecast-runs .steps-close:focus-visible {
-  outline: 2px solid #818cf8;
-  outline-offset: 2px;
-}
-
-.forecast-runs .steps-close-icon {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-
 /* Stage 1: config and external data | the 3 fetches, then the data check button.
    Stage 2: forecast (+ CSB alerts) and approval | publication. 6 columns: 1, 2 or 3 items per row. */
 .forecast-runs .steps-dialog .item-list {
@@ -491,24 +436,9 @@ const todo = computed(() => {
   color: #f87171;
 }
 
-.forecast-runs .disease-nav .is-active {
-  background: #4f46e5;
-  border-color: #4f46e5;
-  color: #fff;
-}
-
-.forecast-runs .btn-small {
-  padding: 0.25rem 0.75rem;
-  font-size: 0.8125rem;
-}
-
 .forecast-runs .level-action {
   position: relative; /* above .card-steps */
   margin-top: auto;
-}
-
-.forecast-runs .level-action .btn {
-  width: 100%;
 }
 
 .forecast-runs .next-link {

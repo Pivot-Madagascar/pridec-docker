@@ -4,6 +4,9 @@ import { useRouter } from 'vue-router'
 import { getDhis2Urls, login } from '@/services/auth'
 import { useAuthStore } from '@/stores/auth'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -46,15 +49,16 @@ const handleSubmit = async () => {
 
 <template>
   <div class="login-container">
-    <form class="login-card" @submit.prevent="handleSubmit">
+    <Card class="w-full max-w-100 px-8">
+    <form class="login-form" @submit.prevent="handleSubmit">
       <h2 class="form-title">Login with DHIS2</h2>
       <div v-if="error" class="error-message">{{ error }}</div>
       <p class="login-description">
         Use your account on the target DHIS2 instance.
       </p>
       <div class="form-group">
-        <label for="dhis2Url">DHIS2 URL</label>
-        <input
+        <Label for="dhis2Url">DHIS2 URL</Label>
+        <Input
           id="dhis2Url"
           v-model="dhis2Url"
           type="url"
@@ -68,8 +72,8 @@ const handleSubmit = async () => {
         </datalist>
       </div>
       <div class="form-group">
-        <label for="username">Username</label>
-        <input
+        <Label for="username">Username</Label>
+        <Input
           id="username"
           v-model="username"
           type="text"
@@ -78,8 +82,8 @@ const handleSubmit = async () => {
         />
       </div>
       <div class="form-group">
-        <label for="password">Password</label>
-        <input
+        <Label for="password">Password</Label>
+        <Input
           id="password"
           v-model="password"
           type="password"
@@ -91,6 +95,7 @@ const handleSubmit = async () => {
         {{ loading ? 'Logging in...' : 'Login' }}
       </Button>
     </form>
+    </Card>
   </div>
 </template>
 
@@ -103,15 +108,10 @@ const handleSubmit = async () => {
   color: white;
 }
 
-.login-card {
+.login-form {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 2rem;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  width: 100%;
-  max-width: 400px;
   text-align: center;
 }
 
@@ -120,7 +120,7 @@ const handleSubmit = async () => {
 }
 
 .login-description {
-  color: #666;
+  color: var(--muted-foreground);
   margin-bottom: 1rem;
 }
 
@@ -129,17 +129,6 @@ const handleSubmit = async () => {
   flex-direction: column;
   gap: 0.5rem;
   text-align: left;
-}
-
-.form-group label {
-  font-weight: 500;
-}
-
-.form-group input {
-   padding: 0.5rem;
-   border: 1px solid #ccc;
-   border-radius: 4px;
-   font-size: 1rem;
 }
 
 .error-message {

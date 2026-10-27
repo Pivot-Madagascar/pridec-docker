@@ -5,21 +5,21 @@
       <div class="modal-header">
         <h2 class="modal-title">Forecast Report</h2>
         <div class="flex items-center gap-2">
-          <button class="modal-refresh" @click="fetchReport" :disabled="loading">
+          <Button variant="outline" size="sm" @click="fetchReport" :disabled="loading">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" :class="{ 'animate-spin': loading }">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5M20 20v-5h-5M4 4l5 5m11 11l-5-5" />
             </svg>
             <span>Refresh</span>
-          </button>
+          </Button>
           <!-- Native download: the browser sends the session cookie and saves the zip itself. New tab so an
                error page (404, expired session) does not replace the app. Open run only: a closed run's files left input/. -->
-          <a v-if="!run" class="modal-refresh" :href="archiveUrl" target="_blank" rel="noopener" download>
+          <Button v-if="!run" as="a" variant="outline" size="sm" :href="archiveUrl" target="_blank" rel="noopener" download>
             <Icon :path="ICONS.download" width="16" height="16" stroke-width="2" />
             <span>Download Forecast Data</span>
-          </a>
-          <button class="modal-close" @click="closeModal">
-            <Icon :path="ICONS.close" width="20" height="20" stroke-width="2" />
-          </button>
+          </Button>
+          <Button variant="ghost" size="icon-sm" aria-label="Close the report" @click="closeModal">
+            <Icon :path="ICONS.close" class="size-5" stroke-width="2" />
+          </Button>
         </div>
       </div>
 
@@ -49,6 +49,7 @@ import { ref, watch } from 'vue'
 import api from '@/services/api'
 import Icon, { ICONS } from '@/components/Icons'
 import BaseDialog from './BaseDialog.vue'
+import { Button } from '@/components/ui/button'
 
 const props = defineProps<{
   modelValue: boolean
@@ -119,14 +120,6 @@ watch(() => props.modelValue, open => open && fetchReport(), { immediate: true }
 
 .modal-title {
   @apply text-2xl font-bold text-white;
-}
-
-.modal-close {
-  @apply p-2 rounded-lg bg-white/5 border border-white/10 text-white hover:text-white hover:bg-white/20 transition-colors;
-}
-
-.modal-refresh {
-  @apply p-2 rounded-lg bg-white/5 border border-white/10 text-white hover:text-white hover:bg-white/20 transition-colors flex items-center gap-2;
 }
 
 .modal-body {

@@ -34,7 +34,7 @@
               Imports approval: <strong :class="`status-${approveImports?.status ?? 'pending'}`">{{ approveImports?.status ?? 'pending' }}</strong>
               · check the case counts first: COM &lt; 100, CSB under the limit, then approve or reject under the Details
             </span>
-            <button type="button" class="approval-btn" @click="availability.show()">Details</button>
+            <Button variant="outline" @click="availability.show()">Details</Button>
           </div>
         </template>
 
@@ -67,10 +67,10 @@
 
       <!-- After System Update: stop the cycle for now (resumed from the Journal), or for good. -->
       <div v-if="active" class="pass-actions">
-        <button type="button" class="approval-btn" :disabled="busy || state?.lock != null" @click="pause">Pause the cycle</button>
-        <button type="button" class="approval-btn approval-btn-danger" :disabled="busy || state?.lock != null" @click="pendingAbandon = true">
+        <Button variant="outline" :disabled="busy || state?.lock != null" @click="pause">Pause the cycle</Button>
+        <Button variant="destructive" :disabled="busy || state?.lock != null" @click="pendingAbandon = true">
           Abandon the cycle
-        </button>
+        </Button>
       </div>
     </section>
 
@@ -78,8 +78,8 @@
 
     <ForecastReportModal v-model="showReportModal" :run="reportRun">
       <template v-if="validating" #footer>
-        <button type="button" class="approval-btn" :disabled="busy" @click="decideFromReport('reject')">Reject</button>
-        <button type="button" class="approval-btn approval-btn-primary" :disabled="busy" @click="decideFromReport('approve')">Approve</button>
+        <Button variant="outline" :disabled="busy" @click="decideFromReport('reject')">Reject</Button>
+        <Button :disabled="busy" @click="decideFromReport('approve')">Approve</Button>
       </template>
     </ForecastReportModal>
 
@@ -93,8 +93,8 @@
     >
       <!-- The imports decision, under the report it is made on: closes it, then sends the decision (as decideFromReport). -->
       <template #footer>
-        <button type="button" class="approval-btn" :disabled="busy || state?.lock != null || availability.loading.value || approveImports?.status !== 'success'" @click="decideImportsFromDetails('reject')">Reject</button>
-        <button type="button" class="approval-btn approval-btn-primary" :disabled="busy || state?.lock != null || availability.loading.value || !approveImports?.launchable" @click="decideImportsFromDetails('approve')">Approve imports</button>
+        <Button variant="outline" :disabled="busy || state?.lock != null || availability.loading.value || approveImports?.status !== 'success'" @click="decideImportsFromDetails('reject')">Reject</Button>
+        <Button :disabled="busy || state?.lock != null || availability.loading.value || !approveImports?.launchable" @click="decideImportsFromDetails('approve')">Approve imports</Button>
       </template>
     </ImportAvailabilityDialog>
 
@@ -154,6 +154,7 @@ import { computed, ref, onMounted } from 'vue'
 
 import Accordion from '@/views/Dashboard/components/Accordion.vue'
 import ActionCard from '@/views/Dashboard/components/ActionCard.vue'
+import { Button } from '@/components/ui/button'
 import ConfigPreview from '@/views/Dashboard/components/ConfigPreview.vue'
 import ConfirmDialog from '@/views/Dashboard/components/ConfirmDialog.vue'
 import CsvPreview from '@/views/Dashboard/components/CsvPreview.vue'
@@ -300,26 +301,6 @@ onMounted(refresh)
   color: #94a3b8;
 }
 
-.approval-btn {
-  padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  cursor: pointer;
-}
-
-.approval-btn-primary {
-  background: #4f46e5;
-  border-color: #4f46e5;
-  color: #fff;
-}
-
-.approval-btn-danger {
-  color: #f87171;
-}
 
 .pass-actions {
   display: flex;
@@ -333,10 +314,6 @@ onMounted(refresh)
   color: #fde68a;
 }
 
-.approval-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
 
 .status-success {
   color: #34d399;

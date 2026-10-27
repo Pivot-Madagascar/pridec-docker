@@ -7,14 +7,14 @@
         <span class="status-text">
           On server · {{ formatSize(serverFile.size ?? 0) }}<template v-if="serverFile.modified"> · {{ formatDate(serverFile.modified) }}</template>
         </span>
-        <button type="button" class="btn btn-sm btn-preview" :aria-label="`Preview ${label} on the server`" @click="emit('preview-server')">
-          <Icon :path="ICONS.eye" class="btn-icon" />
+        <Button variant="outline" size="sm" :aria-label="`Preview ${label} on the server`" @click="emit('preview-server')">
+          <Icon :path="ICONS.eye" />
           Preview
-        </button>
-        <button type="button" class="btn btn-sm btn-danger" :disabled="busy" :aria-label="`Delete ${label} from the server`" @click="emit('delete')">
-          <Icon :path="ICONS.reset" class="btn-icon" />
+        </Button>
+        <Button variant="destructive" size="sm" :disabled="busy" :aria-label="`Delete ${label} from the server`" @click="emit('delete')">
+          <Icon :path="ICONS.reset" />
           {{ busy ? 'Deleting…' : 'Delete' }}
-        </button>
+        </Button>
       </template>
       <span v-else class="status-text">Not on server</span>
     </div>
@@ -50,24 +50,23 @@
       </div>
 
       <div v-if="modelValue" class="dropzone-actions">
-        <button type="button" class="btn btn-preview" :aria-label="`Preview the selected ${label}`" @click="emit('preview-local', modelValue)">
-          <Icon :path="ICONS.eye" class="btn-icon" />
+        <Button variant="outline" size="sm" :aria-label="`Preview the selected ${label}`" @click="emit('preview-local', modelValue)">
+          <Icon :path="ICONS.eye" />
           Preview
-        </button>
-        <label :for="inputId" class="btn" :class="{ 'is-disabled': busy }">Replace</label>
-        <button type="button" class="btn btn-danger" :disabled="busy" @click="clear">Remove</button>
-        <button
-          type="button"
-          class="btn btn-upload"
+        </Button>
+        <Button as="label" :for="inputId" variant="outline" size="sm" :class="{ 'pointer-events-none opacity-50': busy }">Replace</Button>
+        <Button variant="destructive" size="sm" :disabled="busy" @click="clear">Remove</Button>
+        <Button
+          size="sm"
           :disabled="busy || disabled"
           :aria-busy="busy"
           :aria-label="`Upload ${label} to the server`"
           @click="emit('upload', modelValue)"
         >
-          <span v-if="busy" class="btn-spinner animate-spin" aria-hidden="true"></span>
-          <Icon v-else :path="ICONS.upload" class="btn-icon" />
+          <LoaderCircle v-if="busy" class="animate-spin" aria-hidden="true" />
+          <Icon v-else :path="ICONS.upload" />
           {{ busy ? 'Uploading…' : 'Upload' }}
-        </button>
+        </Button>
       </div>
 
       <input :id="inputId" ref="input" type="file" :accept="accept" class="sr-only" :disabled="disabled" @change="onChange" />
@@ -76,26 +75,22 @@
     <!-- The file of the repo (assets/) offered for this item, until a file is on the server: delete that one to get it back. -->
     <div v-if="defaultFile && !serverFile?.exists" class="status-row is-present default-status" data-test="default-status">
       <span class="status-text">Default · {{ defaultFile.filename }} · {{ formatSize(defaultFile.size) }}</span>
-      <button type="button" class="btn btn-sm btn-preview" :aria-label="`Preview the default ${label}`" @click="emit('preview-default')">
-        <Icon :path="ICONS.eye" class="btn-icon" />
+      <Button variant="outline" size="sm" :aria-label="`Preview the default ${label}`" @click="emit('preview-default')">
+        <Icon :path="ICONS.eye" />
         Preview
-      </button>
-      <button
-        type="button"
-        class="btn btn-sm btn-preview"
-        :disabled="disabled || busy"
-        :aria-label="`Use the default ${label}`"
-        @click="emit('use-default')"
-      >
+      </Button>
+      <Button variant="outline" size="sm" :disabled="disabled || busy" :aria-label="`Use the default ${label}`" @click="emit('use-default')">
         Use default
-      </button>
+      </Button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, useId } from 'vue'
+import { LoaderCircle } from '@lucide/vue'
 import Icon, { ICONS } from '@/components/Icons'
+import { Button } from '@/components/ui/button'
 import type { DefaultFile, ServerFile } from '@/types/inputs'
 
 const props = defineProps<{
@@ -301,86 +296,6 @@ const formatDate = (iso: string) =>
 .status-text {
   flex: 1;
   min-width: 0;
-}
-
-/* --- Buttons ------------------------------------------------------------- */
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.375rem 0.75rem;
-  border-radius: 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  cursor: pointer;
-}
-
-.btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.btn:disabled,
-.btn.is-disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-/* Small outlined buttons of the status rows. */
-.btn-sm {
-  padding: 0.25rem 0.625rem;
-  border-radius: 0.375rem;
-  background: transparent;
-}
-
-.btn-preview {
-  color: #bfdbfe;
-  border-color: rgba(59, 130, 246, 0.4);
-}
-
-.btn-sm.btn-preview:hover {
-  background: rgba(59, 130, 246, 0.12);
-}
-
-.btn-danger:hover {
-  color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.5);
-}
-
-.btn-sm.btn-danger {
-  color: #f87171;
-  border-color: rgba(239, 68, 68, 0.35);
-}
-
-.btn-sm.btn-danger:hover {
-  background: rgba(239, 68, 68, 0.12);
-}
-
-.btn-upload {
-  color: #fff;
-  background: #2563eb;
-  border-color: #2563eb;
-}
-
-.btn-upload:hover {
-  background: #1d4ed8;
-}
-
-.btn-icon {
-  width: 0.875rem;
-  height: 0.875rem;
-}
-
-.btn-spinner {
-  width: 0.875rem;
-  height: 0.875rem;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #fff;
-  border-radius: 50%;
 }
 
 @media (max-width: 640px) {
