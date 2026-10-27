@@ -295,6 +295,19 @@ def test_pause_resume_and_abandon_through_the_api(client, checkpoint_store):
     assert client.post("/pipeline/passes/nothex!/resume").status_code == 422
 
 
+def test_a_new_pass_starts_at_once_and_after_a_pause_with_confirm(client, checkpoint_store):
+    first = client.post("/pipeline/passes")
+    assert (first.status_code, first.json()["state"]) == (201, "active")
+    client.post("/pipeline/passes/current/pause")
+
+    refused = client.post("/pipeline/passes")
+    assert (refused.status_code, refused.json()["code"]) == (409, "confirmation_required")
+    assert refused.json()["impact"]["paused_pass"] == first.json()["id"]
+    second = client.post("/pipeline/passes", params={"confirm": "true"}).json()
+    assert second["id"] != first.json()["id"]
+    assert client.get("/pipeline/checkpoints").json()["pass"]["id"] == second["id"]
+
+
 
 def test_the_csv_keeps_the_event_job_id_and_adds_the_request():
     import csv

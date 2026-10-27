@@ -109,6 +109,7 @@ export function usePipeline(addActivity: AddActivity) {
     decideImports: (decision: 'approve' | 'reject') => act(decision === 'approve' ? 'Approve imports' : 'Reject imports', () => pipeline.decideImports(decision)),
     setMode: (testMode: boolean) => act(testMode ? 'Switch to test mode' : 'Switch to production', () => pipeline.setMode(testMode)),
     setCycle: (cycle: string | null) => act(`Cycle ${cycle ?? 'of the current month'}`, () => pipeline.setCycle(cycle)),
+    startPass: () => act('Start a new pass', c => pipeline.startPass(c)),
     pause: () => act('Pause the cycle', () => pipeline.pausePass()),
     resume: (passId: string) => act('Resume the cycle', () => pipeline.resumePass(passId)),
     abandonPass: (passId: string) => act('Abandon the cycle', () => pipeline.abandonPass(passId)),

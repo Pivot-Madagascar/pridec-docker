@@ -191,17 +191,15 @@ def test_items_of_a_run_follow_their_prerequisites(checkpoint_store):
         checkpoint_store.start("calc_orgunit_alerts", "c")
 
 
-def test_opening_a_run_empties_input_and_output(checkpoint_store, tmp_path):
+def test_opening_a_run_empties_input_and_output_but_not_the_pass_folders(checkpoint_store, tmp_path):
     _import(checkpoint_store)
-    (tmp_path / "input").mkdir()
-    (tmp_path / "output").mkdir()
     (tmp_path / "input" / "disease_data.json").write_text("{}")
     (tmp_path / "output" / "forecast.json").write_text("{}")
 
     checkpoint_store.open_run("COM/Malaria")
 
-    assert list((tmp_path / "input").iterdir()) == []
-    assert list((tmp_path / "output").iterdir()) == []
+    assert [f.name for f in (tmp_path / "input").iterdir()] == ["202610"]  # input/<cycle>/<pass>/ stays
+    assert [f.name for f in (tmp_path / "output").iterdir()] == ["202610"]
 
 
 def test_run_jobs_get_the_run_context(checkpoint_store):
@@ -512,11 +510,60 @@ def test_pause_then_resume_from_the_journal_continues_where_it_stopped(checkpoin
         "paused", "resumed"]
 
 
+def test_starting_a_pass_creates_it_at_once_with_its_folders_and_carried_items(checkpoint_store, tmp_path):
+    params = {"import_gee": {"p": 1}, "import_pivot_com": {"p": 2}, "import_pivot_csb": {"p": 3}}
+    for task in ("import_gee", "import_pivot_com", "import_pivot_csb"):
+        job_id = f"{task}_{next(_ids)}"
+        checkpoint_store.start(task, job_id, carry_over=params)
+        checkpoint_store.finish(job_id, "success")
+    first = checkpoint_store.pause()
+
+    with pytest.raises(ConfirmationRequiredError, match=f"Pass {first['id']} of cycle 202610 is paused"):
+        checkpoint_store.start_pass(carry_over=params)
+    p = checkpoint_store.start_pass(confirm=True, carry_over=params)
+
+    state = checkpoint_store.progress()
+    assert (state["pass"]["id"], state["pass"]["state"]) == (p["id"], "active")  # the Dashboard shows the new pass
+    assert _status(state, "data_import", "import_gee") == "success"  # carried, nothing launched
+    assert (tmp_path / "input" / "202610" / p["id"]).is_dir() and (tmp_path / "output" / "202610" / p["id"]).is_dir()
+    with pytest.raises(PipelineBlockedError, match=f"Pass {p['id']} \\(202610\\) is active"):
+        checkpoint_store.start_pass(confirm=True)
+
+
 def test_pause_is_refused_while_a_job_runs(checkpoint_store):
     checkpoint_store.start("import_gee", "busy")
 
     with pytest.raises(PipelineBlockedError, match="one job at a time"):
         checkpoint_store.pause()
+
+
+def test_a_new_pass_after_a_pause_needs_confirm_takes_its_uploads_and_abandon_keeps_only_reports(checkpoint_store, tmp_path):
+    _import(checkpoint_store)
+    checkpoint_store.open_run("COM/Malaria")
+    _upload(checkpoint_store, content='{"m": 1}')
+    _pass(checkpoint_store, "fetch_disease")
+    (tmp_path / "input" / "disease_data.json").write_text("fetched")
+    (tmp_path / "output" / "forecast.json").write_text("{}")
+    first = checkpoint_store.pause()
+    first_in, first_out = (tmp_path / d / "202610" / first["id"] for d in ("input", "output"))
+    assert (first_in / "disease_data.json").read_text() == "fetched"  # the working files go with the pass
+
+    with pytest.raises(ConfirmationRequiredError, match=f"Pass {first['id']} of cycle 202610 is paused") as refused:
+        checkpoint_store.start("import_gee", "new")
+    assert refused.value.impact == {"cycle": "202610", "paused_pass": first["id"]}
+    _pass(checkpoint_store, "import_gee", confirm=True)
+
+    second = checkpoint_store.progress()
+    assert second["pass"]["id"] != first["id"]
+    assert checkpoint_store.progress(first["id"])["pass"]["state"] == "paused"  # to resume from the Journal
+    assert _status(second, "forecast", "config/Malaria") == "success"  # carried from the paused pass
+    assert (tmp_path / "input" / "202610" / second["pass"]["id"] / "config_Malaria.json").read_text() == '{"m": 1}'
+    assert not (tmp_path / "input" / "disease_data.json").exists()  # input/ is the new pass's now
+
+    (first_out / "report_ADJ_Malaria.html").write_text("report")
+    checkpoint_store.abandon(first["id"])
+    assert not first_in.exists()
+    assert [f.name for f in first_out.iterdir()] == ["report_ADJ_Malaria.html"]
 
 
 def test_two_months_in_turn_one_active_pass_at_a_time(checkpoint_store, month, tmp_path):
@@ -537,8 +584,8 @@ def test_two_months_in_turn_one_active_pass_at_a_time(checkpoint_store, month, t
 
     state = checkpoint_store.progress()
     assert (state["cycle"], state["run"]["couple"]) == ("202609", "COM/Malaria")
-    # Another run emptied input/ meanwhile: the run starts again from its fetches, its config is restored
-    assert _status(state, "forecast", "COM/Malaria:fetch_disease") == "pending"
+    # Another run emptied input/ meanwhile: the pass saved its files when paused, nothing is fetched again
+    assert _status(state, "forecast", "COM/Malaria:fetch_disease") == "success"
     assert _status(state, "forecast", "config/Malaria") == "success"
     assert (tmp_path / "input" / "config.json").read_text() == '{"m": "09"}'
 
@@ -897,7 +944,7 @@ def test_a_store_keyed_by_month_is_split_into_passes_at_each_cycle_closed(checkp
     state = checkpoint_store.progress()
     assert (state["pass"]["id"], state["run"]["couple"]) == (second["id"], "COM/Malaria")
     assert _status(state, "data_import", "import_gee") == "success"
-    assert (tmp_path / "uploads" / "202504" / second["id"] / "config_Malaria.json").is_file()
+    assert (tmp_path / "input" / "202504" / second["id"] / "config_Malaria.json").is_file()  # pass folders
     assert checkpoint_store.cycles() == [cycle]  # migrated once: the ids stay
 
 

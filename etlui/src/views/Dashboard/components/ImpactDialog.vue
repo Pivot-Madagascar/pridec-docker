@@ -58,6 +58,9 @@ const LABELS: Record<string, string> = {
   blocked_steps: 'Blocked until revalidated',
   kept_items: 'Successes kept in the next steps',
   stale_runs: 'Runs already computed with the previous file (kept)',
+  cycle: 'Cycle',
+  complete_pass: 'Complete pass (kept)',
+  paused_pass: 'Paused pass (stays paused, resume it from the Journal)',
   mode: 'Mode',
   open_run: 'Open run discarded',
   items_in_success: 'Test successes discarded'

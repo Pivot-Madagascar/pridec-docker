@@ -5,11 +5,13 @@ const getCheckpoints = vi.fn()
 const getCycles = vi.fn()
 const setCycle = vi.fn()
 const resumePass = vi.fn()
+const startPass = vi.fn()
 vi.mock('@/services/pipeline', () => ({
   getCheckpoints: (...args: unknown[]) => getCheckpoints(...args),
   getCycles: (...args: unknown[]) => getCycles(...args),
   setCycle: (...args: unknown[]) => setCycle(...args),
   resumePass: (...args: unknown[]) => resumePass(...args),
+  startPass: (...args: unknown[]) => startPass(...args),
   setMode: vi.fn(),
   journalCsvUrl: vi.fn()
 }))
@@ -23,7 +25,8 @@ vi.mock('@/services/config', () => ({
   }
 }))
 const push = vi.fn()
-vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
+const replace = vi.fn()
+vi.mock('vue-router', () => ({ useRouter: () => ({ push, replace }) }))
 vi.mock('vue3-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }))
 
 import HomeView from '@/views/Home/HomeView.vue'
@@ -62,7 +65,7 @@ describe('HomeView', () => {
     expect(wrapper.find<HTMLInputElement>('input[type="month"]').element.value).toBe('2026-10')
     expect(wrapper.text()).toContain('pppp1111')
     expect(wrapper.text()).not.toContain('tttt2222') // a test pass is not resumed in production
-    expect(wrapper.find('[role="radio"][value="new"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[role="radio"][value="new"]').attributes('disabled')).toBeUndefined() // a new pass, after a confirm
     // The parameters of the pass
     expect(wrapper.text()).toContain('OU_PARENT')
     expect(wrapper.text()).toContain('https://dhis2.example')
@@ -75,15 +78,39 @@ describe('HomeView', () => {
     expect(push).toHaveBeenCalledWith({ name: 'Dashboard' })
   })
 
-  it('starts a new pass on another month: sends the month, then goes to the forecast page', async () => {
+  it('starts a new pass on another month: sends the month, starts the pass, then goes to the forecast page', async () => {
     setCycle.mockResolvedValue(undefined)
+    startPass.mockResolvedValue(undefined)
     const wrapper = await mountPage()
 
     await wrapper.find('input[type="month"]').setValue('2026-09')
-    expect(wrapper.text()).toContain('complete') // the redo is confirmed at the first launch
+    expect(wrapper.text()).toContain('complete') // the redo asks a confirm
     await startButton(wrapper).trigger('click')
     await flushPromises()
     expect(setCycle).toHaveBeenCalledWith('202609')
+    expect(startPass).toHaveBeenCalledWith(false)
+    expect(resumePass).not.toHaveBeenCalled()
+    expect(push).toHaveBeenCalledWith({ name: 'Dashboard' })
+  })
+
+  it('starts a new pass beside a paused one after the confirm, then goes to the forecast page', async () => {
+    startPass
+      .mockRejectedValueOnce({ response: { status: 409, data: {
+        code: 'confirmation_required', message: 'Pass pppp1111 of cycle 202610 is paused: resend with confirm=true',
+        impact: { cycle: '202610', paused_pass: 'pppp1111' } } } })
+      .mockResolvedValueOnce(undefined)
+    const wrapper = await mountPage()
+
+    await wrapper.find('[role="radio"][value="new"]').trigger('click')
+    await startButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(push).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Pass pppp1111 of cycle 202610 is paused')
+
+    await wrapper.find('[data-test="impact-dialog"] [role="checkbox"]').trigger('click') // the impact is read
+    await wrapper.findAll('button').find(b => b.text() === 'Confirm')!.trigger('click')
+    await flushPromises()
+    expect(startPass).toHaveBeenLastCalledWith(true)
     expect(resumePass).not.toHaveBeenCalled()
     expect(push).toHaveBeenCalledWith({ name: 'Dashboard' })
   })
@@ -99,16 +126,19 @@ describe('HomeView', () => {
     expect(push).not.toHaveBeenCalled()
   })
 
-  it('continues an active pass: the month is locked and nothing is sent', async () => {
+  it('sends the user to the forecast page while a pass is active, without sending anything', async () => {
     getCheckpoints.mockResolvedValue(checkpoints({ pass: pass('aaaa4444', '202610', 'active') }))
-    const wrapper = await mountPage()
+    await mountPage()
 
-    expect(wrapper.find('input[type="month"]').attributes('disabled')).toBeDefined()
-    expect(wrapper.text()).toContain('aaaa4444')
-    await startButton(wrapper).trigger('click')
-    await flushPromises()
+    expect(replace).toHaveBeenCalledWith({ name: 'Dashboard' }) // replace: Back does not return to Home
     expect(setCycle).not.toHaveBeenCalled()
     expect(resumePass).not.toHaveBeenCalled()
-    expect(push).toHaveBeenCalledWith({ name: 'Dashboard' })
+    expect(startPass).not.toHaveBeenCalled()
+  })
+
+  it('stays on Home when no pass is active', async () => {
+    await mountPage()
+
+    expect(replace).not.toHaveBeenCalled()
   })
 })

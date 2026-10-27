@@ -1,5 +1,8 @@
 # Cycle passes: redo, pause, resume, abandon
 
+> **Since 2026-10-27**: a new pass can start while the month's last pass is paused (with confirm), and files live in
+> `input/<cycle>/<pass>/` and `output/<cycle>/<pass>/` instead of `uploads/`: see [../pass-folders/pass-folders.md](../pass-folders/pass-folders.md).
+>
 > **Status: implemented on 2026-10-22** (etlhub and etlui together). Product decisions in § 4; what was built, and where
 > it differs from § 5 to § 10, in [§ 12](#12-implementation).
 > Builds on [../cycle-journal/cycle-journal.md](../cycle-journal/cycle-journal.md) and

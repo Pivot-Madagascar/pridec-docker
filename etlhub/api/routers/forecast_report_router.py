@@ -63,6 +63,9 @@ def download_archive():
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for folder in ("input", "output"):
             for path in sorted((root / folder).rglob("*")):
+                top = path.relative_to(root / folder).parts[0]
+                if len(top) == 6 and top.isdigit():  # input/<cycle>/, output/<cycle>/: the pass folders, not the open run
+                    continue
                 if path.is_file() and not path.is_symlink():
                     archive.write(path, path.relative_to(root))
     if not archive.namelist():
