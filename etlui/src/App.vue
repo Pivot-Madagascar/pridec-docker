@@ -69,8 +69,9 @@
   @apply min-h-screen;
 }
 
+/* Stays at the top while the page scrolls: above the Dashboard's fixed panel (z-30), under the dialogs (z-50). */
 .app-header {
-  @apply px-6 py-4 border-b bg-card text-card-foreground;
+  @apply sticky top-0 z-40 px-6 py-4 border-b bg-card text-card-foreground;
 }
 
 .app-header-content {
@@ -113,7 +114,7 @@
 }
 
 .main-content {
-  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8;
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-8;
 }
 </style>
 
