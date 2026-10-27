@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getDhis2Urls, login } from '@/services/auth'
 import { useAuthStore } from '@/stores/auth'
+import { Button } from '@/components/ui/button'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -86,9 +87,9 @@ const handleSubmit = async () => {
           required
         />
       </div>
-      <button type="submit" class="submit-btn" :disabled="loading">
+      <Button type="submit" size="lg" :disabled="loading">
         {{ loading ? 'Logging in...' : 'Login' }}
-      </button>
+      </Button>
     </form>
   </div>
 </template>
@@ -147,24 +148,5 @@ const handleSubmit = async () => {
   padding: 0.5rem;
   border-radius: 4px;
   text-align: center;
-}
-
-.submit-btn {
-  padding: 0.75rem;
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 1rem;
-}
-
-.submit-btn:hover {
-  background: #2563eb;
-}
-
-.submit-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 </style>

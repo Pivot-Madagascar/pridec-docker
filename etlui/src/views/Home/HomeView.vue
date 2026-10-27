@@ -63,13 +63,7 @@
       </div>
 
       <div class="flex justify-end">
-        <button
-          type="submit"
-          class="rounded-md bg-indigo-600 px-6 py-2 font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
-          :disabled="busy || !month"
-        >
-          Start
-        </button>
+        <Button type="submit" size="lg" :disabled="busy || !month">Start</Button>
       </div>
     </form>
   </section>
@@ -81,6 +75,7 @@ import { useRouter } from 'vue-router'
 import ModeToggle from '@/views/Dashboard/components/ModeToggle.vue'
 import { useJournal } from '@/composables/useJournal'
 import { usePipeline } from '@/composables/usePipeline'
+import { Button } from '@/components/ui/button'
 import { useConfigStore } from '@/stores/config'
 
 const router = useRouter()

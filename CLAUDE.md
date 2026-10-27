@@ -25,6 +25,6 @@ Multi-service repo. Each service owns its details; this file only holds the map 
 - `etlhub/docs/` — `ARCHITECTURE.md`, `known-issues.md`, `DEVELOPMENT.md` (test, architecture and clean-code state, proposed rules)
 - `etlhub/docs/testing-QA/` — manual test logs (`test-incident-log.md`, `test-pipeline-michelle.md`) and local tickets (`ticket-*.md`)
 - `etlhub/docs/decision-design/` — design and decision docs, implemented or under discussion, one folder per feature (`pipeline-checkpoints/`, `pipeline-config/`, `default-input-files/`, `cycle-journal/`, `cycle-passes/`, `dry-run/`, `import-availability/`). A new feature's docs go in a new folder there
-- `etlui/docs/decision-design/` — same for etlui (`tailwind-migration/`)
+- `etlui/docs/decision-design/` — same for etlui (`tailwind-migration/`, `shadcn-migration/`)
 - `.claude/skills/etlhub/` — how etlhub is built (architecture, tables)
 - `.claude/skills/etlhub-practices/` — how to change etlhub well (templates, migrations, checklists)

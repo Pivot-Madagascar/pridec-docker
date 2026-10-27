@@ -1,6 +1,9 @@
 # Styling: migration to Tailwind tokens
 
 > Status: **decided, not implemented** (2026-10-16). Nothing in `src/` follows this document yet.
+> **Partly superseded on 2026-10-27** by `../shadcn-migration/shadcn-migration.md`: shadcn tokens replace D5 / § 3.1,
+> shadcn components replace D6 / § 3.3, the `.dark` class replaces `data-theme` (§ 3.2), and § 6 "no new
+> dependency" no longer holds. D1–D4, D7, § 3.4 and § 3.5 still apply.
 > Scope: every `<style>` block and every class of `etlui/src/`, `src/styles/base.css`, `index.html`, the specs that
 > select by class.
 
