@@ -45,6 +45,7 @@ const CYCLES = [
 describe('JournalView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear() // the table's rows per page and order are remembered
     getCycles.mockResolvedValue(CYCLES)
     query.pass = 'cccc3333'
   })
@@ -91,10 +92,13 @@ describe('JournalView', () => {
 
     expect(getJournal).toHaveBeenCalledWith('cccc3333')
     const rows = wrapper.findAll('tbody tr')
-    expect(rows).toHaveLength(2)
-    expect(rows[0].text()).toContain('confirm: true · dry_run: false')
-    expect(rows[0].text()).not.toContain('params') // an import's parameters: in the CSV only
-    expect(rows[1].text()).toContain('test')
+    expect(rows).toHaveLength(2) // newest first: etlhub sends them oldest first
+    expect(rows[0].text()).toContain('test')
+    expect(rows[1].text()).toContain('confirm: true · dry_run: false')
+    expect(rows[1].text()).not.toContain('params') // an import's parameters: in the CSV only
+
+    await wrapper.find('[data-test="order-btn"]').trigger('click')
+    expect(wrapper.findAll('tbody tr')[0].text()).toContain('confirm: true')
 
     await wrapper.find('[aria-label="Step"]').trigger('keydown', { key: 'Enter' }) // shadcn Select: open, then pick
     await flushPromises()

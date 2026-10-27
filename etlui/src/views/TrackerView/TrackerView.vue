@@ -21,12 +21,16 @@
       {{ error }}
     </div>
 
-    <RequestTable
-      :requests="requests"
-      :selected-id="selected?.request_id ?? null"
-      v-model:page="page"
-      @select="handleSelect"
-    />
+    <div class="space-y-2">
+      <TablePager
+        :sizes="PAGE_SIZES"
+        v-model:page-size="settings.pageSize"
+        v-model:newest-first="settings.newestFirst"
+        v-model:page="page"
+        :total-pages="totalPages"
+      />
+      <RequestTable :requests="rows" :selected-id="selected?.request_id ?? null" @select="handleSelect" />
+    </div>
 
     <RequestDialog :open="showModal && !!selected" :request="selected" :job-id="selected?.job_id" @close="showModal = false" />
   </div>
@@ -40,25 +44,28 @@ import RequestTable from './components/RequestTable.vue'
 import RequestDialog from './components/RequestDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import TablePager from '@/components/TablePager.vue'
+import { useTablePaging } from '@/composables/useTablePaging'
 
 const store = useTrackingStore()
 const showModal = ref(false)
-const page = ref(0)
 const endpointFilter = ref('')
 
 // storeToRefs keeps the view in sync when the store replaces these values.
 const { requests, error, loading, selected } = storeToRefs(store)
 
 // Loaded on mount and on Refresh (or Enter in the filter) only: no polling.
-// The table pages through these MAX_REQUESTS client-side, 10 per page.
-const MAX_REQUESTS = 50
+// The table pages through these MAX_REQUESTS client-side; etlhub sends them newest first.
+// ponytail: client-side pages over the last 500; server-side paging (offset) if older requests are needed.
+const MAX_REQUESTS = 500
+const PAGE_SIZES = [10, 25, 50, 100]
+const { settings, page, rows, totalPages } = useTablePaging('tracking', requests, { sizes: PAGE_SIZES, defaultSize: 10, sourceNewestFirst: true })
 
 onMounted(() => {
   refresh()
 })
 
 function refresh() {
-  page.value = 0
   store.fetchRequests(MAX_REQUESTS, endpointFilter.value || undefined)
 }
 

@@ -40,6 +40,7 @@ async function openDetail(wrapper: ReturnType<typeof mount>, request: ReturnType
 
 describe('TrackerView', () => {
   beforeEach(() => {
+    localStorage.clear()
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', FakeWebSocket)
     FakeWebSocket.instances = []
@@ -53,7 +54,7 @@ describe('TrackerView', () => {
     vi.unstubAllGlobals()
   })
 
-  it('loads the last 50 requests once on mount, with no polling', async () => {
+  it('loads the last 500 requests once on mount, with no polling', async () => {
     listRequests.mockResolvedValue({ data: [row('a', '/import_gee')] })
 
     const wrapper = mount(TrackerView)
@@ -61,7 +62,7 @@ describe('TrackerView', () => {
     await vi.advanceTimersByTimeAsync(10000)
 
     expect(listRequests).toHaveBeenCalledTimes(1)
-    expect(listRequests).toHaveBeenCalledWith(50, undefined)
+    expect(listRequests).toHaveBeenCalledWith(500, undefined)
     expect(wrapper.text()).toContain('/import_gee')
   })
 
@@ -75,7 +76,7 @@ describe('TrackerView', () => {
     await wrapper.find('button').trigger('click')
     await flushPromises()
 
-    expect(listRequests).toHaveBeenLastCalledWith(50, '/import_gee')
+    expect(listRequests).toHaveBeenLastCalledWith(500, '/import_gee')
   })
 
   it('pages through the 50 loaded requests, 10 per page', async () => {
