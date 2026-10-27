@@ -14,32 +14,32 @@
     <div class="table-wrap" tabindex="0" aria-label="CSV preview, scrollable">
       <table class="csv-table">
         <caption class="sr-only">First {{ preview.rows.length }} rows of {{ preview.total_rows }}</caption>
-        <thead>
-          <tr>
-            <th scope="col" class="col-index">#</th>
-            <th
+        <TableHeader>
+          <TableRow>
+            <TableHead scope="col" class="col-index">#</TableHead>
+            <TableHead
               v-for="(column, i) in preview.columns"
               :key="i"
               scope="col"
               :class="{ 'col-sticky-1': i === 0, 'col-sticky-2': i === 1 }"
             >
               {{ column }}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(row, r) in preview.rows" :key="r">
-            <td class="col-index">{{ r + 1 }}</td>
-            <td
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow v-for="(row, r) in preview.rows" :key="r">
+            <TableCell class="col-index">{{ r + 1 }}</TableCell>
+            <TableCell
               v-for="(_, i) in preview.columns"
               :key="i"
               :title="row[i]"
               :class="{ 'col-sticky-1': i === 0, 'col-sticky-2': i === 1, numeric: isNumeric(row[i]) }"
             >
               {{ formatCell(row[i] ?? '') }}
-            </td>
-          </tr>
-        </tbody>
+            </TableCell>
+          </TableRow>
+        </TableBody>
       </table>
       <p v-if="!preview.rows.length" class="empty">No data rows.</p>
     </div>
@@ -52,6 +52,7 @@
 </template>
 
 <script setup lang="ts">
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { CsvPreviewData } from '@/types/inputs'
 import { formatCell, formatPeriod } from '@/utils/preview'
 

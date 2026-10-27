@@ -105,6 +105,9 @@ describe('Dashboard', () => {
     expect(html.indexOf('mode-toggle')).toBeLessThan(html.indexOf('Data Import'))
     expect(wrapper.text()).toContain('DHIS2: DRYRUN on (.env), nothing is written.') // read only, from GET /pipeline/checkpoints
 
+    await wrapper.findAll('[data-test="mode-btn"]').find(b => b.text() === 'NO')!.trigger('click') // already active
+    await flushPromises()
+    expect(setMode).not.toHaveBeenCalled()
     await wrapper.findAll('[data-test="mode-btn"]').find(b => b.text() === 'YES')!.trigger('click')
     await flushPromises()
     expect(setMode).toHaveBeenCalledWith(true)
@@ -185,7 +188,7 @@ describe('Dashboard', () => {
     const confirmButton = dialog.findAll('button').find(b => b.text() === 'Confirm')!
     expect(confirmButton.attributes('disabled')).toBeDefined()
 
-    await dialog.find('input[type="checkbox"]').setValue(true)
+    await dialog.find('[role="checkbox"]').trigger('click')
     await confirmButton.trigger('click')
     await flushPromises()
     expect(launchJob).toHaveBeenLastCalledWith('import_gee', true)
@@ -197,7 +200,7 @@ describe('Dashboard', () => {
     getImportAvailability.mockReturnValue(new Promise(resolve => (answer = resolve)))
     const wrapper = await mountPage()
 
-    expect(wrapper.find('[data-test="accordion-header"]').findAll('button').length).toBe(0) // nothing next to the title
+    expect(wrapper.find('[data-test="accordion-header"]').findAll('button')).toHaveLength(1) // the toggle only, nothing next to the title
     const details = wrapper.find('[data-test="imports-approval"]').findAll('button').find(b => b.text() === 'Details')!
     await details.trigger('click')
     expect(wrapper.find('[data-test="availability-dialog"]').text()).toContain('Checking DHIS2')
@@ -327,7 +330,7 @@ describe('Dashboard', () => {
     expect(com.findAll('[data-test="item-time"]').map(t => t.text())).toEqual(['Last update: 2026-10-13 14:02']) // a success only
     expect(csb.text()).toContain('Available once the open run is done')
 
-    expect(adj.find('progress').attributes()).toMatchObject({ value: '3', max: '9' }) // both shared files are provided
+    expect(adj.find('[role="progressbar"]').attributes()).toMatchObject({ 'aria-valuenow': '3', 'aria-valuemax': '9' }) // both shared files are provided
     expect(com.find('[data-test="steps-dialog"]').text()).toContain('Disease data')
     const launchButtons = com.findAll('button').filter(b => b.text() === 'Launch')
     expect(launchButtons).toHaveLength(1) // only what etlhub marks launchable

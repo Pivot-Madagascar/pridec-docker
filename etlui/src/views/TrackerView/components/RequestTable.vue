@@ -1,46 +1,43 @@
 <template>
-  <div class="overflow-hidden rounded-lg border border-gray-700">
-    <table class="min-w-full text-sm">
-      <thead class="bg-gray-800 text-gray-200">
-        <tr>
-          <th class="px-4 py-2 text-left">Request ID</th>
-          <th class="px-4 py-2 text-left">Time</th>
-          <th class="px-4 py-2 text-left">Method</th>
-          <th class="px-4 py-2 text-left">Endpoint</th>
-          <th class="px-4 py-2 text-left">Status</th>
-          <th class="px-4 py-2 text-right">Duration (ms)</th>
-          <th class="px-4 py-2"></th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-gray-700 bg-gray-900">
-        <tr
+  <div class="overflow-hidden rounded-lg border">
+    <Table class="min-w-full">
+      <TableHeader class="bg-muted/50">
+        <TableRow>
+          <TableHead class="px-4 py-2 text-left">Request ID</TableHead>
+          <TableHead class="px-4 py-2 text-left">Time</TableHead>
+          <TableHead class="px-4 py-2 text-left">Method</TableHead>
+          <TableHead class="px-4 py-2 text-left">Endpoint</TableHead>
+          <TableHead class="px-4 py-2 text-left">Status</TableHead>
+          <TableHead class="px-4 py-2 text-right">Duration (ms)</TableHead>
+          <TableHead class="px-4 py-2"></TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow
           v-for="req in paginated"
           :key="req.request_id"
-          :class="{
-            'bg-gray-800': selectedId === req.request_id,
-            'hover:bg-gray-750': selectedId !== req.request_id,
-          }"
+          :data-state="selectedId === req.request_id ? 'selected' : undefined"
           :style="hasDetail(req) ? 'cursor: pointer' : undefined"
           @click="hasDetail(req) && $emit('select', req.request_id)"
         >
-          <td class="px-4 py-2 font-mono text-xs text-gray-300">
+          <TableCell class="px-4 py-2 font-mono text-xs text-gray-300">
             {{ shortRequestId(req.request_id) }}
-          </td>
-          <td class="px-4 py-2 text-xs text-gray-400">
+          </TableCell>
+          <TableCell class="px-4 py-2 text-xs text-gray-400">
             {{ formatTime(req.timestamp) }}
-          </td>
-          <td class="px-4 py-2">
+          </TableCell>
+          <TableCell class="px-4 py-2">
             <span
               class="inline-block rounded px-2 py-0.5 text-xs font-semibold"
               :class="methodColor(req.method)"
             >
               {{ req.method }}
             </span>
-          </td>
-          <td class="px-4 py-2 font-mono text-xs text-gray-300 break-all">
+          </TableCell>
+          <TableCell class="px-4 py-2 font-mono text-xs text-gray-300 break-all">
             {{ endpointOf(req.url) }}
-          </td>
-          <td class="px-4 py-2">
+          </TableCell>
+          <TableCell class="px-4 py-2">
             <span
               class="inline-block rounded px-2 py-0.5 text-xs font-semibold"
               :class="statusColor(req.job_status ?? req.status_code)"
@@ -48,26 +45,26 @@
               <!-- A job launch shows its job's end, not its 202 -->
               {{ req.job_status ?? req.status_code }}
             </span>
-          </td>
-          <td class="px-4 py-2 text-right font-mono text-xs text-gray-300">
+          </TableCell>
+          <TableCell class="px-4 py-2 text-right font-mono text-xs text-gray-300">
             {{ req.duration_ms.toFixed(2) }}
-          </td>
-          <td class="px-4 py-2 text-right">
+          </TableCell>
+          <TableCell class="px-4 py-2 text-right">
             <!-- Only requests that started a job (their logs) or were refused by the pipeline (the reason) have something to show -->
             <Button v-if="hasDetail(req)" variant="link" size="xs" data-test="detail-btn" @click.stop="$emit('select', req.request_id)">
               Detail
             </Button>
-          </td>
-        </tr>
-        <tr v-if="!requests.length">
-          <td colspan="7" class="px-4 py-6 text-center text-gray-500">
+          </TableCell>
+        </TableRow>
+        <TableRow v-if="!requests.length">
+          <TableCell colspan="7" class="px-4 py-6 text-center text-gray-500">
             No requests recorded yet.
-          </td>
-        </tr>
-      </tbody>
-    </table>
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
 
-    <div class="flex items-center justify-end border-t border-gray-700 bg-gray-900 px-4 py-2 space-x-2">
+    <div class="flex items-center justify-end border-t px-4 py-2 space-x-2">
       <Button variant="secondary" size="xs" :disabled="page <= 0" @click="$emit('update:page', page - 1)">Prev</Button>
       <span class="text-xs text-gray-400">Page {{ page + 1 }} / {{ totalPages || 1 }}</span>
       <Button variant="secondary" size="xs" :disabled="page + 1 >= totalPages" @click="$emit('update:page', page + 1)">Next</Button>
@@ -76,6 +73,7 @@
 </template>
 
 <script setup lang="ts">
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { computed } from 'vue'
 import type { RequestLog } from '@/services/api'
 import { statusColor } from '@/utils/status'

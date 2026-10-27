@@ -96,7 +96,10 @@ describe('JournalView', () => {
     expect(rows[0].text()).not.toContain('params') // an import's parameters: in the CSV only
     expect(rows[1].text()).toContain('test')
 
-    await wrapper.find('select[aria-label="Step"]').setValue('forecast')
+    await wrapper.find('[aria-label="Step"]').trigger('keydown', { key: 'Enter' }) // shadcn Select: open, then pick
+    await flushPromises()
+    await wrapper.findAll('[role="option"]').find(o => o.text() === 'forecast')!.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
     expect(wrapper.findAll('tbody tr')).toHaveLength(1)
   })
 

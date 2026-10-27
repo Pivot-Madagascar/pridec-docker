@@ -62,7 +62,7 @@ describe('HomeView', () => {
     expect(wrapper.find<HTMLInputElement>('input[type="month"]').element.value).toBe('2026-10')
     expect(wrapper.text()).toContain('pppp1111')
     expect(wrapper.text()).not.toContain('tttt2222') // a test pass is not resumed in production
-    expect(wrapper.find<HTMLInputElement>('input[value="new"]').element.disabled).toBe(true)
+    expect(wrapper.find('[role="radio"][value="new"]').attributes('disabled')).toBeDefined()
     // The parameters of the pass
     expect(wrapper.text()).toContain('OU_PARENT')
     expect(wrapper.text()).toContain('https://dhis2.example')

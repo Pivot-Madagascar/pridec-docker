@@ -43,10 +43,14 @@
             <Button title="Continue this cycle on the Dashboard" @click="resume(current.id)">Resume</Button>
             <Button variant="destructive" @click="abandoning = true">Abandon</Button>
           </template>
-          <select v-model="step" aria-label="Step" class="rounded-md border border-gray-600 bg-gray-800 px-2 py-1 text-gray-200">
-            <option value="">All steps</option>
-            <option v-for="s in STEPS" :key="s" :value="s">{{ s }}</option>
-          </select>
+          <!-- Reka refuses '' as an item value: 'all' stands for no filter. -->
+          <Select :model-value="step || 'all'" @update:model-value="v => (step = v === 'all' ? '' : String(v))">
+            <SelectTrigger aria-label="Step" class="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All steps</SelectItem>
+              <SelectItem v-for="s in STEPS" :key="s" :value="s">{{ s }}</SelectItem>
+            </SelectContent>
+          </Select>
           <Button variant="secondary" :disabled="loading" @click="refresh">
             {{ loading ? 'Loading...' : 'Refresh' }}
           </Button>
@@ -71,46 +75,46 @@
 
       <div v-if="error" class="rounded-lg border border-red-900 bg-red-950 p-3 text-sm text-red-300">{{ error }}</div>
 
-      <div class="overflow-x-auto rounded-lg border border-gray-700">
-        <table class="min-w-full text-sm">
-          <thead class="bg-gray-800 text-left text-gray-200">
-            <tr>
-              <th class="px-3 py-2">Time</th>
-              <th class="px-3 py-2">Step</th>
-              <th class="px-3 py-2">Item</th>
-              <th class="px-3 py-2">Event</th>
-              <th class="px-3 py-2">Actor</th>
-              <th class="px-3 py-2">Request</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-700 bg-gray-900 text-gray-300">
-            <tr
+      <div class="overflow-hidden rounded-lg border">
+        <Table class="min-w-full">
+          <TableHeader class="bg-muted/50">
+            <TableRow>
+              <TableHead class="px-3 py-2">Time</TableHead>
+              <TableHead class="px-3 py-2">Step</TableHead>
+              <TableHead class="px-3 py-2">Item</TableHead>
+              <TableHead class="px-3 py-2">Event</TableHead>
+              <TableHead class="px-3 py-2">Actor</TableHead>
+              <TableHead class="px-3 py-2">Request</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow
               v-for="(e, index) in shown"
               :key="index"
               :class="{ 'cursor-pointer hover:bg-gray-800': hasDetail(e) }"
               @click="hasDetail(e) && (selected = e)"
             >
-              <td class="whitespace-nowrap px-3 py-2 text-xs text-gray-400">
+              <TableCell class="whitespace-nowrap px-3 py-2 text-xs text-gray-400">
                 {{ formatTime(e.at) }}
                 <span v-if="e.mode === 'test'" class="ml-1 rounded bg-yellow-900 px-1.5 py-0.5 text-yellow-300">test</span>
-              </td>
-              <td class="px-3 py-2 text-xs">{{ e.step ?? '-' }}</td>
-              <td class="px-3 py-2 font-mono text-xs break-all">{{ e.item ?? '-' }}</td>
-              <td class="px-3 py-2">
+              </TableCell>
+              <TableCell class="px-3 py-2 text-xs">{{ e.step ?? '-' }}</TableCell>
+              <TableCell class="px-3 py-2 font-mono text-xs break-all">{{ e.item ?? '-' }}</TableCell>
+              <TableCell class="px-3 py-2">
                 <span class="font-semibold" :class="EVENT_COLORS[e.event] ?? 'text-gray-200'">{{ e.event }}</span>
                 <span v-if="e.detail" class="ml-2 text-xs text-gray-500">{{ formatDetail(e.detail) }}</span>
-              </td>
-              <td class="px-3 py-2 text-xs">{{ e.actor ?? '-' }}</td>
-              <td class="whitespace-nowrap px-3 py-2 text-xs">
+              </TableCell>
+              <TableCell class="px-3 py-2 text-xs">{{ e.actor ?? '-' }}</TableCell>
+              <TableCell class="whitespace-nowrap px-3 py-2 text-xs">
                 <template v-if="e.request">{{ e.request.method }} {{ e.request.status_code }}</template>
                 <template v-else>-</template>
-              </td>
-            </tr>
-            <tr v-if="!shown.length && !loading">
-              <td colspan="6" class="px-4 py-6 text-center text-gray-500">No event for this pass.</td>
-            </tr>
-          </tbody>
-        </table>
+              </TableCell>
+            </TableRow>
+            <TableRow v-if="!shown.length && !loading">
+              <TableCell colspan="6" class="px-4 py-6 text-center text-gray-500">No event for this pass.</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
 
       <!-- Same detail as Tracking: the request, then the job logs. -->
@@ -131,6 +135,7 @@
 </template>
 
 <script setup lang="ts">
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -139,6 +144,7 @@ import type { JournalEvent, JournalPass, PassState } from '@/types/pipeline'
 import RequestDialog from '@/views/TrackerView/components/RequestDialog.vue'
 import ConfirmDialog from '@/views/Dashboard/components/ConfirmDialog.vue'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 const STEPS = ['data_import', 'forecast', 'system_update']
 // Events of a real job: they have logs. Uploads and decisions have none. carried_over: the job of an earlier pass.

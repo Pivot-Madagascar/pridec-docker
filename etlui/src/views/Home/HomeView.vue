@@ -29,22 +29,22 @@
           Pass <span class="font-mono">{{ active.id }}</span> is active, started {{ formatTime(active.started_at) }} by
           {{ active.started_by ?? '-' }}: Start continues it.
         </p>
-        <template v-else>
-          <label class="block">
-            <input v-model="choice" type="radio" value="new" :disabled="paused.length > 0" />
+        <RadioGroup v-else v-model="choice">
+          <Label class="font-normal">
+            <RadioGroupItem value="new" :disabled="paused.length > 0" />
             New pass
-            <span class="text-xs text-gray-400">
+            <span class="text-xs text-muted-foreground">
               <template v-if="paused.length">· resume or abandon (Journal) the paused pass first</template>
               <template v-else-if="complete">· the month is complete: the first launch asks to confirm a new pass</template>
               <template v-else>· starts at the first launch</template>
             </span>
-          </label>
-          <label v-for="p in paused" :key="p.id" class="block">
-            <input v-model="choice" type="radio" :value="p.id" />
+          </Label>
+          <Label v-for="p in paused" :key="p.id" class="font-normal">
+            <RadioGroupItem :value="p.id" />
             Resume paused pass <span class="font-mono">{{ p.id }}</span>
-            <span class="text-xs text-gray-400">· started {{ formatTime(p.started_at) }} by {{ p.started_by ?? '-' }}</span>
-          </label>
-        </template>
+            <span class="text-xs text-muted-foreground">· started {{ formatTime(p.started_at) }} by {{ p.started_by ?? '-' }}</span>
+          </Label>
+        </RadioGroup>
       </fieldset>
 
       <div v-if="month">
@@ -79,6 +79,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useConfigStore } from '@/stores/config'
 
 const router = useRouter()

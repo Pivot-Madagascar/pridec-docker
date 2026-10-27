@@ -13,18 +13,26 @@
         <template v-else>DHIS2: DRYRUN off (.env), jobs write to DHIS2{{ testMode ? ', even in test mode' : '' }}.</template>
       </span>
     </div>
-    <div class="mode-buttons" role="group" aria-label="Test mode">
-      <button type="button" data-test="mode-btn" :class="['mode-btn', { active: testMode === false }]" :disabled="disabled || testMode === false" @click="emit('change', false)">
-        NO
-      </button>
-      <button type="button" data-test="mode-btn" :class="['mode-btn', { active: testMode === true }]" :disabled="disabled || testMode === true" @click="emit('change', true)">
-        YES
-      </button>
-    </div>
+    <!-- Single choice, never empty: clicking the active item again changes nothing. -->
+    <ToggleGroup
+      type="single"
+      variant="outline"
+      aria-label="Test mode"
+      :model-value="testMode === undefined ? undefined : testMode ? 'yes' : 'no'"
+      :disabled="disabled"
+      @update:model-value="value => value && emit('change', value === 'yes')"
+    >
+      <ToggleGroupItem v-for="choice in ['no', 'yes']" :key="choice" :value="choice" data-test="mode-btn"
+        class="px-3.5 font-bold data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+        {{ choice.toUpperCase() }}
+      </ToggleGroupItem>
+    </ToggleGroup>
   </section>
 </template>
 
 <script setup lang="ts">
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+
 defineProps<{
   testMode: boolean | undefined // unknown until the first read of the state
   dryRun: boolean | undefined
@@ -74,32 +82,5 @@ const emit = defineEmits<{
 
 .mode-hint.mode-warn {
   color: #fca5a5;
-}
-
-.mode-buttons {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.mode-btn {
-  padding: 0.375rem 0.875rem;
-  border-radius: 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: #cbd5e1;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  cursor: pointer;
-}
-
-.mode-btn.active {
-  color: #0f172a;
-  background: #fbbf24;
-  border-color: #fbbf24;
-}
-
-.mode-btn:disabled:not(.active) {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 </style>
