@@ -1,5 +1,6 @@
 <template>
-  <div class="space-y-6">
+  <!-- No side panel: SideLayout keeps the page where Forecast and Journal have theirs. -->
+  <SideLayout class="space-y-6">
     <div class="flex items-center justify-between gap-4">
       <h1 class="text-2xl font-bold text-foreground">Request Tracking</h1>
       <div class="flex items-center gap-2">
@@ -33,10 +34,11 @@
     </div>
 
     <RequestDialog :open="showModal && !!selected" :request="selected" :job-id="selected?.job_id" @close="showModal = false" />
-  </div>
+  </SideLayout>
 </template>
 
 <script setup lang="ts">
+import SideLayout from '@/components/SideLayout.vue'
 import { onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useTrackingStore } from '@/stores/useTrackingStore'
