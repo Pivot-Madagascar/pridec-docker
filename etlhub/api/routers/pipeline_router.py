@@ -80,9 +80,9 @@ def open_run(body: RunRequest, confirm: bool = CONFIRM, gate: PipelineGate = Dep
 @router.delete(
     "/runs/current",
     summary="Abandon the open forecast run",
-    description="Nothing is published; the run's items go back to pending. Administrators only (DHIS2 authority ALL).",
-    dependencies=[Depends(require_admin)],
-    responses={**BLOCKED, **ADMIN_ONLY},
+    description="Nothing is published; the run's items go back to pending and the pass stays active. The couple "
+                "reopens later from zero, without confirmation. Refused while a job runs.",
+    responses=BLOCKED,
 )
 def abandon_run(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str]:
     return {"abandoned": gate.abandon_run()}

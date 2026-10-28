@@ -93,7 +93,7 @@
             @delete="name => (pendingDelete = name)"
             @preview="openPreview"
             @use-default="useDefault"
-            @abandon="abandonRun"
+            @abandon="pendingRunAbandon = true"
             @release="pendingRelease = true"
           />
         </template>
@@ -163,6 +163,17 @@
     >
       The cycle {{ state?.cycle }} (pass {{ state?.pass?.id }}) stops for good: it cannot be resumed, and its open
       forecast run is abandoned. Its journal stays readable. The month can be run again in a new pass.
+    </ConfirmDialog>
+
+    <ConfirmDialog
+      :open="pendingRunAbandon"
+      :title="`Abandon the run ${state?.run?.couple ?? ''}?`"
+      confirm-label="Abandon the run"
+      @confirm="confirmRunAbandon"
+      @cancel="pendingRunAbandon = false"
+    >
+      Nothing is published. Its steps go back to "To do", including those already done; the input files are kept.
+      The cycle goes on, and this run can be opened again later, from the start. The journal records the abandon.
     </ConfirmDialog>
 
     <ConfirmDialog
@@ -264,6 +275,7 @@ const validating = ref(false) // opened by "Read and approve": Approve / Reject 
 const pendingDelete = ref<InputName | null>(null)
 const pendingRelease = ref(false)
 const pendingAbandon = ref(false)
+const pendingRunAbandon = ref(false)
 
 // approve_imports is a decision (Approve / Reject buttons), not a job card.
 const cards = (name: StepName) =>
@@ -300,6 +312,11 @@ const confirmDelete = async () => {
 const confirmAbandon = async () => {
   pendingAbandon.value = false
   if (state.value?.pass) await abandonPass(state.value.pass.id)
+}
+
+const confirmRunAbandon = async () => {
+  pendingRunAbandon.value = false
+  await abandonRun()
 }
 
 const confirmRelease = async () => {

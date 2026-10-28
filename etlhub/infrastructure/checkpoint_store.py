@@ -881,7 +881,7 @@ class CheckpointStore:
                 raise PipelineBlockedError("No forecast run is open")
             conn.execute("UPDATE forecast_runs SET state = 'abandoned', closed_at = ? WHERE state = 'open' AND pass_id = ?",
                          (_now(), p["id"]))
-            self._event(conn, p, "run_abandoned", "forecast", detail={"couple": run["couple"], "by": "admin"})
+            self._event(conn, p, "run_abandoned", "forecast", detail={"couple": run["couple"], "by": "manual"})
             self._reset(conn, p, list(run_items(run["couple"])), "abandon")
         return run["couple"]
 

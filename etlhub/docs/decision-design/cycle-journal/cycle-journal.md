@@ -138,7 +138,7 @@ stays in Redis after test mode is left (§ 6.3). No `mode` column: the mode of a
 | `skipped` | `skip_alerts` | — | — |
 | `run_opened` | `open_run` | — | `{"couple", "confirm"}` |
 | `run_closed` | `finish` (post_forecast success) | the job | `{"couple"}` |
-| `run_abandoned` | `abandon_run` / `_abandon_other_cycles` | — | `{"couple", "by": "admin" \| "month_change"}` (G5) |
+| `run_abandoned` | `abandon_run` / `_abandon_other_cycles` | — | `{"couple", "by": "manual" \| "pass_abandoned" \| "month_change"}` (G5; `admin` in events before 2026-10-28) |
 | `cycle_chosen` | `set_cycle` | — | `{"from", "to"}` |
 | `lock_released` | `release_lock` | the freed job | `{"task"}` (G5) |
 | `cycle_closed` | `finish`, once per cycle, when its success makes the last step done (only a job can complete a cycle) | the job | — (Q7) |

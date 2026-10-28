@@ -50,7 +50,7 @@ The smallest unit of forecast is the **`dataElement`** (named `pridec_historic_<
 4. **Decide**: read the report, then `approve` (or `reject` to redo the forecast).
 5. **Publish**: `post_forecast`. The run **closes** (its report is kept: `GET /pipeline/runs/{source}/{disease}/report`) and another pair can be opened.
 
-A run can be **abandoned** at any time, by an administrator: nothing is published, and its steps start again from zero.
+A run can be **abandoned** at any time but while a job runs, by any logged-in user (administrators only until 2026-10-28): nothing is published, and its steps start again from zero.
 
 ## The rules
 

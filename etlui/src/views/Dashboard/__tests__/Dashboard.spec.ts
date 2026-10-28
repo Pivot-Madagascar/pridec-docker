@@ -436,7 +436,6 @@ describe('Dashboard', () => {
   })
 
   it('shows the administration zone to administrators only', async () => {
-    abandonRun.mockResolvedValue('COM/Malaria')
     getCheckpoints.mockResolvedValue(forecastState('COM/Malaria'))
     let wrapper = await mountPage()
     expect(wrapper.find('[data-test="admin-zone"]').exists()).toBe(false)
@@ -444,9 +443,25 @@ describe('Dashboard', () => {
 
     useAuthStore().setUser({ id: 'u1', email: null, username: 'admin', displayName: 'Admin', is_admin: true })
     wrapper = await mountPage()
-    await wrapper.find('[data-test="admin-zone"]').findAll('button').find(b => b.text() === 'Abandon the open forecast run')!.trigger('click')
+    expect(wrapper.find('[data-test="admin-zone"]').findAll('button').map(b => b.text())).toEqual(['Release the lock'])
+    wrapper.unmount()
+  })
+
+  it('abandons the open run from the header of its steps dialog, after a confirmation, admin or not', async () => {
+    abandonRun.mockResolvedValue('COM/Malaria')
+    getCheckpoints.mockResolvedValue(forecastState('COM/Malaria'))
+    const wrapper = await mountPage()
+    const com = wrapper.find('#forecast-Malaria').findAll('[data-test="level-column"]')[1]
+    await com.find('[data-test="card-steps"]').trigger('click')
     await flushPromises()
-    expect(abandonRun).toHaveBeenCalled()
+
+    await com.find('[data-test="steps-dialog"] header [data-test="abandon-run"]').trigger('click')
+    await flushPromises()
+    expect(abandonRun).not.toHaveBeenCalled() // a confirmation first
+    expect(wrapper.text()).toContain('Abandon the run COM/Malaria?')
+    await wrapper.findAll('button').find(b => b.text() === 'Abandon the run')!.trigger('click')
+    await flushPromises()
+    expect(abandonRun).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
 })

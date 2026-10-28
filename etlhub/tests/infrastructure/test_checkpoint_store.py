@@ -251,6 +251,9 @@ def test_abandoning_a_run_resets_its_items(checkpoint_store):
     state = checkpoint_store.progress()
     assert state["run"] is None
     assert _status(state, "forecast", "ADJ/Malaria:forecast") == "pending"
+    assert state["pass"]["state"] == "active"  # the pass goes on
+    abandoned = [e for e in checkpoint_store.journal(state["pass"]["id"]) if e["event"] == "run_abandoned"]
+    assert abandoned[-1]["detail"] == {"couple": "ADJ/Malaria", "by": "manual"}
     checkpoint_store.open_run("ADJ/Malaria")  # an abandoned couple reopens without confirmation
 
 

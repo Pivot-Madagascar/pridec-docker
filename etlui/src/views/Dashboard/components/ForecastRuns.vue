@@ -30,9 +30,6 @@
       <summary>Administration</summary>
       <div class="admin-actions">
         <Button variant="destructive" :disabled="busy || !state?.lock" @click="emit('release')">Release the lock</Button>
-        <Button variant="destructive" :disabled="busy || !!state?.lock || !state?.run" @click="emit('abandon')">
-          Abandon the open forecast run
-        </Button>
       </div>
     </details>
   </div>
@@ -47,7 +44,7 @@ import { DISEASES } from '@/types/pipeline'
 import { RUNS, type RunsEmit, type RunsProps } from './runs'
 
 const props = defineProps<RunsProps & { isAdmin: boolean }>()
-const emit = defineEmits<RunsEmit & { (e: 'abandon' | 'release'): void }>()
+const emit = defineEmits<RunsEmit & { (e: 'release'): void }>()
 provide(RUNS, { props, emit })
 
 // Index of the disease card on screen: each card is 100% of the carousel width.

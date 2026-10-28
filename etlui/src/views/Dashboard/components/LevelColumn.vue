@@ -25,6 +25,8 @@
       <div class="forecast-runs min-h-0 overflow-y-auto"><div class="steps-dialog">
       <header class="steps-header pr-10">
         <DialogTitle as="h5" class="level-title">{{ LEVEL_NAMES[source] }} <span class="level-code">{{ source }}</span> · {{ disease }}</DialogTitle>
+        <!-- Stops this run only (the pass goes on): its items go back to "To do", the run can be opened again later. -->
+        <Button variant="destructive" size="sm" data-test="abandon-run" :disabled="blocked" @click="emit('abandon')">Abandon this run</Button>
       </header>
       <!-- Two stages: preparing the data, then the forecast. Stage 2 opens once the data check succeeds (Next / Previous). -->
       <section v-for="tile in tiles" v-show="shown === tile.n" :key="tile.n" class="steps-tile" data-test="steps-tile" :aria-label="tile.title">

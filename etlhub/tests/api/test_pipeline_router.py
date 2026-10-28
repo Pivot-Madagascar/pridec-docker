@@ -212,13 +212,15 @@ def test_cycle_choice_through_the_api(client):
     assert client.get("/pipeline/checkpoints").json()["cycle"] != "202001"
 
 
-def test_unlocking_and_abandoning_need_an_admin(app, client):
+def test_unlocking_needs_an_admin_abandoning_a_run_does_not(app, client, checkpoint_store):
     from etlhub.api.auth import get_current_user
     from tests.conftest import TEST_USER
     app.dependency_overrides[get_current_user] = lambda: {**TEST_USER, "is_admin": False}
+    _import(checkpoint_store)
+    checkpoint_store.open_run("COM/Malaria")
 
     assert client.delete("/pipeline/lock").status_code == 403
-    assert client.delete("/pipeline/runs/current").status_code == 403
+    assert client.delete("/pipeline/runs/current").json() == {"abandoned": "COM/Malaria"}
 
 
 def test_the_report_of_a_closed_run(client, checkpoint_store, tmp_path):
