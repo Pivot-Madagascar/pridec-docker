@@ -50,8 +50,8 @@ which pridec
 You can also build the application directly via `docker compose`. This will take about 15 minutes the first time it is run.
 
 ```
-docker compose build -f compose-prod.yaml
-docker compose build -f compose-prod.yaml --no-cache #takes 15 minutes. ensures it is clean
+docker compose -f compose-prod.yaml build 
+docker compose -f compose-prod.yaml build  --no-cache #takes 15 minutes. ensures it is clean
 ```
 
 To access the PRIDE-C services for a manual install, you will need to use the `docker compose run` call to access the `etl` and `forecast` services.
@@ -121,15 +121,15 @@ pridec forecast forecast
 
 #YOU SHOULD INSPECT output/forecast_report.html NOW
 
+pridec etl calc_orgUnit_alert
+
 #PAY ATTENTION HERE AS THIS WILL CHANGE YOUR INSTANCE. update DRYRUN as needed
 pridec etl post_forecast -e DRYRUN=True
 
 #to run analytics table
 pridec etl build_analytics
-#update key and CSB on alert
-pridec etl calc_CSB_alerts -e DRYRUN='True'
 pridec etl update_key
-pridec etl build_analytics
+
 
 pridec down 
 ```
@@ -224,9 +224,17 @@ docker compose run --rm forecast forecast
 
 You should now inspect the model validation report in `output/forecast_report.html`. If everything seems okay, proceed to step `2.4` to import the forecast into the PRIDE-C instance.
 
+If the dataElement has an associated alert, that should be run following the forecast:
+
+```
+docker compose run  --env-from-file .env --rm etl calc_orgUnit_alerts
+```
+
+The alert name may need to be provided via the env-var `ALERT_NAME`.
+
 #### 2.4. `POST` the forecast to the PRIDE-C instance
 
-Once the forecast has been validated, it can be posted to the instance.
+Once the forecast has been validated, it can be posted to the instance. This will also post the alert if one exists.
 
 ```
 docker compose run --env-from-file .env --rm etl post_forecast
@@ -236,21 +244,11 @@ docker compose run --env-from-file .env --rm etl post_forecast
 
 Once all the forecasts have been posted, there are several steps to update the rest of the PRIDE-C system. They are all run via one line commands to the `etl` image.
 
-1. Calculate and post the number of health centers on alert
-2. Build the analytics tables
-3. Update the PRIDE-C dataStore key
 
-#### 3.1. Calcuate the CSB on alert
+1. Build the analytics tables
+2. Update the PRIDE-C dataStore key
 
-Thie estimates the number of health centers expected to see more cases than the three year average for that season for each disease. It queries the `analytics` endpoint and so requries the analytics tables to be built first.
-
-```
-docker compose run --env-from-file .env --env DRYRUN="false" --rm etl build_analytics
-#wait until this has completed before calculating the health centers on alert
-docker compose run --env-from-file .env --env DRYRUN="false" --rm etl calc_CSB_alerts
-```
-
-#### 3.2. Build the analytics tables
+#### 3.1. Build the analytics tables
 
 Because the PRIDE-C app accessed data via a call to analytics, the tables must be built for the updated data to be available:
 
@@ -258,7 +256,7 @@ Because the PRIDE-C app accessed data via a call to analytics, the tables must b
 docker compose run --env-from-file .env --env DRYRUN="false" --rm etl build_analytics
 ```
 
-#### 3.3. Update the PRIDE-C dataStore key
+#### 3.2. Update the PRIDE-C dataStore key
 
 This key is used by the application cache to trigger an update of data in a user's cache after the monthly update:
 
