@@ -28,11 +28,16 @@
         <!-- Stops this run only (the pass goes on): its items go back to "To do", the run can be opened again later. -->
         <Button variant="destructive" size="sm" data-test="abandon-run" :disabled="blocked" @click="emit('abandon')">Abandon this run</Button>
       </header>
-      <!-- Two stages: preparing the data, then the forecast. Stage 2 opens once the data check succeeds (Next / Previous). -->
-      <section v-for="tile in tiles" v-show="shown === tile.n" :key="tile.n" class="steps-tile" data-test="steps-tile" :aria-label="tile.title">
+      <!-- Four columns side by side, each headed by its step of the stepper, green once all its items succeed. -->
+      <ol class="steps-columns">
+        <li v-for="(column, n) in columns" :key="column.title" class="steps-column" data-test="steps-column" :aria-label="column.title">
+        <p class="step" :class="{ 'is-done': column.done }" data-test="step">
+          <span class="step-mark" aria-hidden="true">{{ column.done ? '✓' : n + 1 }}</span>
+          <span class="step-title">{{ column.title }}<span v-if="column.done" class="sr-only"> (done)</span></span>
+        </p>
         <ol class="item-list">
           <!-- The run's input files: etlhub keeps one per disease (config) and one per level (external_data), shared by those runs. -->
-          <li v-for="input in tile.n === 1 ? inputs : []" :key="input.item" class="item item-input" data-test="item" :data-item="input.item" :class="`item-${input.status}`">
+          <li v-for="input in column.inputs" :key="input.item" class="item item-input" data-test="item" :data-item="input.item" :class="`item-${input.status}`">
             <span class="item-dot" aria-hidden="true"></span>
             <span class="item-text">
               <span class="item-label">{{ input.label }}</span>
@@ -57,7 +62,7 @@
               @use-default="emit('use-default', input.name)"
             />
           </li>
-          <li v-for="row in tile.rows" :key="row.item" class="item" :class="[`item-${row.look}`, `job-${row.job}`]" data-test="item" :data-job="row.job" :data-item="row.item">
+          <li v-for="row in column.rows" :key="row.item" class="item" :class="[`item-${row.look}`, `job-${row.job}`]" data-test="item" :data-job="row.job" :data-item="row.item">
             <span class="item-dot" aria-hidden="true"></span>
             <span class="item-text">
               <span class="item-label">{{ row.label }}</span>
@@ -81,23 +86,20 @@
             </Button>
           </li>
         </ol>
-        <!-- The data check is a button, not a card: it closes stage 1. -->
-        <div v-if="tile.n === 1 && check" class="data-check" data-test="data-check" :data-item="check.item" :class="`item-${check.look}`">
+        <!-- The data check is a button, not a card: it closes the data preparation. -->
+        <div v-if="column.check" class="data-check" data-test="data-check" :data-item="column.check.item" :class="`item-${column.check.look}`">
           <span class="item-text">
-            <span class="item-label">{{ check.label }}</span>
+            <span class="item-label">{{ column.check.label }}</span>
             <span class="item-state">
-              {{ check.look === 'pending' && !check.launch ? 'Available once the 5 items above are done' : LOOK_TEXT[check.look] }}
+              {{ column.check.look === 'pending' && !column.check.launch ? 'Available once the input files and the 3 fetches are done' : LOOK_TEXT[column.check.look] }}
             </span>
           </span>
-          <Button :disabled="blocked || !check.launch" @click="emit('launch', check.item)">
-            {{ check.look === 'pending' ? 'Run the data check' : 'Relaunch the data check' }}
+          <Button :disabled="blocked || !column.check.launch" @click="emit('launch', column.check.item)">
+            {{ column.check.look === 'pending' ? 'Run the data check' : 'Relaunch the data check' }}
           </Button>
-          <Button variant="outline" :disabled="!checked" @click="shown = 2">Next →</Button>
         </div>
-        <div v-if="tile.n === 2" class="tile-nav" data-test="tile-nav">
-          <Button variant="outline" @click="shown = 1">← Previous</Button>
-        </div>
-      </section>
+        </li>
+      </ol>
       </div></div>
       </DialogContent>
     </Dialog>
@@ -203,24 +205,28 @@ const rows = computed(() =>
   })
 )
 
-// Stage 1: input files, the 3 fetches and the data check; stage 2: everything after it.
+// The 4 columns: input files | the 3 fetches and the data check | forecast (CSB alerts) and approval | publication.
+// A column is done when all its items succeed (none loaded yet: not done).
+type Row = (typeof rows.value)[number]
 const PREPARE = ['fetch_disease', 'fetch_climate', 'fetch_geojson']
-const check = computed(() => rows.value.find(r => r.job === 'validate_inputs'))
-const checked = computed(() => check.value?.look === 'success')
-const tiles = computed(() => [
-  { n: 1, title: 'Prepare the data', rows: rows.value.filter(r => PREPARE.includes(r.job)) },
-  { n: 2, title: 'Forecast and publish', rows: rows.value.filter(r => !PREPARE.includes(r.job) && r.job !== 'validate_inputs') }
-])
-// Follows the data check: stage 2 once it succeeds, back to stage 1 if it is reset (a new input file).
-const shown = ref(1)
-watch(checked, ok => { shown.value = ok ? 2 : 1 }, { immediate: true })
+function column(title: string, columnInputs: typeof inputs.value, columnRows: Row[], check?: Row) {
+  const states = [...columnInputs.map(i => i.status), ...[...columnRows, ...(check ? [check] : [])].map(r => r.look)]
+  return { title, inputs: columnInputs, rows: columnRows, check, done: states.length > 0 && states.every(s => s === 'success') }
+}
+const columns = computed(() => {
+  const jobs = (keep: (job: string) => boolean) => rows.value.filter(r => keep(r.job))
+  return [
+    column('Input files', inputs.value, []),
+    column('Prepare the data', [], jobs(j => PREPARE.includes(j)), rows.value.find(r => r.job === 'validate_inputs')),
+    column('Forecast and approval', [], jobs(j => ![...PREPARE, 'validate_inputs', 'post_forecast'].includes(j))),
+    column('Publication', [], jobs(j => j === 'post_forecast'))
+  ]
+})
 
-// The breadcrumb's "go to the current item" (Dashboard): the open run opens its steps at the item's stage and points to it.
-const STAGE_ONE = [...PREPARE, 'validate_inputs']
+// The breadcrumb's "go to the current item" (Dashboard): the open run opens its steps and points to it.
 watch(() => runs.focus, focus => {
   if (!focus || !isOpen.value) return
   showSteps.value = true
-  shown.value = focus.item.includes(':') && !STAGE_ONE.includes(jobOf(focus.item)) ? 2 : 1 // input files: stage 1
   pointTo(`[data-test="steps-dialog"] [data-item="${focus.item}"]`, focus.blink)
 })
 </script>

@@ -279,28 +279,84 @@ const todo = computed(() => {
   gap: 1rem;
 }
 
-/* Stage 1: config and external data | the 3 fetches, then the data check button.
-   Stage 2: forecast (+ CSB alerts) and approval | publication. 6 columns: 1, 2 or 3 items per row. */
-.forecast-runs .steps-dialog .item-list {
+/* 4 columns, each headed by its step: input files | the 3 fetches and the data check | forecast (+ CSB alerts) and
+   approval | publication. 2 per row, then 1, on narrower screens. */
+.forecast-runs .steps-columns {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.forecast-runs .step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.forecast-runs .step-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 9999px;
+  border: 2px solid var(--border);
+  background: var(--card);
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
+}
+
+.forecast-runs .step-title {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* The line to the next step, across the gap. */
+.forecast-runs .steps-column:not(:last-child) .step::after {
+  content: '';
+  flex: 1;
+  height: 2px;
+  margin-right: -1rem;
+  background: var(--border);
+}
+
+/* A done column: its step glows green. */
+.forecast-runs .step.is-done .step-mark {
+  border-color: var(--success);
+  background: var(--success);
+  color: var(--primary-foreground);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--success) 30%, transparent), 0 0 12px var(--success);
+}
+
+.forecast-runs .steps-column:not(:last-child) .step.is-done::after {
+  background: var(--success);
+}
+
+@media (max-width: 1280px) {
+  .forecast-runs .steps-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .forecast-runs .steps-column:not(:last-child) .step::after {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .forecast-runs .steps-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .forecast-runs .steps-dialog .item {
-  grid-column: span 2;
   align-content: start;
   padding: 0.875rem;
   border-radius: 0.75rem;
   background: var(--card);
   border: 1px solid var(--border);
-}
-
-.forecast-runs .steps-dialog .item-input {
-  grid-column: span 3;
-}
-
-.forecast-runs .steps-dialog .job-post_forecast {
-  grid-column: 1 / -1;
 }
 
 .forecast-runs .data-check {
@@ -312,29 +368,9 @@ const todo = computed(() => {
   border-top: 1px solid var(--border);
 }
 
-/* Stage 2's Previous: where Next is in stage 1. */
-.forecast-runs .tile-nav {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
-}
-
-/* The text on the left, the data check and Next buttons together on the right. */
+/* The text on the left, the data check button on the right. */
 .forecast-runs .data-check .item-text {
   margin-right: auto;
-}
-
-/* Two per row, unless the CSB alerts make it three. */
-.forecast-runs .steps-dialog .item-list:not(:has(.job-calc_orgunit_alerts)) :is(.job-forecast, .job-approve) {
-  grid-column: span 3;
-}
-
-/* Narrow screens: one item per row (grid-column has no effect in a flex column). */
-@media (max-width: 640px) {
-  .forecast-runs .steps-dialog .item-list {
-    display: flex;
-  }
 }
 
 .forecast-runs .item-list {

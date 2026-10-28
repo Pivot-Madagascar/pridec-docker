@@ -126,8 +126,6 @@ describe('Dashboard', () => {
     await wrapper.find('[data-test="position-link"]').trigger('click')
     await flushPromises()
     const com = wrapper.find('#forecast-Malaria').findAll('[data-test="level-column"]')[1]
-    const tiles = com.findAll('[data-test="steps-tile"]')
-    expect(tiles.map(t => t.isVisible())).toEqual([true, false]) // stage 1: the fetches
     const row = com.find('[data-test="steps-dialog"] [data-item="COM/Malaria:fetch_climate"]')
     expect(row.find('button').text()).toBe('Launch')
     expect(row.find('button').attributes('data-attention')).toBeDefined()
@@ -359,15 +357,17 @@ describe('Dashboard', () => {
     expect(applyDefaultFile).toHaveBeenCalledWith('config', false)
     expect(adj.text()).toContain('Published')
     expect(com.findAll('[data-test="item"]')).toHaveLength(8) // 2 input files + 6 jobs: the data check is a button
-    // Stage 1 until the data check succeeds: its button waits for the 5 items, stage 2 is locked.
-    const tiles = com.findAll('[data-test="steps-tile"]')
-    expect(tiles.map(t => t.isVisible())).toEqual([true, false])
-    expect(tiles[0].findAll('[data-test="item-tech"]').map(t => t.text())).toEqual(
-      ['config/Malaria', 'external_data/fkt', 'fetch_disease', 'fetch_climate', 'fetch_geojson'])
-    expect(tiles[1].findAll('[data-test="item-tech"]').map(t => t.text())).toEqual(['forecast', 'approve', 'post_forecast'])
-    expect(tiles[0].find('[data-test="data-check"]').text()).toContain('Available once the 5 items above are done')
-    expect(tiles[0].findAll('[data-test="data-check"] button').map(b => [b.text(), b.attributes('disabled') !== undefined]))
-      .toEqual([['Run the data check', true], ['Next →', true]])
+    // All shown at once, in 4 columns; the data check button waits for the 5 items before it.
+    const columns = com.findAll('[data-test="steps-column"]')
+    expect(columns.map(c => c.findAll('[data-test="item-tech"]').map(t => t.text()))).toEqual([
+      ['config/Malaria', 'external_data/fkt'], ['fetch_disease', 'fetch_climate', 'fetch_geojson'],
+      ['forecast', 'approve'], ['post_forecast']])
+    expect(columns[1].find('[data-test="data-check"]').text()).toContain('Available once the input files and the 3 fetches are done')
+    expect(columns[1].findAll('[data-test="data-check"] button').map(b => [b.text(), b.attributes('disabled') !== undefined]))
+      .toEqual([['Run the data check', true]])
+    // The stepper: a column's step is done once all its items succeed (here, the 2 input files).
+    expect(columns.map(c => c.find('[data-test="step"]').text())).toEqual(
+      ['✓Input files (done)', '2Prepare the data', '3Forecast and approval', '4Publication'])
     expect(com.text()).toContain('Disease data')
     expect(com.text()).toContain('fetch_disease')
     expect(com.findAll('[data-test="item-time"]').map(t => t.text())).toEqual(['Last update: 2026-10-13 14:02']) // a success only
@@ -394,17 +394,9 @@ describe('Dashboard', () => {
     const com = wrapper.find('#forecast-Malaria').findAll('[data-test="level-column"]')[1]
     expect(com.text()).toContain('To approve')
     await com.find('[data-test="card-steps"]').trigger('click')
-    // The data check succeeded: the dialog shows stage 2, and stage 1 stays reachable to relaunch it.
-    expect(com.findAll('[data-test="steps-tile"]').map(t => t.isVisible())).toEqual([false, true])
+    // The data check succeeded: it can be relaunched, next to the approval waiting.
     expect(com.find('[data-test="data-check"] button').text()).toBe('Relaunch the data check')
     expect(com.text()).toContain('Waiting for your decision')
-    await com.find('[data-test="tile-nav"] button').trigger('click') // ← Previous
-    expect(com.findAll('[data-test="steps-tile"]').map(t => t.isVisible())).toEqual([true, false])
-    // Next: active once the data check succeeded, back to stage 2.
-    const next = com.findAll('[data-test="data-check"] button').find(b => b.text() === 'Next →')!
-    expect(next.attributes('disabled')).toBeUndefined()
-    await next.trigger('click')
-    expect(com.findAll('[data-test="steps-tile"]').map(t => t.isVisible())).toEqual([false, true])
     // Read and approve: on the card, and on the approval item of the dialog.
     const approveItem = com.find('[data-test="steps-dialog"] [data-job="approve"]')
     expect(approveItem.find('button').text()).toBe('Read and approve')
