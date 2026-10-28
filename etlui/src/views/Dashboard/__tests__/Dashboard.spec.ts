@@ -25,7 +25,6 @@ vi.mock('@/services/pipeline', () => ({
   abandonRun: (...args: unknown[]) => abandonRun(...args),
   pausePass: (...args: unknown[]) => pausePass(...args),
   abandonPass: (...args: unknown[]) => abandonPass(...args),
-  releaseLock: vi.fn(),
   getImportAvailability: (...args: unknown[]) => getImportAvailability(...args)
 }))
 vi.mock('@/services/inputs', () => ({
@@ -45,7 +44,6 @@ vi.mock('@/services/api', () => ({ default: { get: (...args: unknown[]) => apiGe
 vi.mock('vue3-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }))
 
 import Dashboard from '@/views/Dashboard/Dashboard.vue'
-import { useAuthStore } from '@/stores/auth'
 
 const item = (name: string, status = 'pending', launchable = false) => ({ item: name, status, job_id: null, updated_at: null, launchable })
 
@@ -320,13 +318,15 @@ describe('Dashboard', () => {
     const runs = wrapper.find('[data-test="forecast-runs"]')
     expect(runs.find('[data-test="todo"]').text()).toContain('launch “Disease data” for Malaria · Community sites (COM).')
     expect(runs.findAll('[data-test="disease-card"]')).toHaveLength(3)
-    const nav = () => runs.findAll('[data-test="disease-nav"] a').map(a => a.attributes('aria-current') === 'true')
-    expect(nav()).toEqual([true, false, false])
-    const carousel = runs.find('[data-test="carousel"]').element as HTMLElement
-    Object.defineProperty(carousel, 'clientWidth', { value: 800 })
-    carousel.scrollLeft = 1600
-    await runs.find('[data-test="carousel"]').trigger('scroll')
-    expect(nav()).toEqual([false, false, true])
+    // One tab per disease, the open run's (Malaria) first; the other tabs stay mounted, hidden.
+    const tabs = () => runs.findAll('[data-test="disease-tabs"] [role="tab"]')
+    expect(tabs().map(t => t.text())).toEqual(['Malaria', 'Diarrhea', 'Respiratory infections'])
+    expect(tabs().map(t => t.attributes('aria-selected'))).toEqual(['true', 'false', 'false'])
+    await tabs()[2].trigger('mousedown', { button: 0 })
+    expect(tabs().map(t => t.attributes('aria-selected'))).toEqual(['false', 'false', 'true'])
+    expect(runs.find('#forecast-Malaria').element.closest('[role="tabpanel"]')!.getAttribute('data-state')).toBe('inactive') // hidden by CSS
+    expect(runs.findAll('[data-test="level-carousel"] [role="group"]')).toHaveLength(9) // 3 runs per disease
+    await tabs()[0].trigger('mousedown', { button: 0 })
     const malaria = runs.find('#forecast-Malaria')
     expect(malaria.text()).toContain('1 of 3 levels published')
     // Only the open run has steps to show: its whole card opens them, highlighted.
@@ -427,15 +427,17 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
-  it('shows the administration zone to administrators only', async () => {
-    getCheckpoints.mockResolvedValue(forecastState('COM/Malaria'))
-    let wrapper = await mountPage()
-    expect(wrapper.find('[data-test="admin-zone"]').exists()).toBe(false)
-    wrapper.unmount()
+  it("shows the open run's disease tab, and goes back to it on the breadcrumb's link", async () => {
+    getCheckpoints.mockResolvedValue(forecastState('CSB/Respinf', { 'config/Respinf': ['pending', true] }))
+    const wrapper = await mountPage()
+    const selected = () => wrapper.findAll('[data-test="disease-tabs"] [role="tab"]').map(t => t.attributes('aria-selected'))
+    expect(selected()).toEqual(['false', 'false', 'true'])
 
-    useAuthStore().setUser({ id: 'u1', email: null, username: 'admin', displayName: 'Admin', is_admin: true })
-    wrapper = await mountPage()
-    expect(wrapper.find('[data-test="admin-zone"]').findAll('button').map(b => b.text())).toEqual(['Release the lock'])
+    await wrapper.findAll('[data-test="disease-tabs"] [role="tab"]')[0].trigger('mousedown', { button: 0 })
+    expect(selected()).toEqual(['true', 'false', 'false'])
+    await wrapper.find('[data-test="position-link"]').trigger('click')
+    await flushPromises()
+    expect(selected()).toEqual(['false', 'false', 'true'])
     wrapper.unmount()
   })
 

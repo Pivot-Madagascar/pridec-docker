@@ -1,12 +1,13 @@
 import { ref } from 'vue'
-import { abandonPass, getCycles, getJournal, journalCsvUrl, resumePass } from '@/services/pipeline'
+import { abandonPass, getCheckpoints, getCycles, getJournal, journalCsvUrl, releaseLock, resumePass } from '@/services/pipeline'
 import { errorMessage } from '@/services/api'
-import type { JournalCycle, JournalEvent } from '@/types/pipeline'
+import type { JournalCycle, JournalEvent, PipelineLock } from '@/types/pipeline'
 
-/** The months and their passes, the journal of one pass, and resuming or abandoning a paused pass, as etlhub answers. */
+/** The months and their passes, the journal of one pass, resuming or abandoning a paused pass, and the job lock, as etlhub answers. */
 export function useJournal() {
   const cycles = ref<JournalCycle[]>([])
   const events = ref<JournalEvent[]>([])
+  const lock = ref<PipelineLock | null>(null)
   const loading = ref(false)
   const error = ref('')
   let request = 0 // drops the answer of a pass that was replaced meanwhile
@@ -35,6 +36,14 @@ export function useJournal() {
     }
   }
 
+  async function loadLock(): Promise<void> {
+    try {
+      lock.value = (await getCheckpoints()).lock
+    } catch (err) {
+      error.value = errorMessage(err, 'Could not read the job lock')
+    }
+  }
+
   // The server refuses (409) a pass of the other mode or while another one is active: its message is shown.
   async function act(call: () => Promise<unknown>, passId: string): Promise<void> {
     let refused = ''
@@ -48,8 +57,13 @@ export function useJournal() {
   }
 
   return {
-    cycles, events, loading, error, load, loadCycles, csvUrl: journalCsvUrl,
+    cycles, events, lock, loading, error, load, loadCycles, loadLock, csvUrl: journalCsvUrl,
     resume: (passId: string) => act(() => resumePass(passId), passId),
-    abandon: (passId: string) => act(() => abandonPass(passId), passId)
+    abandon: (passId: string) => act(() => abandonPass(passId), passId),
+    // A lock left by a dead worker (it never expires): its job becomes error, lock_released goes to the job's pass.
+    releaseLock: async (passId: string) => {
+      await act(() => releaseLock(), passId)
+      await loadLock()
+    }
   }
 }

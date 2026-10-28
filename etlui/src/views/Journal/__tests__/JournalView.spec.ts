@@ -5,7 +5,11 @@ const getJournal = vi.fn()
 const getCycles = vi.fn()
 const resumePass = vi.fn()
 const abandonPass = vi.fn()
+const getCheckpoints = vi.fn()
+const releaseLock = vi.fn()
 vi.mock('@/services/pipeline', () => ({
+  getCheckpoints: (...args: unknown[]) => getCheckpoints(...args),
+  releaseLock: (...args: unknown[]) => releaseLock(...args),
   getJournal: (...args: unknown[]) => getJournal(...args),
   getCycles: (...args: unknown[]) => getCycles(...args),
   resumePass: (...args: unknown[]) => resumePass(...args),
@@ -159,6 +163,29 @@ describe('JournalView', () => {
     useAuthStore().setUser({ id: '1', email: null, username: 'admin', displayName: null, is_admin: true })
     const link = mount(JournalView).find('a[download]')
     expect(link.attributes('href')).toBe('http://localhost:8111/pipeline/passes/cccc3333/journal.csv')
+  })
+
+  it('lets administrators release the job lock at the bottom of the page, after a confirmation', async () => {
+    getJournal.mockResolvedValue([])
+    getCheckpoints.mockResolvedValue({ lock: { job_id: 'forecast_1a2b3c4d', task: 'forecast', acquired_at: '2026-10-28T09:00:00' } })
+    let wrapper = mount(JournalView)
+    await flushPromises()
+    expect(wrapper.find('[data-test="lock-zone"]').exists()).toBe(false)
+    expect(getCheckpoints).not.toHaveBeenCalled()
+    wrapper.unmount()
+
+    useAuthStore().setUser({ id: '1', email: null, username: 'admin', displayName: null, is_admin: true })
+    wrapper = mount(JournalView)
+    await flushPromises()
+    const zone = wrapper.find('[data-test="lock-zone"]')
+    expect(zone.text()).toContain('forecast (forecast_1a2b3c4d)')
+    await zone.find('button').trigger('click')
+    await flushPromises()
+    expect(releaseLock).not.toHaveBeenCalled() // a confirmation first
+    await wrapper.findAll('button').find(b => b.text() === 'Release')!.trigger('click')
+    await flushPromises()
+    expect(releaseLock).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
   })
 
   it('opens the request that caused an event', async () => {

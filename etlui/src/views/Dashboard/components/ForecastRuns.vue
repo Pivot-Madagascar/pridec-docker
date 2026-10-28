@@ -2,57 +2,35 @@
   <div class="forecast-runs" data-test="forecast-runs">
     <p class="todo" data-test="todo" role="status"><strong>To do now:</strong> {{ todo }}</p>
 
-    <!-- The carousel has no scrollbar: these buttons (and each card's "Next disease") move between diseases. -->
-    <nav class="disease-nav" data-test="disease-nav" aria-label="Diseases">
-      <Button
-        v-for="(disease, i) in DISEASES"
-        :key="disease"
-        as="a"
-        size="sm"
-        :variant="i === shown ? 'default' : 'outline'"
-        :aria-current="i === shown ? 'true' : undefined"
-        :href="`#forecast-${disease}`"
-      >
-        {{ DISEASE_NAMES[disease] }}
-      </Button>
-    </nav>
-    <div class="carousel" data-test="carousel" tabindex="0" aria-label="Forecasts by disease" @scroll="onScroll">
-      <DiseaseCard
-        v-for="(disease, i) in DISEASES"
-        :id="`forecast-${disease}`"
-        :key="disease"
-        :disease="disease"
-        :next="DISEASES[(i + 1) % DISEASES.length]"
-      />
-    </div>
-
-    <details v-if="isAdmin" class="admin-zone" data-test="admin-zone">
-      <summary>Administration</summary>
-      <div class="admin-actions">
-        <Button variant="destructive" :disabled="busy || !state?.lock" @click="emit('release')">Release the lock</Button>
-      </div>
-    </details>
+    <!-- One tab per disease. Hidden tabs stay mounted (force-mount, hidden by CSS: reka then never sets `hidden`): files picked in a run's steps are kept, and the
+         breadcrumb's "go to the current item" reaches the open run's card. -->
+    <Tabs v-model="tab">
+      <TabsList data-test="disease-tabs" aria-label="Diseases">
+        <TabsTrigger v-for="disease in DISEASES" :key="disease" :value="disease">{{ DISEASE_NAMES[disease] }}</TabsTrigger>
+      </TabsList>
+      <TabsContent v-for="disease in DISEASES" :key="disease" :value="disease" force-mount class="mt-4 data-[state=inactive]:hidden">
+        <DiseaseCard :id="`forecast-${disease}`" :disease="disease" />
+      </TabsContent>
+    </Tabs>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, provide, ref } from 'vue'
+import { computed, provide, ref, watch } from 'vue'
 import DiseaseCard from '@/views/Dashboard/components/DiseaseCard.vue'
-import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DISEASE_NAMES, ITEM_NAMES, coupleName, jobOf, labelOf, nextItem, step } from '@/config/pipeline'
-import { DISEASES } from '@/types/pipeline'
+import { DISEASES, type Disease } from '@/types/pipeline'
 import { RUNS, type RunsEmit, type RunsProps } from './runs'
 
-const props = defineProps<RunsProps & { isAdmin: boolean }>()
-const emit = defineEmits<RunsEmit & { (e: 'release'): void }>()
+const props = defineProps<RunsProps>()
+const emit = defineEmits<RunsEmit>()
 provide(RUNS, { props, emit })
 
-// Index of the disease card on screen: each card is 100% of the carousel width.
-const shown = ref(0)
-const onScroll = (e: Event) => {
-  const el = e.target as HTMLElement
-  shown.value = Math.round(el.scrollLeft / el.clientWidth)
-}
+// The open run's disease tab: shown at first, when a run opens, and on each "go to the current item" (a new focus).
+const tab = ref<Disease>(DISEASES[0])
+const runDisease = computed(() => props.state?.run?.couple.split('/')[1] as Disease | undefined)
+watch([runDisease, () => props.focus], ([disease]) => { if (disease) tab.value = disease }, { immediate: true })
 
 const forecastStep = computed(() => step(props.state, 'forecast'))
 
@@ -99,36 +77,13 @@ const todo = computed(() => {
   color: var(--warning);
 }
 
-.forecast-runs .disease-nav,
-.forecast-runs .admin-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-.forecast-runs .carousel:focus-visible,
 .forecast-runs a:focus-visible,
 .forecast-runs summary:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
-.forecast-runs .carousel {
-  display: flex;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  scrollbar-width: none;
-  border-radius: 1rem;
-}
-
-.forecast-runs .carousel::-webkit-scrollbar {
-  display: none;
-}
-
 .forecast-runs .disease-card {
-  flex: 0 0 100%;
-  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -181,10 +136,9 @@ const todo = computed(() => {
   color: var(--muted-foreground);
 }
 
-.forecast-runs .level-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1.25rem;
+/* Every card of a carousel as tall as the tallest. */
+.forecast-runs [data-slot="carousel-item"] > .level-column {
+  height: 100%;
 }
 
 .forecast-runs .level-column {
@@ -460,26 +414,6 @@ const todo = computed(() => {
   margin-top: auto;
 }
 
-.forecast-runs .next-link {
-  align-self: flex-end;
-  color: var(--primary);
-  font-weight: 600;
-  padding: 0.75rem 0;
-}
-
-.forecast-runs .admin-zone summary {
-  cursor: pointer;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  color: var(--muted-foreground);
-  font-weight: 600;
-}
-
-.forecast-runs .admin-actions {
-  padding-top: 0.75rem;
-}
-
 @keyframes forecast-spin {
   to {
     transform: rotate(360deg);
@@ -490,17 +424,9 @@ const todo = computed(() => {
   .forecast-runs .item-running .item-dot {
     animation: none;
   }
-
-  .forecast-runs .carousel {
-    scroll-behavior: auto;
-  }
 }
 
 @media (max-width: 820px) {
-  .forecast-runs .level-grid {
-    grid-template-columns: 1fr;
-  }
-
   .forecast-runs .disease-card {
     padding: 1.5rem;
   }

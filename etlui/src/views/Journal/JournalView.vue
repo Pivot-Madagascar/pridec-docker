@@ -174,6 +174,21 @@
         @close="selected = null"
       />
 
+      <!-- Administrators (etlhub enforces it too, 403): only when the worker of the job is dead, the lock never expires. -->
+      <section v-if="isAdmin" class="space-y-3 rounded-lg border p-4" data-test="lock-zone" aria-labelledby="lock-title">
+        <h2 id="lock-title" class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Job lock</h2>
+        <p class="text-sm">
+          <template v-if="lock">Held by <strong>{{ lock.task }} ({{ lock.job_id }})</strong> since {{ formatTime(lock.acquired_at) }}.</template>
+          <template v-else>No job holds the lock.</template>
+        </p>
+        <Button variant="destructive" :disabled="!lock" @click="releasing = true">Release the lock</Button>
+      </section>
+
+      <ConfirmDialog :open="releasing" title="Release the job lock?" confirm-label="Release" @confirm="confirmRelease" @cancel="releasing = false">
+        Only when the worker of <strong>{{ lock?.task }}</strong> is dead: the lock never expires on its own.
+        The running item becomes "error" and can be relaunched.
+      </ConfirmDialog>
+
       <ConfirmDialog :open="abandoning" title="Abandon this cycle?" confirm-label="Abandon" @confirm="confirmAbandon" @cancel="abandoning = false">
         The pass {{ current?.id }} of {{ current ? monthName(current.cycle) : '' }} stops for good: it cannot be resumed, and its
         open forecast run is abandoned. Its journal stays readable. The month can be run again in a new pass.
@@ -239,7 +254,7 @@ const STATE_ICONS: Record<PassState, typeof CircleCheck> = {
 
 const route = useRoute()
 const router = useRouter()
-const { cycles, events, loading, error, load, loadCycles, csvUrl, resume, abandon } = useJournal()
+const { cycles, events, lock, loading, error, load, loadCycles, loadLock, csvUrl, resume, abandon, releaseLock } = useJournal()
 const isAdmin = computed(() => useAuthStore().user?.is_admin === true)
 
 // ?pass=<id> (the Dashboard link), else the newest pass of the target month once the list is loaded.
@@ -248,6 +263,7 @@ const passId = ref(typeof query === 'string' && /^[0-9a-f]{8}$/.test(query) ? qu
 const step = ref('')
 const selected = ref<JournalEvent | null>(null)
 const abandoning = ref(false)
+const releasing = ref(false)
 
 // The tree's look, after shadcn's file tree (sidebar-11): the chevron turns when its own trigger is open.
 const TREE_TRIGGER = 'group/trigger flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm text-foreground hover:bg-muted'
@@ -286,6 +302,7 @@ function select(id: string) {
 }
 
 async function refresh() {
+  if (isAdmin.value) loadLock()
   await loadCycles()
   passId.value ||= cycles.value.find(c => c.target)?.passes[0]?.id ?? passes.value[0]?.id ?? ''
   if (passId.value) await load(passId.value)
@@ -294,6 +311,11 @@ async function refresh() {
 async function confirmAbandon() {
   abandoning.value = false
   if (current.value) await abandon(current.value.id)
+}
+
+async function confirmRelease() {
+  releasing.value = false
+  await releaseLock(passId.value)
 }
 
 onMounted(refresh)

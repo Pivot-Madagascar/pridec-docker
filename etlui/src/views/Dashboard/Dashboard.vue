@@ -82,7 +82,6 @@
             :state="state"
             :focus="runFocus"
             :busy="busy"
-            :is-admin="!!auth.user?.is_admin"
             :server-files="serverFiles"
             :defaults="defaults"
             :upload-file="upload"
@@ -94,7 +93,6 @@
             @preview="openPreview"
             @use-default="useDefault"
             @abandon="pendingRunAbandon = true"
-            @release="pendingRelease = true"
           />
         </template>
 
@@ -175,18 +173,6 @@
       Nothing is published. Its steps go back to "To do", including those already done; the input files are kept.
       The cycle goes on, and this run can be opened again later, from the start. The journal records the abandon.
     </ConfirmDialog>
-
-    <ConfirmDialog
-      :open="pendingRelease"
-      title="Release the job lock?"
-      confirm-label="Release"
-      :busy="busy"
-      @confirm="confirmRelease"
-      @cancel="pendingRelease = false"
-    >
-      Only when the worker of <strong>{{ state?.lock?.task }}</strong> is dead: the lock never expires on its own.
-      The running item becomes "error" and can be relaunched.
-    </ConfirmDialog>
   </SideLayout>
 </template>
 
@@ -216,7 +202,6 @@ import { useImportAvailability } from '@/composables/useImportAvailability'
 import { useInputPreview } from '@/composables/useInputPreview'
 import { usePipeline } from '@/composables/usePipeline'
 import { jobOf, labelOf, position, positionItem, step, toCard } from '@/config/pipeline'
-import { useAuthStore } from '@/stores/auth'
 import type { InputName } from '@/types/inputs'
 import type { StepName } from '@/types/pipeline'
 
@@ -231,7 +216,7 @@ const accordionItems = [
 const { activityLog, addActivity } = useActivityLog()
 const {
   state, serverFiles, defaults, busy, pending, refresh, confirm, cancel,
-  launch, openRun, abandonRun, decide, decideImports, skipAlerts, setMode, releaseLock, upload, remove, useDefault,
+  launch, openRun, abandonRun, decide, decideImports, skipAlerts, setMode, upload, remove, useDefault,
   pause, abandonPass
 } = usePipeline(addActivity)
 const active = computed(() => state.value?.pass?.state === 'active')
@@ -267,13 +252,11 @@ const {
   open: openPreview,
   close: closePreview
 } = useInputPreview()
-const auth = useAuthStore()
 
 const showReportModal = ref(false)
 const reportRun = ref<{ source: string; disease: string } | null>(null)
 const validating = ref(false) // opened by "Read and approve": Approve / Reject under the report
 const pendingDelete = ref<InputName | null>(null)
-const pendingRelease = ref(false)
 const pendingAbandon = ref(false)
 const pendingRunAbandon = ref(false)
 
@@ -317,11 +300,6 @@ const confirmAbandon = async () => {
 const confirmRunAbandon = async () => {
   pendingRunAbandon.value = false
   await abandonRun()
-}
-
-const confirmRelease = async () => {
-  pendingRelease.value = false
-  await releaseLock()
 }
 
 onMounted(refresh)

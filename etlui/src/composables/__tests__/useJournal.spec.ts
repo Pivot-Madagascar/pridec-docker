@@ -2,9 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const getJournal = vi.fn()
 const getCycles = vi.fn()
+const getCheckpoints = vi.fn()
+const releaseLock = vi.fn()
 vi.mock('@/services/pipeline', () => ({
   getJournal: (...args: unknown[]) => getJournal(...args),
   getCycles: (...args: unknown[]) => getCycles(...args),
+  getCheckpoints: (...args: unknown[]) => getCheckpoints(...args),
+  releaseLock: (...args: unknown[]) => releaseLock(...args),
   journalCsvUrl: (cycle: string) => `csv/${cycle}`
 }))
 
@@ -57,5 +61,22 @@ describe('useJournal', () => {
 
     await loadCycles()
     expect(error.value).toBe('boom')
+  })
+
+  it('reads the job lock, releases it, then reloads the lock and the journal', async () => {
+    const LOCK = { job_id: 'forecast_1a2b3c4d', task: 'forecast', acquired_at: '2026-10-28T09:00:00' }
+    getCheckpoints.mockResolvedValueOnce({ lock: LOCK }).mockResolvedValueOnce({ lock: null })
+    getCycles.mockResolvedValue([])
+    getJournal.mockResolvedValue([])
+    releaseLock.mockResolvedValue('forecast_1a2b3c4d')
+    const { loadLock, releaseLock: release, lock } = useJournal()
+
+    await loadLock()
+    expect(lock.value).toEqual(LOCK)
+
+    await release('cccc3333')
+    expect(releaseLock).toHaveBeenCalledTimes(1)
+    expect(getJournal).toHaveBeenCalledWith('cccc3333') // its lock_released event shows
+    expect(lock.value).toBeNull()
   })
 })
