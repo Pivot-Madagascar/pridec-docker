@@ -6,7 +6,7 @@ load_dotenv(override=False)
 
 
 #run configurations
-dryRun = os.getenv('DRYRUN', 'true').lower() == 'true'
+dryRun = os.getenv('DRYRUN', 'true').lower() != 'false'
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
 
 #dhis api info
