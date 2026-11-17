@@ -123,11 +123,30 @@ def _actor(actor: str | None = None) -> str | None:
     return actor or (context.get("actor") if context is not None else "worker")
 
 
-def _migrate_to_passes(conn: sqlite3.Connection, uploads: Path) -> None:
-    """One-time migration of a store keyed by month to passes (2026-10-22): the journal of a month is cut after each
-    cycle_closed; its checkpoints and kept files go to its last pass, each forecast run to the pass it was opened in.
+class SchemaVersionError(RuntimeError):
+    """A db (etlhub.db or the test blob) is not at SCHEMA_VERSION: python -m etlhub.migrate, by hand."""
 
-    ponytail: delete once every store (etlhub.db, the test blob) ran it.
+
+def _schema_version(conn: sqlite3.Connection) -> int | None:
+    """PRAGMA user_version, or None for a new db (no checkpoints table: request_log may be there already)."""
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'checkpoints'").fetchone():
+        return None
+    return conn.execute("PRAGMA user_version").fetchone()[0]
+
+
+def _schema_error(where: str, version: int) -> SchemaVersionError:
+    if version > SCHEMA_VERSION:
+        return SchemaVersionError(
+            f"{where} is at schema version {version}, newer than this code ({SCHEMA_VERSION}): check out a newer "
+            f"version, or restore the *.v{SCHEMA_VERSION}-*.bak backup that python -m etlhub.migrate left in logs/")
+    return SchemaVersionError(
+        f"{where} is at schema version {version}, this code needs {SCHEMA_VERSION}: stop the API and the workers, "
+        "then run python -m etlhub.migrate (it backs the db up first)")
+
+
+def _migrate_to_passes(conn: sqlite3.Connection, uploads: Path) -> None:
+    """Part of migration 1: a store keyed by month to passes (2026-10-22). The journal of a month is cut after each
+    cycle_closed; its checkpoints and kept files go to its last pass, each forecast run to the pass it was opened in.
     """
     if "cycle" not in {r[1] for r in conn.execute("PRAGMA table_info(checkpoints)")}:
         return  # new or already migrated
@@ -299,11 +318,9 @@ class CheckpointStore:
             data = self._blob.get()
             if data:
                 conn.deserialize(data)
-            _migrate_to_passes(conn, self._uploads_root / "dry_run")  # a failure saves nothing: the blob is set at the end
-            conn.executescript(_SCHEMA)
+            self._check_schema(conn, _BLOB)  # a failure saves nothing: the blob is set at the end
             conn.execute("BEGIN")
             try:
-                self._migrate_files(conn, self._uploads_root / "dry_run")
                 yield conn
                 conn.execute("COMMIT")
             except BaseException:
@@ -317,17 +334,9 @@ class CheckpointStore:
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         with closing(sqlite3.connect(self._db_path, timeout=5, isolation_level=None)) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("BEGIN IMMEDIATE")  # DDL is transactional in SQLite: a failed migration leaves the file as it was
-            try:
-                _migrate_to_passes(conn, self._uploads_root)
-                conn.execute("COMMIT")
-            except BaseException:
-                conn.execute("ROLLBACK")
-                raise
-            conn.executescript(_SCHEMA)
+            self._check_schema(conn, str(self._db_path))
             conn.execute("BEGIN IMMEDIATE")
             try:
-                self._migrate_files(conn, self._uploads_root)
                 yield conn
                 conn.execute("COMMIT")
             except BaseException:
@@ -492,16 +501,15 @@ class CheckpointStore:
         for root in (self._input_dir, self._output_dir):
             _copy_work(self._pass_dir(p, root), root, _is_kept, _is_cycle)
 
-    def _migrate_files(self, conn: sqlite3.Connection, uploads: Path) -> None:
-        """One-time move to the pass folders (2026-10-27): uploads/<cycle>/<pass>/ goes to input/<cycle>/<pass>/ and
-        the reports to output/<cycle>/<pass>/. Without an active pass, the working files of input/ and output/ are
-        copied into the last paused pass (with an active pass they are its own: they stay where they are). Any other
-        paused pass with an open run, or one whose files another run emptied since, will fetch again: its run is reset.
-
-        ponytail: delete once every store (etlhub.db, the test blob) ran it; the emptied uploads/ folders are left.
+    def _migration_1(self, conn: sqlite3.Connection, uploads: Path) -> None:
+        """Passes (2026-10-22), then the move to the pass folders (2026-10-27): uploads/<cycle>/<pass>/ goes to
+        input/<cycle>/<pass>/ and the reports to output/<cycle>/<pass>/. Without an active pass, the working files of
+        input/ and output/ are copied into the last paused pass (with an active pass they are its own: they stay where
+        they are). Any other paused pass with an open run, or one whose files another run emptied since, will fetch
+        again: its run is reset. The emptied uploads/ folders are left.
         """
-        if conn.execute("PRAGMA user_version").fetchone()[0] >= 1:
-            return
+        _migrate_to_passes(conn, uploads)
+        conn.executescript(_SCHEMA)  # the tables added before the migrations were numbered
         for p in self._passes(conn):
             for f in sorted((uploads / p["cycle"] / p["id"]).glob("*")):
                 folder = self._pass_dir(p, self._output_dir if f.name.startswith("report_") else None)
@@ -516,7 +524,77 @@ class CheckpointStore:
             if run and (p is not owner or conn.execute("SELECT 1 FROM forecast_runs WHERE opened_at > ?",
                                                        (run["opened_at"],)).fetchone()):
                 self._reset(conn, p, list(run_items(run["couple"])), "pass_folders")
-        conn.execute("PRAGMA user_version = 1")
+
+    # Schema migrations (docs/decision-design/db-migrations/db-migrations.md): MIGRATIONS[i] takes a db from version i
+    # to i + 1, applied by hand only (migrate()). Never edit a released one: a change to _SCHEMA ships with a new
+    # migration and its test on a db of the previous version.
+    MIGRATIONS = (_migration_1,)
+
+    def _check_schema(self, conn: sqlite3.Connection, where: str) -> None:
+        """A new db gets the schema at SCHEMA_VERSION; any other one must already be at it: nothing migrates here."""
+        if _schema_version(conn) is None:
+            conn.executescript(_SCHEMA)
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        elif (version := self._pending(conn, where)) is not None:
+            raise _schema_error(where, version)
+
+    def _apply(self, conn: sqlite3.Connection, version: int, uploads: Path) -> None:
+        """Every pending migration in one transaction: a failure leaves the db as it was (not the files it moved)."""
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for i in range(version, SCHEMA_VERSION):
+                self.MIGRATIONS[i](self, conn, uploads)
+                conn.execute(f"PRAGMA user_version = {i + 1}")
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+
+    def migrate(self, check: bool = False) -> list[str]:
+        """Brings etlhub.db and the test-mode db (Redis) to SCHEMA_VERSION, each after a backup next to etlhub.db.
+
+        By hand only (python -m etlhub.migrate), the API and the workers stopped. check=True lists what is pending.
+        ponytail: the backup holds the db, not input/ output/ uploads/ that a migration moves; copy them by hand first.
+        """
+        stamp, done = datetime.now().strftime("%Y%m%dT%H%M%S"), []
+        # autocommit=True: an executescript inside a migration does not commit the transaction of _apply.
+        if self._db_path.is_file():
+            with closing(sqlite3.connect(self._db_path, timeout=5, autocommit=True)) as conn:
+                done.append(self._migrate_one(conn, str(self._db_path), self._uploads_root, self._db_path.name, stamp, check))
+        with self._blob.lock(), closing(sqlite3.connect(":memory:", autocommit=True)) as conn:
+            if data := self._blob.get():
+                conn.deserialize(data)
+                line = self._migrate_one(conn, _BLOB, self._uploads_root / "dry_run", "test_mode.db", stamp, check)
+                if line and not check:
+                    self._blob.set(conn.serialize())
+                done.append(line)
+        return [line for line in done if line]
+
+    def _migrate_one(self, conn: sqlite3.Connection, where: str, uploads: Path, name: str, stamp: str,
+                     check: bool) -> str | None:
+        """One db: None if nothing is pending, else its line; without check, a backup (VACUUM INTO) then _apply."""
+        if (version := self._pending(conn, where)) is None:
+            return None
+        line = f"{where}: version {version} -> {SCHEMA_VERSION}"
+        if check:
+            return line
+        backup = self._db_path.with_name(f"{name}.v{version}-{stamp}.bak")
+        conn.execute("VACUUM INTO ?", (str(backup),))
+        self._apply(conn, version, uploads)
+        return f"{line}, backup {backup}"
+
+    def check_schema(self) -> None:
+        """At API start: no start on a db that needs python -m etlhub.migrate, or one newer than this code."""
+        if pending := self.migrate(check=True):
+            raise SchemaVersionError("\n".join(pending) + ": stop the workers, then run python -m etlhub.migrate")
+
+    @staticmethod
+    def _pending(conn: sqlite3.Connection, where: str) -> int | None:
+        """The version of a db to migrate; None if it is new or current. A db newer than this code is refused."""
+        version = _schema_version(conn)
+        if version is not None and version > SCHEMA_VERSION:
+            raise _schema_error(where, version)
+        return version if version is not None and version < SCHEMA_VERSION else None
 
     def _archive_report(self, p: dict, couple: str) -> None:
         """Keeps the report of a closed run: the next run empties output/."""
@@ -1101,6 +1179,10 @@ class CheckpointStore:
                             (pass_id,)).fetchall()
         return [{**dict(zip(_EVENT_COLUMNS, r)), "detail": json.loads(r[-1]) if r[-1] else None, "mode": mode}
                 for r in rows]
+
+
+SCHEMA_VERSION = len(CheckpointStore.MIGRATIONS)
+_BLOB = f"the test-mode db (Redis {RedisBlob.KEY})"
 
 
 @lru_cache

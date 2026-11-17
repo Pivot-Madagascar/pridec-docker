@@ -1,4 +1,6 @@
 import itertools
+import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -666,7 +668,6 @@ def test_test_mode_keeps_checkpoints_in_redis_only(checkpoint_store, tmp_path):
     assert _status(test_state, "data_import", "import_pivot_com") == "success"
     assert _status(test_state, "data_import", "import_gee") == "pending"  # production data is not visible
     assert checkpoint_store._blob.data is not None
-    import sqlite3
     rows = sqlite3.connect(tmp_path / "etlhub.db").execute("SELECT item FROM checkpoints").fetchall()
     assert rows == [("import_gee",)]  # nothing written to the SQLite file in test mode
 
@@ -871,7 +872,6 @@ def test_the_test_journal_stays_in_redis_and_production_never_sees_its_events(ch
     assert [(e["mode"], e["event"], e["item"]) for e in checkpoint_store.journal(test)] == [
         ("test", "pass_started", None), ("test", "launched", "import_pivot_com"),
         ("test", "succeeded", "import_pivot_com"), ("test", "paused", None)]
-    import sqlite3
     items = sqlite3.connect(tmp_path / "etlhub.db").execute("SELECT DISTINCT item FROM pipeline_events").fetchall()
     assert ("import_pivot_com",) not in items  # never in the SQLite file
 
@@ -929,13 +929,17 @@ INSERT INTO forecast_runs VALUES
 
 
 def test_a_store_keyed_by_month_is_split_into_passes_at_each_cycle_closed(checkpoint_store, month, tmp_path):
-    import sqlite3
     legacy = sqlite3.connect(tmp_path / "etlhub.db")
     legacy.executescript(_LEGACY_SCHEMA)
     legacy.close()
     (tmp_path / "uploads" / "202504").mkdir(parents=True)
     (tmp_path / "uploads" / "202504" / "config_Malaria.json").write_text("{}")
 
+    (line,) = checkpoint_store.migrate()
+
+    assert line.startswith(f"{tmp_path / 'etlhub.db'}: version 0 -> 1, backup ")
+    (backup,) = tmp_path.glob("etlhub.db.v0-*.bak")
+    assert "cycle" in {r[1] for r in sqlite3.connect(backup).execute("PRAGMA table_info(checkpoints)")}
     (cycle,) = [c for c in checkpoint_store.cycles() if c["cycle"] == "202504"]
 
     second, first = cycle["passes"]
@@ -949,6 +953,51 @@ def test_a_store_keyed_by_month_is_split_into_passes_at_each_cycle_closed(checkp
     assert _status(state, "data_import", "import_gee") == "success"
     assert (tmp_path / "input" / "202504" / second["id"] / "config_Malaria.json").is_file()  # pass folders
     assert checkpoint_store.cycles() == [cycle]  # migrated once: the ids stay
+    assert checkpoint_store.migrate() == []
+
+
+# --- schema migrations, by hand only (db-migrations.md) -------------------------------------------
+
+def test_a_db_behind_this_code_is_refused_until_migrated_by_hand(checkpoint_store, tmp_path):
+    from etlhub.infrastructure.checkpoint_store import SchemaVersionError
+    with closing(sqlite3.connect(tmp_path / "etlhub.db")) as db:
+        db.executescript(_LEGACY_SCHEMA)
+
+    for read in (checkpoint_store.progress, checkpoint_store.check_schema):
+        with pytest.raises(SchemaVersionError, match="version 0.*python -m etlhub.migrate"):
+            read()
+    assert checkpoint_store.migrate(check=True) == [f"{tmp_path / 'etlhub.db'}: version 0 -> 1"]
+    assert not list(tmp_path.glob("*.bak"))  # check changes nothing
+
+    checkpoint_store.migrate()
+    checkpoint_store.check_schema()
+    assert checkpoint_store.progress()["pass"]
+
+
+def test_a_db_newer_than_this_code_is_refused_even_by_migrate(checkpoint_store, tmp_path):
+    from etlhub.infrastructure.checkpoint_store import SchemaVersionError
+    checkpoint_store.progress()  # a new db: created at SCHEMA_VERSION
+    with closing(sqlite3.connect(tmp_path / "etlhub.db")) as db:
+        assert db.execute("PRAGMA user_version").fetchone() == (1,)
+        db.execute("PRAGMA user_version = 2")  # left by a newer etlhub
+
+    for call in (checkpoint_store.progress, checkpoint_store.migrate):
+        with pytest.raises(SchemaVersionError, match="version 2, newer than this code"):
+            call()
+
+
+def test_the_test_mode_db_in_redis_is_migrated_with_its_own_backup(checkpoint_store, tmp_path):
+    with closing(sqlite3.connect(":memory:")) as db:
+        db.executescript(_LEGACY_SCHEMA)
+        checkpoint_store._blob.set(db.serialize())
+    checkpoint_store.mode["test_mode"] = True
+
+    (line,) = checkpoint_store.migrate()
+
+    assert line.startswith("the test-mode db (Redis pipeline:dry_run:db): version 0 -> 1")
+    (backup,) = tmp_path.glob("test_mode.db.v0-*.bak")
+    assert "cycle" in {r[1] for r in sqlite3.connect(backup).execute("PRAGMA table_info(checkpoints)")}
+    assert [c["cycle"] for c in checkpoint_store.cycles() if c["passes"]] == ["202504"]
 
 
 def test_test_mode_starts_from_dryrun_once_then_is_independent(monkeypatch):
