@@ -1,6 +1,7 @@
 import subprocess
 import os
 import json
+import logging
 import tempfile
 from pathlib import Path
 from datetime import datetime
@@ -9,6 +10,8 @@ from etlhub.core.config import get_settings
 from etlhub.infrastructure.job_store import JobStore
 from etlhub.infrastructure.config_store import ConfigStore
 from etlhub.infrastructure import etl_events
+
+logger = logging.getLogger(__name__)
 
 
 def _container_user() -> list[str]:
@@ -98,8 +101,8 @@ def run_rscript(job_id, params, job_store: JobStore):
                 job_store.append_logs(job_id, line)  # history first: a client connecting now loses nothing
                 try:
                     etl_events.publish_log(job_id, "INFO", line.rstrip("\n"))
-                except Exception:
-                    pass
+                except Exception as e:  # the line is in the history already: a client reconnecting reads it
+                    logger.warning("Could not publish a log line of %s: %s", job_id, e)
         output = "".join(lines)
         completed = datetime.now().isoformat()
         if proc.returncode == 0:
@@ -132,8 +135,8 @@ def run_rscript(job_id, params, job_store: JobStore):
         if env_file:
             try:
                 os.remove(env_file)
-            except OSError:
-                pass
+            except OSError as e:  # it holds the .env secrets: say it is left behind
+                logger.warning("Could not remove the forecast env file %s: %s", env_file, e)
 
     try:
         settings = get_settings()
@@ -143,7 +146,7 @@ def run_rscript(job_id, params, job_store: JobStore):
         with open(status_file, 'w') as f:
             json.dump(status, f)
     except Exception as e:
-        print(f"Warning: Could not write status file: {e}")
+        logger.warning("Could not write the status file of %s: %s", job_id, e)
 
     job_store.set(job_id, status)
 
@@ -151,7 +154,7 @@ def run_rscript(job_id, params, job_store: JobStore):
         job_store.append_logs(job_id, status["message"])
         try:
             etl_events.publish_log(job_id, "ERROR", status["message"])
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Could not publish the start failure of %s: %s", job_id, e)
 
     return status

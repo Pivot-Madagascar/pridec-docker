@@ -1,5 +1,6 @@
 import contextlib
 import io
+import logging
 
 import httpx
 
@@ -16,6 +17,8 @@ from etl.scripts.fetch_pridec_geojson import fetch_geojson
 from etl.scripts.build_analytics import build_analytics
 from etl.scripts.post_forecast import post_forecast
 from etl.scripts.update_pridec_key import update_key
+
+logger = logging.getLogger(__name__)
 
 # Jobs run by the Celery worker: task_type -> (function, label of the job status messages).
 ETL_JOBS = {
@@ -88,5 +91,5 @@ def notify_webhook(webhook_url: str | None, job_id: str, status: str, message: s
             "message": message,
             "logs_url": f"/api/tracking/etl-logs/{job_id}",
         }, timeout=10)
-    except Exception:
-        pass
+    except Exception as e:  # the host only: the path or query of a webhook may carry a token
+        logger.warning("Webhook of %s to %s failed: %s", job_id, httpx.URL(webhook_url).host, type(e).__name__)

@@ -28,8 +28,8 @@ def _update_task_status(job_store: JobStore, job_id: str, status: str, message: 
             logger.exception("Could not record the end of %s in the pipeline checkpoints", job_id)
     try:
         etl_events.publish_status(job_id, status, message)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Could not publish the %s status of %s: %s", status, job_id, e)
 
 
 def _run_task(job_id: str, task_name: str, run_fn, webhook_url: str | None = None):
@@ -44,8 +44,8 @@ def _run_task(job_id: str, task_name: str, run_fn, webhook_url: str | None = Non
         job_store.append_logs(job_id, tb)  # after the job's own output (a forecast's R logs), not instead of it
         try:
             etl_events.publish_log(job_id, "ERROR", tb)
-        except Exception:
-            pass
+        except Exception as pub_error:
+            logger.warning("Could not publish the error log of %s: %s", job_id, pub_error)
         _update_task_status(job_store, job_id, "error", str(e))
         notify_webhook(webhook_url, job_id, "error", str(e))
         raise
