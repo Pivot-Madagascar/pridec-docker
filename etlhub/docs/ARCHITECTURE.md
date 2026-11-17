@@ -106,7 +106,7 @@ Concurrency: **one job at a time**, in cycle order, **one forecast run (source Ã
 1. Every route needs the etlui session except `/auth/login`, `/auth/logout`, `GET /` and FastAPI's `/docs`, `/redoc`, `/openapi.json`. There are no roles: any logged-in user can launch any job.
 2. There is no endpoint deleting `output/` (`DELETE /output/reset` removed 2026-10-23): opening a run empties it. Forecast containers run as the worker's user (`--user uid:gid`), so their files are not root-owned.
 3. `webhook_url` allows outgoing requests to any address. The login only sends credentials to `DHIS2_ALLOWED_HOSTS`.
-4. The middleware logs the full URL: any secret in a query string ends up in `logs/requests/`. The login password travels in the body and is not logged.
+4. The middleware logs the URL in `logs/etlhub.db` with the value of `webhook_url` masked (`_logged_url`); any other secret in a query string would still be stored. The login password travels in the body and is not logged.
 5. The worker needs the Docker socket (equivalent to root on the host).
 
 ## 9. Operations

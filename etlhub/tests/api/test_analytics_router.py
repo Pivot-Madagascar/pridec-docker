@@ -11,6 +11,15 @@ def test_build_analytics_returns_202(override_dependencies):
     assert response.status_code == 202
 
 
+def test_inline_scripts_run_off_the_event_loop():
+    """An async def handler calling the synchronous service would freeze the whole API while the script runs."""
+    import inspect
+    from etlhub.api.routers.etl.analytics_router import api_post_forecast, api_update_key
+
+    assert not inspect.iscoroutinefunction(api_post_forecast)
+    assert not inspect.iscoroutinefunction(api_update_key)
+
+
 def test_calc_csb_alerts_is_no_longer_a_route(override_dependencies):
     from fastapi.testclient import TestClient
     from etlhub.main import app

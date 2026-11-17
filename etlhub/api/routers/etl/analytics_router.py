@@ -32,7 +32,10 @@ add_launch_route(
         **BLOCKED,
     },
 )
-async def api_post_forecast(
+# def, not async: FastAPI runs it in its threadpool, the event loop stays free.
+# ponytail: run_etl_job redirects the process-wide stdout/stderr, so prints of other API threads during the run land in
+# this job's log (one inline job at a time: the gate). Upgrade: run both through Celery (etlhub-practices, migration m2).
+def api_post_forecast(
     webhook_url: WebhookUrl = Query(None),
     confirm: bool = CONFIRM_RELAUNCH,
     service: AnalyticsService = Depends(get_analytics_service),
@@ -55,7 +58,7 @@ async def api_post_forecast(
         **BLOCKED,
     },
 )
-async def api_update_key(
+def api_update_key(  # def, not async: see api_post_forecast
     webhook_url: WebhookUrl = Query(None),
     confirm: bool = CONFIRM_RELAUNCH,
     service: AnalyticsService = Depends(get_analytics_service),

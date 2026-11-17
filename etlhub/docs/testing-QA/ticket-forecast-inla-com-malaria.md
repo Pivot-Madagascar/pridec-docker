@@ -96,6 +96,8 @@ Seen with `validate_inputs_b6df15e1`. The real error, replayed in memory, was: `
 
 Proposed: etlhub should include `e.errors` in the job message when present. This is an etlhub-only change, since `etl/` is not modified here.
 
+*Fixed (2026-11-17):* `etl_use_cases._reason` falls back to `e.errors` when `str(e)` is empty; the job message is now `validate_inputs failed: ERROR: …`. Test: `tests/infrastructure/test_forecast_task.py::test_a_validate_inputs_failure_keeps_its_reason_in_the_job_message`.
+
 ## Current state of the open run
 
 The run is left with the inputs of `forecast_22ee563a`:

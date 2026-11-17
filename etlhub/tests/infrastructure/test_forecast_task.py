@@ -107,3 +107,18 @@ def test_etl_job_output_goes_to_the_job_logs_once_as_it_is_printed(job_store, mo
 
     assert job_store.get_logs("import_gee_1") == "step 1\n"
     assert "step 1" in published
+
+
+def test_a_validate_inputs_failure_keeps_its_reason_in_the_job_message(job_store):
+    """etl.scripts.validate_inputs.ValidationError has no message: str(e) is empty, its errors carry the reason."""
+    from etl.scripts.validate_inputs import ValidationError
+    from etlhub.application.use_cases import etl_use_cases
+    from etlhub.domain.exceptions import ETLException
+    from etlhub.infrastructure import etl_events
+
+    def job():
+        raise ValidationError(errors=["ERROR: missing predictor variables:mosquito_net"], messages=[])
+
+    with pytest.raises(ETLException, match="validate_inputs failed: ERROR: missing predictor variables:mosquito_net"):
+        etl_use_cases._execute_etl_job(job, etl_use_cases._JobLogger(job_store, "validate_inputs_1", etl_events),
+                                       "validate_inputs")

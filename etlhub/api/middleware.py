@@ -31,6 +31,13 @@ def _request_id(header: str | None) -> str:
         return str(uuid.uuid4())
 
 
+def _logged_url(request: Request) -> str:
+    """The URL to store: the value of webhook_url is masked, it may carry a token. Other parameters are kept."""
+    if "webhook_url" not in request.query_params:
+        return str(request.url)
+    return str(request.url.include_query_params(webhook_url="[redacted]"))
+
+
 def setup_cors(app):
     settings = get_settings()
     app.add_middleware(
@@ -110,7 +117,7 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
                     "request_id": request_id,
                     "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     "method": request.method,
-                    "url": str(request.url),
+                    "url": _logged_url(request),
                     "status_code": status_code,
                     "duration_ms": round((time.perf_counter() - start) * 1000, 2),
                     "client_host": request.client.host if request.client else None,

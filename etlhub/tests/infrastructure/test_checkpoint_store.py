@@ -193,7 +193,7 @@ def test_items_of_a_run_follow_their_prerequisites(checkpoint_store):
         checkpoint_store.start("calc_orgunit_alerts", "c")
 
 
-def test_opening_a_run_empties_input_and_output_but_not_the_pass_folders(checkpoint_store, tmp_path):
+def test_opening_a_run_empties_input_and_output_but_not_the_pass_folders(checkpoint_store, month, tmp_path):
     _import(checkpoint_store)
     (tmp_path / "input" / "disease_data.json").write_text("{}")
     (tmp_path / "output" / "forecast.json").write_text("{}")
@@ -515,7 +515,7 @@ def test_pause_then_resume_from_the_journal_continues_where_it_stopped(checkpoin
         "paused", "resumed"]
 
 
-def test_starting_a_pass_creates_it_at_once_with_its_folders_and_carried_items(checkpoint_store, tmp_path):
+def test_starting_a_pass_creates_it_at_once_with_its_folders_and_carried_items(checkpoint_store, month, tmp_path):
     params = {"import_gee": {"p": 1}, "import_pivot_com": {"p": 2}, "import_pivot_csb": {"p": 3}}
     for task in ("import_gee", "import_pivot_com", "import_pivot_csb"):
         job_id = f"{task}_{next(_ids)}"
@@ -542,7 +542,7 @@ def test_pause_is_refused_while_a_job_runs(checkpoint_store):
         checkpoint_store.pause()
 
 
-def test_a_new_pass_after_a_pause_needs_confirm_takes_its_uploads_and_abandon_keeps_only_reports(checkpoint_store, tmp_path):
+def test_a_new_pass_after_a_pause_needs_confirm_takes_its_uploads_and_abandon_keeps_only_reports(checkpoint_store, month, tmp_path):
     _import(checkpoint_store)
     checkpoint_store.open_run("COM/Malaria")
     _upload(checkpoint_store, content='{"m": 1}')

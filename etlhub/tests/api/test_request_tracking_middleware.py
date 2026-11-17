@@ -61,6 +61,14 @@ def test_tracked_endpoints_filter_by_path_prefix(app, recorded, monkeypatch):
     assert [log["url"].split("testserver")[1] for log in recorded] == ["/input/files"]
 
 
+def test_the_webhook_url_is_masked_in_the_recorded_url_and_the_other_parameters_are_kept(app, recorded):
+    TestClient(app).get("/docs", params={"webhook_url": "https://hooks.example.org/x?token=s3cret", "confirm": "true"})
+
+    url = recorded[-1]["url"]
+    assert "s3cret" not in url and "hooks.example.org" not in url
+    assert "webhook_url=%5Bredacted%5D" in url and "confirm=true" in url
+
+
 def test_client_request_id_is_kept_only_if_it_is_a_uuid(app, recorded):
     client = TestClient(app)
     good = str(uuid.uuid4())

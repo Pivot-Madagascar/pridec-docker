@@ -63,7 +63,12 @@ def _execute_etl_job(fn, log: _JobLogger, name: str, **kwargs) -> None:
         try:
             fn(**kwargs)
         except Exception as e:
-            raise ETLException(f"{name} failed: {e}") from e
+            raise ETLException(f"{name} failed: {_reason(e)}") from e
+
+
+def _reason(e: Exception) -> str:
+    """str(e), else the `errors` list of etl.scripts.validate_inputs.ValidationError (raised without a message)."""
+    return str(e) or "\n".join(getattr(e, "errors", None) or []) or type(e).__name__
 
 
 def run_etl_job(task_type: str, job_store: JobRepository, job_id: str, events: EventPublisher, **kwargs) -> None:
