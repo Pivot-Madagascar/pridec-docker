@@ -16,7 +16,7 @@ from etl.scripts.fetch_pridec_climate import fetch_climate
 from etl.scripts.fetch_pridec_disease import fetch_disease
 from etl.scripts.fetch_pridec_geojson import fetch_geojson
 from etl.scripts.build_analytics import build_analytics
-from etl.scripts.post_forecast import post_forecast
+from etlhub.application.use_cases.post_forecast import post_forecast
 from etl.scripts.update_pridec_key import update_key
 
 logger = logging.getLogger(__name__)

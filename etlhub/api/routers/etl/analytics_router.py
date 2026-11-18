@@ -22,8 +22,8 @@ add_launch_route(
     response_model=ETLResponse,
     summary="Publish forecast results to DHIS2",
     description=(
-        "Publishes the latest forecast results to DHIS2. "
-        "Executes `etl/scripts/post_forecast.py` synchronously: the request blocks until the script ends "
+        "Publishes `output/forecast.json`, then `output/alerts.json` if present, to DHIS2. "
+        "Runs synchronously: the request blocks until both are posted "
         "(200 with status success, or 500). `webhook_url` is notified on success only."
     ),
     response_description="Forecast published successfully to DHIS2.",
