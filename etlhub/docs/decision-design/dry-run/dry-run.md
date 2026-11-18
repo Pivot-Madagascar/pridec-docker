@@ -1,6 +1,8 @@
 # DRYRUN and TEST_MODE: current state
 
-What the code does today (2026-10-20), not a target design. Related: the test-mode part of
+> **Since 2026-11-17:** `DRYRUN` of `.env` is only the default of a launch outside test mode. Each launch of a job that writes to DHIS2 (`domain/pipeline.DHIS2_WRITES`: the 3 imports, `build_analytics`, `post_forecast`, `update_key`) takes an optional `dry_run`; absent, `true` in test mode, else `DRYRUN` of `.env` (`PipelineGate.default_dry_run`); the job's value is journaled (`launched` `dry_run`) and read by the scripts through `script_config._get` (`core/job_context.job_dry_run`, for that job only); `update_key` in dry run is refused (409: `pivot_dhis_tools` ignores its `dryRun`). etlui: one Dry run switch per pass (Dashboard).
+
+What the code did on 2026-10-20, not a target design. Related: the test-mode part of
 [pipeline-checkpoints.md](../pipeline-checkpoints/pipeline-checkpoints.md), [default-input-files.md](../default-input-files/default-input-files.md).
 
 ## In one sentence

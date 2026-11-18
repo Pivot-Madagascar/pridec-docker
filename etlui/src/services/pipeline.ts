@@ -16,10 +16,12 @@ export async function getImportAvailability(refresh = false): Promise<ImportAvai
 
 // POST /<task> (or /forecast/ with {}: etlhub's ForecastParams defaults are the files written by validate_inputs): 202 with a job_id for Celery jobs, 200 for post_forecast and update_key.
 // The X-Request-ID (a UUID) becomes the request_id etlhub tracks: GET /api/tracking/requests/{requestId} finds this launch.
+// dryRun: the pass switch, sent with every launch; etlhub reads it for the jobs that write to DHIS2 only (others ignore it).
 export type LaunchedJob = { jobId: string | null; requestId: string }
-export async function launchJob(task: string, confirm = false): Promise<LaunchedJob> {
+export async function launchJob(task: string, confirm = false, dryRun?: boolean): Promise<LaunchedJob> {
   const requestId = crypto.randomUUID()
-  const config = { ...withConfirm(confirm), headers: { 'X-Request-ID': requestId } }
+  const params = { ...withConfirm(confirm)?.params, ...(dryRun === undefined ? {} : { dry_run: dryRun }) }
+  const config = { params, headers: { 'X-Request-ID': requestId } }
   const response =
     task === 'forecast'
       ? await api.post('/forecast/', {}, config)

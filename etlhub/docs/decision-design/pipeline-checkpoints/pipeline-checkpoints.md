@@ -453,8 +453,9 @@ Limits:
     (current month by default), like the `validate_inputs` default; kept on 2026-11-17 (§6).
 19. ⬜ **`calc_orgunit_alerts`**: wire the command `pridec etl calc_orgUnit_alerts` (end of the 501). Blocked: no script
     exists in `etl/scripts/`.
-20. ⬜ **Test mode**: `DRYRUN=True` passed to `import_gee` and `post_forecast` only, distinct from the commands' `DRYRUN` option.
-    Waiting for a decision: the other jobs would then write to DHIS2 in test mode, and the mode itself is read from `DRYRUN` today.
+20. ✅ **Test mode** (decided 2026-11-17, replaces the target "`DRYRUN=True` for `import_gee` and `post_forecast` only"):
+    every job writing to DHIS2 takes an optional `dry_run` per launch; absent, true in test mode, else `DRYRUN` of `.env`;
+    `update_key` in dry run is refused (409). etlui: one Dry run switch per pass on the Dashboard.
 21. ✅ **etlui**: expected file per disease (`config_respiratory.json` for `Respinf`), `external_data` upload per level, `approve_imports` decision.
 
 ---

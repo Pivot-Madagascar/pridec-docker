@@ -47,8 +47,17 @@ describe('pipeline service', () => {
 
     expect(jobId).toBe('import_gee_1')
     // etlhub tracks the request under this X-Request-ID: RecentActivity finds it back with it
-    expect(post).toHaveBeenNthCalledWith(1, '/import_gee', undefined, { headers: { 'X-Request-ID': requestId } })
+    expect(post).toHaveBeenNthCalledWith(1, '/import_gee', undefined, { params: {}, headers: { 'X-Request-ID': requestId } })
     expect(post).toHaveBeenNthCalledWith(2, '/import_gee', undefined, { ...CONFIRM, headers: { 'X-Request-ID': expect.any(String) } })
+  })
+
+  it('sends the pass DRYRUN switch as dry_run (etlhub uses it for the jobs writing to DHIS2)', async () => {
+    post.mockResolvedValue({ data: { job_id: 'import_gee_1' } })
+
+    await pipeline.launchJob('import_gee', true, false)
+
+    expect(post).toHaveBeenCalledWith('/import_gee', undefined,
+      { params: { confirm: true, dry_run: false }, headers: { 'X-Request-ID': expect.any(String) } })
   })
 
   it('launches the forecast on /forecast/ with the etlhub default paths', async () => {
@@ -56,7 +65,7 @@ describe('pipeline service', () => {
 
     await pipeline.launchJob('forecast')
 
-    expect(post).toHaveBeenCalledWith('/forecast/', {}, { headers: { 'X-Request-ID': expect.any(String) } })
+    expect(post).toHaveBeenCalledWith('/forecast/', {}, { params: {}, headers: { 'X-Request-ID': expect.any(String) } })
   })
 
   it('returns null for a synchronous job without job_id', async () => {

@@ -622,16 +622,23 @@ class CheckpointStore:
 
     # --- jobs ----------------------------------------------------------------------------
 
-    def start(self, task: str, job_id: str, confirm: bool = False, carry_over: dict[str, dict] | None = None) -> None:
-        """Takes the lock and marks the checkpoint running. A refusal writes nothing.
+    def default_dry_run(self) -> bool:
+        """DRYRUN of a launch that does not choose: true in test mode, else DRYRUN of .env (Redis)."""
+        return True if self._test_mode() else self._dry_run()
+
+    def start(self, task: str, job_id: str, confirm: bool = False, carry_over: dict[str, dict] | None = None,
+              dry_run: bool | None = None) -> bool:
+        """Takes the lock and marks the checkpoint running. A refusal writes nothing. Returns the job's DRYRUN.
 
         Raises PipelineBlockedError, or ConfirmationRequiredError for an item already in success without confirm.
         A run job resets its dependents in the run and gets the run context (DISEASE_CODE, OU_LEVEL).
         Without an active pass, a launch starts one (confirm=true after a complete pass).
-        The launched event keeps DRYRUN as read now (since 2026-10-26): whether this job may write to DHIS2, and, for an
+        The launched event keeps the job's DRYRUN (dry_run, else default_dry_run(); since 2026-11-17 a launch may choose
+        it): whether this job may write to DHIS2, and, for an
         import, its parameters (`carry_over[item]`). A launch that starts a pass carries over the imports done before
         in the cycle (`carry_over`: the current parameters of each import; None records and carries nothing).
         """
+        dry_run = self.default_dry_run() if dry_run is None else dry_run
         with self._transaction() as conn:
             self._check_lock_free(conn)
             p = self._current(conn, confirm)
@@ -645,13 +652,14 @@ class CheckpointStore:
             self._take_lock(conn, job_id, task)
             self._upsert(conn, p, step, item, job_id, "running")
             self._event(conn, p, "launched", step, item, job_id,
-                        {**({"confirm": True} if confirm else {}), "dry_run": self._dry_run(),
+                        {**({"confirm": True} if confirm else {}), "dry_run": dry_run,
                          **({"params": carry_over[item]} if carry_over and item in carry_over else {})})
             if p.get("new") and carry_over:
-                self._carry_over(conn, p, carry_over, item)
+                self._carry_over(conn, p, carry_over, item, dry_run)
             if step == "forecast":
                 self._reset(conn, p, dependents(item), "relaunch", job_id)
                 self._apply_context(run_context(couple))  # inside the transaction: a failure writes nothing
+        return dry_run
 
     def _begin(self, conn: sqlite3.Connection, p: dict) -> None:
         """A new pass: its folders, empty working files (the previous pass saved or dropped them when it left), and
@@ -674,13 +682,14 @@ class CheckpointStore:
                 shutil.copyfile(kept, self._pass_dir(p) / file_name)
                 self._carry(conn, p, "forecast", item, {"pass_id": prev["id"], **row}, {})
 
-    def _carry_over(self, conn: sqlite3.Connection, p: dict, params: dict[str, dict], launched: str | None) -> None:
+    def _carry_over(self, conn: sqlite3.Connection, p: dict, params: dict[str, dict], launched: str | None,
+                    dry_run: bool) -> None:
         """A new pass: each import whose latest success in another pass of the cycle (any state) was launched with the
-        same parameters and DRYRUN as now is success at once; approve_imports too, when both its prerequisites are
+        same parameters and DRYRUN as this launch is success at once; approve_imports too, when both its prerequisites are
         carried. The launched item is relaunched, not carried. The operator relaunches a carried item with confirm=true,
         as any success. cycle-passes.md § 11.
         """
-        dry_run, carried = self._dry_run(), set()
+        carried = set()
         for item in IMPORT_TASKS:
             prev = self._last_success(conn, p, item) if item != launched and item in params else None
             if prev and prev["launch"].get("dry_run") == dry_run and prev["launch"].get("params") == params[item]:
@@ -739,11 +748,11 @@ class CheckpointStore:
                             (job_id,)).fetchone()
 
     @contextmanager
-    def run(self, task: str, job_id: str, confirm: bool = False) -> Iterator[None]:
-        """For synchronous work: start, then success or error when the block ends."""
-        self.start(task, job_id, confirm)
+    def run(self, task: str, job_id: str, confirm: bool = False, dry_run: bool | None = None) -> Iterator[bool]:
+        """For synchronous work: start, then success or error when the block ends. Yields the job's DRYRUN."""
+        dry_run = self.start(task, job_id, confirm, dry_run=dry_run)
         try:
-            yield
+            yield dry_run
         except BaseException:
             self.finish(job_id, "error")
             raise
@@ -851,7 +860,7 @@ class CheckpointStore:
             p = self._current(conn, confirm)
             self._begin(conn, p)
             if carry_over:
-                self._carry_over(conn, p, carry_over, None)
+                self._carry_over(conn, p, carry_over, None, self.default_dry_run())
         return {c: p[c] for c in _PASS_COLUMNS}
 
     def pause(self) -> dict:
@@ -1092,7 +1101,7 @@ class CheckpointStore:
         state["run"] = run
         state["lock"] = dict(zip(("job_id", "task", "acquired_at"), lock)) if lock else None
         state["test_mode"] = self._test_mode()
-        state["dry_run"] = self._dry_run()  # read only, from .env: whether the scripts write to DHIS2
+        state["dry_run"] = self.default_dry_run()  # DRYRUN of a launch that does not choose (the pass switch starts on it)
         return state
 
     # --- test mode (TEST_MODE) ---------------------------------------------------------------

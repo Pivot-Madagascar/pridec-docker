@@ -137,7 +137,7 @@ describe('Dashboard', () => {
     const html = wrapper.html()
     // The step's accordion title: the breadcrumb above the toggle also says 'Data Import'
     expect(html.indexOf('mode-toggle')).toBeLessThan(html.lastIndexOf('Data Import'))
-    expect(wrapper.text()).toContain('DHIS2: DRYRUN on (.env), nothing is written.') // read only, from GET /pipeline/checkpoints
+    expect(wrapper.text()).toContain('DHIS2: dry run, the jobs write nothing.') // etlhub's default, from GET /pipeline/checkpoints
 
     await wrapper.findAll('[data-test="mode-btn"]').find(b => b.text() === 'NO')!.trigger('click') // already active
     await flushPromises()
@@ -209,7 +209,21 @@ describe('Dashboard', () => {
 
     await gee.trigger('click')
     await flushPromises()
-    expect(launchJob).toHaveBeenCalledWith('import_gee', false)
+    expect(launchJob).toHaveBeenCalledWith('import_gee', false, true) // the pass switch: etlhub's default dry_run
+    wrapper.unmount()
+  })
+
+  it('sends the Dry run switch of the pass with the next launches', async () => {
+    launchJob.mockResolvedValue({ jobId: null, requestId: 'r' })
+    const wrapper = await mountPage()
+
+    await wrapper.findAll('[data-test="dry-run-btn"]').find(b => b.text() === 'NO')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="dry-run-hint"]').text()).toContain('the jobs write to DHIS2')
+
+    await wrapper.findAll('[data-test="action-card"]').find(c => c.text().includes('Import GEE'))!.trigger('click')
+    await flushPromises()
+    expect(launchJob).toHaveBeenCalledWith('import_gee', false, false)
     wrapper.unmount()
   })
 
@@ -230,7 +244,7 @@ describe('Dashboard', () => {
     await dialog.find('[role="checkbox"]').trigger('click')
     await confirmButton.trigger('click')
     await flushPromises()
-    expect(launchJob).toHaveBeenLastCalledWith('import_gee', true)
+    expect(launchJob).toHaveBeenLastCalledWith('import_gee', true, true)
     wrapper.unmount()
   })
 
@@ -379,7 +393,7 @@ describe('Dashboard', () => {
     expect(launchButtons).toHaveLength(1) // only what etlhub marks launchable
     await launchButtons[0].trigger('click')
     await flushPromises()
-    expect(launchJob).toHaveBeenCalledWith('fetch_disease', false)
+    expect(launchJob).toHaveBeenCalledWith('fetch_disease', false, true)
     wrapper.unmount()
   })
 

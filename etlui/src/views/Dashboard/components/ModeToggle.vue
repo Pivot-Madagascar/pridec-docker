@@ -1,5 +1,6 @@
 <template>
-  <!-- Before step 1: the mode applies to the whole cycle (TEST_MODE on the server). DHIS2 writes follow DRYRUN (.env). -->
+  <!-- Before step 1: the mode applies to the whole cycle (TEST_MODE on the server). DRYRUN: the pass switch
+       (dryRunEditable, Dashboard), sent with each launch; etlhub's default is true in test mode, else DRYRUN of .env. -->
   <section class="mode-toggle" :class="{ 'is-test': testMode }">
     <div class="mode-text">
       <span class="mode-label">Test mode</span>
@@ -7,11 +8,26 @@
         <template v-if="testMode">Test cycle: checkpoints, runs and uploads are kept apart from production.</template>
         <template v-else>Production cycle.</template>
       </span>
-      <!-- Read only: DRYRUN is set in the root .env, not here -->
-      <span v-if="dryRun !== undefined" class="mode-hint" :class="{ 'mode-warn': testMode && !dryRun }">
-        <template v-if="dryRun">DHIS2: DRYRUN on (.env), nothing is written.</template>
-        <template v-else>DHIS2: DRYRUN off (.env), jobs write to DHIS2{{ testMode ? ', even in test mode' : '' }}.</template>
+      <span v-if="dryRun !== undefined" class="mode-hint" data-test="dry-run-hint" :class="{ 'mode-warn': !dryRun }">
+        <template v-if="dryRun">DHIS2: dry run, the jobs write nothing.</template>
+        <template v-else>DHIS2: no dry run, the jobs write to DHIS2{{ testMode ? ', even in test mode' : '' }}.</template>
       </span>
+      <div v-if="dryRunEditable" class="mt-1 flex items-center gap-3">
+        <span class="mode-label text-sm">Dry run</span>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          aria-label="Dry run"
+          :model-value="dryRun === undefined ? undefined : dryRun ? 'yes' : 'no'"
+          :disabled="disabled"
+          @update:model-value="value => value && emit('dryRun', value === 'yes')"
+        >
+          <ToggleGroupItem v-for="choice in ['no', 'yes']" :key="choice" :value="choice" data-test="dry-run-btn"
+            class="px-3.5 font-bold data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+            {{ choice.toUpperCase() }}
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </div>
     </div>
     <!-- Single choice, never empty: clicking the active item again changes nothing. -->
     <ToggleGroup
@@ -36,11 +52,13 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 defineProps<{
   testMode: boolean | undefined // unknown until the first read of the state
   dryRun: boolean | undefined
+  dryRunEditable?: boolean // the pass switch (Dashboard); read only elsewhere
   disabled?: boolean
 }>()
 
 const emit = defineEmits<{
   change: [testMode: boolean]
+  dryRun: [dryRun: boolean]
 }>()
 </script>
 

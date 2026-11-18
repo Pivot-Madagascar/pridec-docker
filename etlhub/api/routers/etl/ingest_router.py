@@ -1,23 +1,33 @@
 from fastapi import APIRouter, Query, Depends
 
-from etlhub.api.routers import BLOCKED, CONFIRM_OVERWRITE, CONFIRM_RELAUNCH, WebhookUrl, error_doc
+from etlhub.api.routers import BLOCKED, CONFIRM_OVERWRITE, CONFIRM_RELAUNCH, DRY_RUN, WebhookUrl, error_doc
 from etlhub.application.use_cases.availability_service import AvailabilityService
 from etlhub.application.use_cases.ingestion_service import IngestionService
+from etlhub.domain.pipeline import DHIS2_WRITES
 from etlhub.domain.schemas import ETLResponse, ImportAvailabilityReport
 from etlhub.core.dependencies import get_availability_service, get_ingestion_service
 
 router = APIRouter(tags=["Ingest"])
 
 
+def _dry_run_query(dry_run: bool | None = DRY_RUN) -> bool | None:
+    return dry_run
+
+
+def _no_dry_run() -> None:  # a job that does not write to DHIS2: no dry_run parameter in its schema
+    return None
+
+
 def add_launch_route(router: APIRouter, task_type: str, summary: str, description: str, response_description: str,
                      message: str, confirm_query=CONFIRM_RELAUNCH) -> None:
-    """POST /{task_type}: queues the Celery job, 202 with its job_id."""
+    """POST /{task_type}: queues the Celery job, 202 with its job_id. A job writing to DHIS2 also takes `dry_run`."""
     async def endpoint(
         webhook_url: WebhookUrl = Query(None),
         confirm: bool = confirm_query,
+        dry_run: bool | None = Depends(_dry_run_query if task_type in DHIS2_WRITES else _no_dry_run),
         service: IngestionService = Depends(get_ingestion_service),
     ):
-        job_id = service.launch(task_type, webhook_url, confirm)
+        job_id = service.launch(task_type, webhook_url, confirm, dry_run=dry_run)
         return ETLResponse(status="accepted", message=message, job_id=job_id, webhook_url=webhook_url)
 
     router.post(

@@ -65,7 +65,7 @@ describe('usePipeline', () => {
 
     expect(await launch('import_gee', 'Import GEE')).toBe(true)
 
-    expect(launchJob).toHaveBeenCalledWith('import_gee', false)
+    expect(launchJob).toHaveBeenCalledWith('import_gee', false, undefined) // state not read yet: etlhub's default
     expect(followJob).toHaveBeenCalledWith('Import GEE', 'import_gee_1')
     expect(showNotification).not.toHaveBeenCalled()
     expect(addActivity).not.toHaveBeenCalled() // the 202 is not an activity
@@ -102,7 +102,7 @@ describe('usePipeline', () => {
     expect(showNotification).not.toHaveBeenCalledWith(expect.anything(), 'error')
 
     expect(await confirm()).toBe(true)
-    expect(launchJob).toHaveBeenLastCalledWith('import_gee', true)
+    expect(launchJob).toHaveBeenLastCalledWith('import_gee', true, true) // the dry_run of the state read meanwhile
     expect(pending.value).toBeNull()
   })
 
@@ -128,5 +128,20 @@ describe('usePipeline', () => {
     await vi.advanceTimersByTimeAsync(POLL_MS * 3)
 
     expect(getCheckpoints).toHaveBeenCalledTimes(3)
+  })
+
+  it('keeps the DRYRUN switch for the cycle and mode, and sends it with every launch', async () => {
+    launchJob.mockResolvedValue({ jobId: null, requestId: 'req-1' })
+    const { launch, refresh, dryRun, setDryRun, state } = usePipeline(addActivity)
+    await refresh()
+    expect(dryRun.value).toBe(true) // etlhub's default
+
+    setDryRun(false)
+    await launch('import_gee', 'Import GEE')
+    expect(launchJob).toHaveBeenLastCalledWith('import_gee', false, false)
+    expect(usePipeline(addActivity).dryRun.value).toBeUndefined() // another page: kept, read once its state loads
+
+    state.value = { ...STATE, cycle: '202611' } as typeof state.value
+    expect(dryRun.value).toBe(true) // another cycle starts on the default
   })
 })

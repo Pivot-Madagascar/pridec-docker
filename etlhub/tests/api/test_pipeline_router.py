@@ -384,3 +384,38 @@ def test_journal_shows_a_job_once_at_its_end_with_its_launch_request():
     assert _job_outcomes(events) == [ev("succeeded", "a", "alice", "req-a", {"confirm": True}),
                                      ev("launched", "c", "carol", "req-c"), ev("lock_released", "c", "admin", "req-x"),
                                      ev("uploaded", None, "alice", "req-u")]
+
+
+def test_a_dhis2_job_takes_the_dryrun_of_its_launch_and_journals_it(client, checkpoint_store, monkeypatch, job_store):
+    monkeypatch.setattr(tasks, "JobStore", lambda: job_store)
+    queued = []
+    monkeypatch.setattr(tasks.task_etl, "apply_async", lambda args, kwargs, task_id: queued.append(kwargs))
+    checkpoint_store.mode["dry_run"] = True  # .env
+
+    assert client.post("/import_gee", params={"dry_run": False}).status_code == 202
+
+    assert queued[0]["dry_run"] is False
+    events = checkpoint_store.journal(checkpoint_store.progress()["pass"]["id"])
+    assert [e["detail"]["dry_run"] for e in events if e["event"] == "launched"] == [False]
+
+
+def test_only_the_jobs_writing_to_dhis2_offer_dry_run(app):
+    from etlhub.domain.pipeline import DHIS2_WRITES
+    paths = app.openapi()["paths"]
+    offered = {path.strip("/") for path, ops in paths.items() for op in ops.values()
+               if any(p["name"] == "dry_run" for p in op.get("parameters", []))}
+
+    assert offered == set(DHIS2_WRITES)
+
+
+def test_update_key_is_refused_in_dry_run_and_nothing_is_written(app, client, checkpoint_store, monkeypatch):
+    from etlhub.application.use_cases import analytics_service
+    ran = []
+    monkeypatch.setattr(analytics_service, "run_etl_job", lambda *args, **kwargs: ran.append(kwargs))
+    checkpoint_store.mode["dry_run"] = True  # .env
+
+    for params in ({}, {"dry_run": True}):
+        refused = client.post("/update_key", params=params)
+        assert refused.status_code == 409
+        assert "dry run" in refused.json()["message"]
+    assert ran == [] and checkpoint_store.progress()["lock"] is None

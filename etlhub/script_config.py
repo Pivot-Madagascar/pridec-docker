@@ -22,8 +22,11 @@ def _get(key: str, default=None) -> str | None:
     """Editable keys (config_store.EDITABLE_KEYS): Redis only, loaded from .env at API start; absent = the default.
     A Redis error fails the job instead of silently running on .env values. Other keys: the environment / .env."""
     # Imported here, not at module level: this module loads with the etlhub package, before tests mock redis.
+    from etlhub.core.job_context import job_dry_run
     from etlhub.infrastructure.config_store import CONFIG_KEY, EDITABLE_KEYS
     from etlhub.infrastructure.redis_client import get_redis
+    if key == "DRYRUN" and (dry_run := job_dry_run.get()) is not None:  # the launch's choice (pass switch)
+        return "true" if dry_run else "false"
     if key in EDITABLE_KEYS:
         value = get_redis().hget(CONFIG_KEY, key)
         return value.strip() if value is not None else default

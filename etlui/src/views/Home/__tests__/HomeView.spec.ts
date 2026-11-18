@@ -69,7 +69,7 @@ describe('HomeView', () => {
     // The parameters of the pass
     expect(wrapper.text()).toContain('OU_PARENT')
     expect(wrapper.text()).toContain('https://dhis2.example')
-    expect(wrapper.text()).toContain('DRYRUN on')
+    expect(wrapper.text()).toContain('Dry run: nothing is written')
 
     await startButton(wrapper).trigger('click')
     await flushPromises()

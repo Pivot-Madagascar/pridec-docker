@@ -5,7 +5,7 @@
       <p class="text-sm text-muted-foreground">Choose the cycle, then start a new pass or resume a paused one. The forecast page follows.</p>
     </div>
 
-    <ModeToggle :test-mode="state?.test_mode" :dry-run="state?.dry_run" :disabled="busy || state?.lock != null" @change="changeMode" />
+    <ModeToggle :test-mode="state?.test_mode" :dry-run="dryRun" :disabled="busy || state?.lock != null" @change="changeMode" />
 
     <p v-if="!state" class="text-sm text-muted-foreground">Loading the pipeline state…</p>
     <form v-else class="space-y-6" @submit.prevent="start">
@@ -45,7 +45,7 @@
         </dl>
         <p class="mt-2 text-xs text-muted-foreground">
           Values now. PARENT_OU, GEE_VARIABLES and LOG_LEVEL are edited in Admin Config and apply to the launches after the change;
-          DRYRUN comes from the root .env.
+          DRYRUN: the Dry run switch of the Forecast page (by default on in test mode, else the root .env).
         </p>
       </div>
 
@@ -72,7 +72,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useConfigStore } from '@/stores/config'
 
 const router = useRouter()
-const { state, busy, pending, refresh, setCycle, setMode, resume, startPass, confirm, cancel } = usePipeline(() => {}) // no Recent Activity on this page
+const { state, busy, pending, dryRun, refresh, setCycle, setMode, resume, startPass, confirm, cancel } = usePipeline(() => {}) // no Recent Activity on this page
 const { cycles, loadCycles } = useJournal()
 const configStore = useConfigStore()
 
@@ -106,7 +106,7 @@ const parameters = computed(() => {
     ['Cycle', monthName(cycle.value)],
     ['Pass', passLabel.value],
     ['Mode', state.value?.test_mode ? 'test (kept apart from production)' : 'production'],
-    ['DHIS2 writes', state.value?.dry_run ? 'DRYRUN on: nothing is written' : 'DRYRUN off: jobs write to DHIS2'],
+    ['DHIS2 writes', dryRun.value ? 'Dry run: nothing is written (switch on the Forecast page)' : 'No dry run: jobs write to DHIS2'],
     ['DHIS2', config?.dhis_url ?? '-'],
     ['PARENT_OU', config?.parent_ou ?? '-'],
     ['GEE_VARIABLES', config?.gee_variables || 'all available variables'],

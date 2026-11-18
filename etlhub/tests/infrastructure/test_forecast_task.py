@@ -158,3 +158,18 @@ def test_is_active_is_true_for_an_inline_job_of_this_process_and_unknown_when_th
     assert tasks.CeleryTaskLauncher().is_active("post_forecast_1") is True
     assert tasks.CeleryTaskLauncher().is_active("import_gee_1") is None
 
+
+@pytest.mark.parametrize("chosen", [True, False])
+def test_the_scripts_read_the_dryrun_of_their_launch_during_the_job_only(job_store, chosen):
+    from etl.scripts.config import get_dry_run
+    from etlhub.application.use_cases import etl_use_cases
+    from etlhub.core.job_context import job_dry_run
+    from etlhub.infrastructure import etl_events
+    seen = []
+
+    etl_use_cases._execute_etl_job(lambda: seen.append(get_dry_run()),
+                                   etl_use_cases._JobLogger(job_store, "import_gee_1", etl_events), "import_gee",
+                                   dry_run=chosen)
+
+    assert seen == [chosen]
+    assert job_dry_run.get() is None  # after the job: DRYRUN of Redis (.env) again

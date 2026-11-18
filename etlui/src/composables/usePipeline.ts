@@ -1,4 +1,5 @@
-import { ref, getCurrentScope, onScopeDispose } from 'vue'
+import { computed, ref, getCurrentScope, onScopeDispose } from 'vue'
+import { useStorage } from '@vueuse/core'
 import * as pipeline from '@/services/pipeline'
 import { applyDefaultFile, deleteInputFile, getDefaultFiles, getInputFiles, uploadInputFile } from '@/services/inputs'
 import { useNotification } from '@/composables/useNotification'
@@ -42,6 +43,17 @@ export function usePipeline(addActivity: AddActivity) {
   const busy = ref(false)
   const pending = ref<PendingConfirmation | null>(null)
   let timer: ReturnType<typeof setTimeout> | null = null
+
+  // The DRYRUN switch of the pass, sent with every launch: etlhub applies it to the jobs that write to DHIS2 and
+  // journals it. Untouched: etlhub's default (`state.dry_run`: true in test mode, else DRYRUN of .env).
+  // ponytail: kept in this browser (localStorage) per cycle and mode, not on the server: another browser starts on the
+  // default. Keyed by cycle, not pass id: the first launch creates the pass.
+  const dryRunChoices = useStorage<Record<string, boolean>>('etlui-dry-run', {})
+  const dryRunKey = () => `${state.value?.cycle}:${state.value?.test_mode ? 'test' : 'production'}`
+  const dryRun = computed<boolean | undefined>(() => dryRunChoices.value[dryRunKey()] ?? state.value?.dry_run)
+  const setDryRun = (value: boolean) => {
+    dryRunChoices.value = { ...dryRunChoices.value, [dryRunKey()]: value }
+  }
 
   const stop = () => {
     if (timer !== null) clearTimeout(timer)
@@ -99,9 +111,9 @@ export function usePipeline(addActivity: AddActivity) {
   if (getCurrentScope()) onScopeDispose(stop)
 
   return {
-    state, serverFiles, defaults, busy, pending, refresh, stop, confirm,
+    state, serverFiles, defaults, busy, pending, dryRun, setDryRun, refresh, stop, confirm,
     cancel: () => { pending.value = null },
-    launch: (task: string, label: string) => act(label, c => pipeline.launchJob(task, c)),
+    launch: (task: string, label: string) => act(label, c => pipeline.launchJob(task, c, dryRun.value)),
     openRun: (source: Source, disease: Disease) => act(`Open run ${source}/${disease}`, c => pipeline.openRun(source, disease, c)),
     abandonRun: () => act('Abandon run', () => pipeline.abandonRun()),
     decide: (decision: 'approve' | 'reject') => act(decision === 'approve' ? 'Approve forecast' : 'Reject forecast', () => pipeline.decideRun(decision)),

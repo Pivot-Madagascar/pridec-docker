@@ -86,15 +86,18 @@ class FakeBlob:
 class OpenGate:
     """Pipeline gate that lets everything through: for tests that are not about the pipeline order."""
 
-    def start(self, task, job_id, confirm=False, carry_over=None):
-        pass
+    def start(self, task, job_id, confirm=False, carry_over=None, dry_run=None):
+        return self.default_dry_run() if dry_run is None else dry_run
+
+    def default_dry_run(self):
+        return True
 
     def finish(self, job_id, status):
         pass
 
     @contextmanager
-    def run(self, task, job_id, confirm=False):
-        yield
+    def run(self, task, job_id, confirm=False, dry_run=None):
+        yield self.start(task, job_id, confirm, dry_run=dry_run)
 
     @contextmanager
     def change_input(self, name, confirm=False, removed=False):

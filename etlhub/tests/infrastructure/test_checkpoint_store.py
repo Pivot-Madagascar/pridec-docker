@@ -1019,13 +1019,24 @@ def test_test_mode_starts_from_dryrun_once_then_is_independent(monkeypatch):
     assert module.test_mode_enabled() is False  # TEST_MODE alone from now on
 
 
-def test_test_mode_and_dryrun_are_independent(checkpoint_store):
+def test_a_launch_without_choice_is_dry_run_in_test_mode_and_follows_env_in_production(checkpoint_store):
     checkpoint_store.mode["dry_run"] = False  # .env: the scripts write to DHIS2
 
+    assert (checkpoint_store.progress()["test_mode"], checkpoint_store.progress()["dry_run"]) == (False, False)
     assert checkpoint_store.set_mode(True) == {"test_mode": True}
+    assert (checkpoint_store.progress()["test_mode"], checkpoint_store.progress()["dry_run"]) == (True, True)
 
-    state = checkpoint_store.progress()
-    assert (state["test_mode"], state["dry_run"]) == (True, False)
+
+def test_a_launch_journals_the_dryrun_it_chose_or_the_default(checkpoint_store):
+    checkpoint_store.mode["dry_run"] = True  # .env
+
+    assert checkpoint_store.start("import_gee", "chose", dry_run=False) is False
+    checkpoint_store.finish("chose", "success")
+    assert checkpoint_store.start("import_pivot_com", "default") is True
+
+    launched = {e["job_id"]: e["detail"]["dry_run"] for e in checkpoint_store.journal(checkpoint_store.progress()["pass"]["id"])
+                if e["event"] == "launched"}
+    assert launched == {"chose": False, "default": True}
 
 
 # --- carry-over of Data Import to a new pass of the cycle (cycle-passes.md § 11) ---------------

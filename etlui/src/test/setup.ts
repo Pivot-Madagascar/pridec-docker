@@ -8,4 +8,5 @@ config.global.stubs = { teleport: defineComponent({ setup: (_, { slots }) => () 
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  localStorage.clear() // useStorage choices (table paging, the pass DRYRUN switch) never leak between tests
 })
