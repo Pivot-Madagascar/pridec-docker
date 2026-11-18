@@ -4,8 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from etlhub.api.auth import require_admin
-from etlhub.api.routers import ADMIN_ONLY, BLOCKED, error_doc
+from etlhub.api.routers import BLOCKED, error_doc
 from etlhub.application.use_cases.ingestion_service import current_import_params
 from etlhub.application.use_cases.journal_service import JournalService
 from etlhub.core.dependencies import get_job_repository, get_journal_service, get_pipeline_gate, get_task_launcher
@@ -244,12 +243,11 @@ def abandon(pass_id: str = PASS_PATH, gate: PipelineGate = Depends(get_pipeline_
     description=(
         "For a job whose worker was killed: frees the lock and marks its running checkpoint and its job record as error "
         "(the toast, the tracking and the logs then see its end). "
-        "The lock never expires on its own. Returns the freed job_id, or null. Administrators only (DHIS2 authority ALL). "
+        "The lock never expires on its own. Returns the freed job_id, or null. "
         "The workers are asked first: while the job still runs (or when no worker answers), 409 confirmation_required "
         "with `impact` {job_id, task, active: true | null} until `confirm=true`."
     ),
-    dependencies=[Depends(require_admin)],
-    responses={**ADMIN_ONLY, **BLOCKED},
+    responses=BLOCKED,
 )
 def release_lock(confirm: bool = Query(False, description="Required while the job holding the lock may still run"),
                  gate: PipelineGate = Depends(get_pipeline_gate),
@@ -271,7 +269,7 @@ def release_lock(confirm: bool = Query(False, description="Required while the jo
     job = jobs.get(released) if released else None
     # A worker that is not dead after all still overwrites this with its own end.
     if job and job.get("status") in ("pending", "running"):
-        jobs.set(released, {**job, "status": "error", "message": "Lock released by an administrator (worker killed)"})
+        jobs.set(released, {**job, "status": "error", "message": "Lock released by a user (worker killed)"})
     return {"released": released}
 
 
@@ -312,9 +310,8 @@ def get_journal(pass_id: str = PASS_PATH, service: JournalService = Depends(get_
     "/passes/{pass_id}/journal.csv",
     response_class=Response,
     summary="Journal of a pass, as CSV",
-    description="The same events as the JSON journal, one line each. Administrators only (DHIS2 authority ALL).",
-    dependencies=[Depends(require_admin)],
-    responses={200: {"content": {"text/csv": {}}}, **ADMIN_ONLY},
+    description="The same events as the JSON journal, one line each.",
+    responses={200: {"content": {"text/csv": {}}}},
 )
 def get_journal_csv(pass_id: str = PASS_PATH, service: JournalService = Depends(get_journal_service)) -> Response:
     return Response(service.csv(pass_id), media_type="text/csv",

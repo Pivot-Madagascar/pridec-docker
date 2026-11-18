@@ -2,6 +2,8 @@
 
 > **Status: proposal, not implemented.** Nothing in this document exists in the code yet.
 > Open questions are at the end ([§ 10](#10-open-questions)); several choices below are defaults until they are answered.
+>
+> **Roles removed on 2026-11-17:** there is no admin anymore (`require_admin`, `is_admin` and `ADMIN_ONLY` are deleted). Wherever this document says administrators only, any logged-in user may do it.
 
 Today the pipeline is a Python constant (`PIPELINE` in `etlhub/domain/pipeline.py`) and etlui repeats part of it
 (`SOURCES`, `DISEASES`, labels in `etlui/src/types/pipeline.ts` and `etlui/src/config/pipeline.ts`).

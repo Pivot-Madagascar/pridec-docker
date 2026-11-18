@@ -257,14 +257,11 @@ def test_cycle_choice_through_the_api(client):
     assert client.get("/pipeline/checkpoints").json()["cycle"] != "202001"
 
 
-def test_unlocking_needs_an_admin_abandoning_a_run_does_not(app, client, checkpoint_store):
-    from etlhub.api.auth import get_current_user
-    from tests.conftest import TEST_USER
-    app.dependency_overrides[get_current_user] = lambda: {**TEST_USER, "is_admin": False}
+def test_any_user_unlocks_and_abandons_a_run(client, checkpoint_store):
     _import(checkpoint_store)
     checkpoint_store.open_run("COM/Malaria")
 
-    assert client.delete("/pipeline/lock").status_code == 403
+    assert client.delete("/pipeline/lock").json() == {"released": None}  # no roles since 2026-11-17
     assert client.delete("/pipeline/runs/current").json() == {"abandoned": "COM/Malaria"}
 
 
@@ -302,8 +299,7 @@ def test_the_journal_lists_events_with_the_request_that_caused_them(journal_clie
     assert journal_client.get("/pipeline/passes/2026-10/journal").status_code == 422
 
 
-def test_the_journal_csv_is_for_administrators(journal_client, app, queue):
-    from etlhub.api.auth import get_current_user
+def test_the_journal_csv(journal_client, queue):
     journal_client.post("/import_gee")
     pass_id = journal_client.get("/pipeline/checkpoints").json()["pass"]["id"]
 
@@ -312,14 +308,11 @@ def test_the_journal_csv_is_for_administrators(journal_client, app, queue):
     assert response.headers["content-type"].startswith("text/csv")
     assert response.text.splitlines()[0].startswith("at,mode,cycle,pass_id,step,item,event,actor")
 
-    app.dependency_overrides[get_current_user] = lambda: {"username": "op", "is_admin": False}
-    assert journal_client.get(f"/pipeline/passes/{pass_id}/journal.csv").status_code == 403
-
 
 def test_the_logged_in_user_is_the_actor_of_the_events(anon_app, monkeypatch, checkpoint_store):
     from etlhub.api.auth import dhis2_auth
     from etlhub.infrastructure.checkpoint_store import get_checkpoint_store
-    monkeypatch.setattr(dhis2_auth, "user_from_cookies", lambda cookies: {"username": "jdoe", "is_admin": True})
+    monkeypatch.setattr(dhis2_auth, "user_from_cookies", lambda cookies: {"username": "jdoe"})
     checkpoint_store.start("import_gee", "g")
     checkpoint_store.finish("g", "success")
 

@@ -94,9 +94,7 @@
           <Button variant="secondary" :disabled="loading" @click="refresh">
             {{ loading ? 'Loading...' : 'Refresh' }}
           </Button>
-          <!-- etlhub enforces it too (403): the CSV export is for administrators. -->
           <a
-            v-if="isAdmin"
             class="rounded-md bg-secondary px-4 py-1.5 text-primary hover:bg-secondary/80"
             :href="csvUrl(passId)"
             :class="{ 'pointer-events-none opacity-50': !passId }"
@@ -174,9 +172,9 @@
         @close="selected = null"
       />
 
-      <!-- Administrators (etlhub enforces it too, 403). The lock never expires: etlhub asks the workers, frees it at once
-           when none runs the job, and otherwise sends a 409 confirmation_required, shown below (rule R5). -->
-      <section v-if="isAdmin" class="space-y-3 rounded-lg border p-4" data-test="lock-zone" aria-labelledby="lock-title">
+      <!-- The lock never expires: etlhub asks the workers, frees it at once when none runs the job, and otherwise sends a
+           409 confirmation_required, shown below (rule R5). Any user, no roles since 2026-11-17. -->
+      <section class="space-y-3 rounded-lg border p-4" data-test="lock-zone" aria-labelledby="lock-title">
         <h2 id="lock-title" class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Job lock</h2>
         <p class="text-sm">
           <template v-if="lock">Held by <strong>{{ lock.task }} ({{ lock.job_id }})</strong> since {{ formatTime(lock.acquired_at) }}.</template>
@@ -210,7 +208,6 @@ import { computed, onMounted, ref } from 'vue'
 import TablePager from '@/components/TablePager.vue'
 import { useTablePaging } from '@/composables/useTablePaging'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 import { useJournal } from '@/composables/useJournal'
 import type { JournalEvent, JournalPass, PassState } from '@/types/pipeline'
 import RequestDialog from '@/views/TrackerView/components/RequestDialog.vue'
@@ -262,7 +259,6 @@ const route = useRoute()
 const router = useRouter()
 const { cycles, events, lock, pendingRelease, loading, error, load, loadCycles, loadLock, csvUrl, resume, abandon, releaseLock } =
   useJournal()
-const isAdmin = computed(() => useAuthStore().user?.is_admin === true)
 
 // ?pass=<id> (the Dashboard link), else the newest pass of the target month once the list is loaded.
 const query = route.query.pass
@@ -309,7 +305,7 @@ function select(id: string) {
 }
 
 async function refresh() {
-  if (isAdmin.value) loadLock()
+  loadLock()
   await loadCycles()
   passId.value ||= cycles.value.find(c => c.target)?.passes[0]?.id ?? passes.value[0]?.id ?? ''
   if (passId.value) await load(passId.value)

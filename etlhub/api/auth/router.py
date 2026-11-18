@@ -22,7 +22,7 @@ from etlhub.api.auth.dhis2_auth import (
 )
 from etlhub.api.routers import NOT_AUTHENTICATED, error_doc
 from etlhub.core.config import get_settings
-from etlhub.core.dependencies import get_auth_store, get_config_store
+from etlhub.core.dependencies import get_auth_store, get_config_store, get_pipeline_gate
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ MAX_FAILED_LOGINS = 5
 FAILED_LOGIN_WINDOW_SECONDS = 15 * 60
 
 # Documented with examples, not response_model: a model would filter the user dict etlui reads.
-_USER = {"id": "xE7jOejl9FI", "email": None, "username": "admin", "displayName": "John Traore", "is_admin": True}
+_USER = {"id": "xE7jOejl9FI", "email": None, "username": "admin", "displayName": "John Traore"}
 
 
 class LoginRequest(BaseModel):
@@ -53,14 +53,28 @@ def _set_session_cookie(response: Response, session_id: str) -> None:
     )
 
 
+def _job_running() -> bool:
+    """A job holding the pipeline lock read the DHIS2 token once, at its start: revoking it would stop it half done.
+
+    Its token is then left to expire on its own (24 h at most). Unreadable gate: kept too, the safe side."""
+    try:
+        return get_pipeline_gate().progress()["lock"] is not None
+    except Exception as e:
+        logger.warning("Could not read the pipeline lock, the previous DHIS2 token is kept: %s", e)
+        return True
+
+
 def _revoke_previous(client: httpx.Client, url: str, basic: tuple) -> None:
-    """Revoke the token etlhub created at the previous login, and only that one."""
+    """Revoke the token etlhub created at the previous login, and only that one (not while a job runs)."""
     previous = get_auth_store().get_credential()
     if not previous:
         return
-    revoked = revoke_pat(client, previous["url"], previous["pat_uid"], token=previous["token"])
-    if not revoked and previous["url"] == url:
-        revoke_pat(client, url, previous["pat_uid"], auth=basic)
+    if _job_running():
+        logger.info("DHIS2 token uid=%s not revoked: a job is running, it expires on its own", previous["pat_uid"])
+    else:
+        revoked = revoke_pat(client, previous["url"], previous["pat_uid"], token=previous["token"])
+        if not revoked and previous["url"] == url:
+            revoke_pat(client, url, previous["pat_uid"], auth=basic)
     # Never leave a revoked token where jobs and sessions would still use it,
     # even if creating the new one fails below.
     get_auth_store().delete_credential()
@@ -111,7 +125,7 @@ def login(body: LoginRequest, request: Request, response: Response):
     """Log in with a DHIS2 username and password.
 
     etlhub creates a 24h DHIS2 personal access token for this user, stores it in Redis
-    for the ETL jobs, revokes the one created at the previous login, and sets an
+    for the ETL jobs, revokes the one created at the previous login (unless a job runs: it uses it), and sets an
     HttpOnly session cookie. The password is neither stored nor logged.
     """
     url = normalize_dhis2_url(body.dhis2_url)
@@ -161,15 +175,18 @@ def login(body: LoginRequest, request: Request, response: Response):
 
 @auth_router.post("/auth/logout", status_code=204, summary="Log out")
 def logout(request: Request):
-    """End the session and revoke its DHIS2 token. Always clears the cookie."""
+    """End the session and revoke its DHIS2 token (not while a job runs: it uses it). Always clears the cookie."""
     session_id = request.cookies.get(SESSION_COOKIE)
     session = get_auth_store().get_session(session_id) if session_id else None
     if session:
         get_auth_store().delete_session(session_id)
         credential = get_auth_store().get_credential()
         if credential and credential["pat_uid"] == session["pat_uid"]:
-            with dhis2_client() as client:
-                revoke_pat(client, credential["url"], credential["pat_uid"], token=credential["token"])
+            if _job_running():
+                logger.info("DHIS2 token uid=%s not revoked: a job is running, it expires on its own", credential["pat_uid"])
+            else:
+                with dhis2_client() as client:
+                    revoke_pat(client, credential["url"], credential["pat_uid"], token=credential["token"])
             get_auth_store().delete_credential()
         logger.info("DHIS2 logout: user=%s", session["user"].get("username"))
 

@@ -387,12 +387,12 @@ Open points:
 
 | Point | Question |
 |---|---|
-| `forecast_start` | Which value does `jq` write in `pivot_forecast.sh` (current month, next month, last month of data)? The server must write the same one. |
+| `forecast_start` | Decided 2026-11-17: the cycle. `pivot_forecast.sh` writes the calendar month (`"202601"` in test mode); they match while the cycle follows the calendar, and a month chosen on Home forecasts from that month. |
 | `approve_imports` | What is the limit for CSB cases? |
 | `approve_imports` role (to be determined, 2026-10-26) | Its buttons are now under the import availability report ([../import-availability/import-availability.md](../import-availability/import-availability.md)). Still open: should it close step ① (after `build_analytics`) instead of gating `build_analytics`? Should etlhub refuse it (409) while the report shows missing data, or keep it a free human decision? Should it also need `import_gee`? Should its journal event keep which report (section check times) it was made on? Nothing changed: today it needs `import_pivot_com` and `import_pivot_csb` only and does not read the report. |
 | Test mode and `forecast` | Decided 2026-10-15: test mode offers `assets/test/inputs/config.json` as default ([../default-input-files/default-input-files.md](../default-input-files/default-input-files.md)). |
 | `calc_orgunit_alerts` | Celery or synchronous job? What exactly does it publish? |
-| Level check for `external_data` | Which columns distinguish an fkt file from a csb file? |
+| Level check for `external_data` | Decided 2026-11-17: no column distinguishes them (same columns; fkt 195 orgUnits, csb 21, none shared). Checked at `validate_inputs`, not at upload: refused when it shares no orgUnit with `disease_data.json`. |
 
 Limits:
 - **Matching `config.json`**: the server cannot check that the file matches the run's disease,
@@ -448,9 +448,9 @@ Limits:
 16. ✅ **`approve_imports`**: decision item in `data_import`, prerequisite of `build_analytics`;
     `POST /pipeline/imports/approve` (`approve` / `reject`). The CSB limit is not checked by the server: the user checks it.
 17. ✅ **`external_data/<level>`**: mandatory item, prerequisite of `validate_inputs`; `forecast_runs.external_data` removed
-    (existing databases keep the column, unused). ⬜ Level check at upload (422): waiting for the columns that distinguish fkt and csb (§6).
-18. ✅ **`forecast_start`**: written by the server when `config.json` is uploaded (end of the 422 refusal). Temporary value: the cycle
-    (current month), like the `validate_inputs` default; to align with `pivot_forecast.sh` once confirmed (§6).
+    (existing databases keep the column, unused). ✅ Level check at `validate_inputs` (2026-11-17, §6), not at upload: no column distinguishes fkt and csb.
+18. ✅ **`forecast_start`**: written by the server when `config.json` is uploaded (end of the 422 refusal). Value: the cycle
+    (current month by default), like the `validate_inputs` default; kept on 2026-11-17 (§6).
 19. ⬜ **`calc_orgunit_alerts`**: wire the command `pridec etl calc_orgUnit_alerts` (end of the 501). Blocked: no script
     exists in `etl/scripts/`.
 20. ⬜ **Test mode**: `DRYRUN=True` passed to `import_gee` and `post_forecast` only, distinct from the commands' `DRYRUN` option.

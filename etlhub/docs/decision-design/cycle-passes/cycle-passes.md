@@ -7,6 +7,8 @@
 > it differs from § 5 to § 10, in [§ 12](#12-implementation).
 > Builds on [../cycle-journal/cycle-journal.md](../cycle-journal/cycle-journal.md) and
 > [../pipeline-checkpoints/pipeline-checkpoints-summary.md](../pipeline-checkpoints/pipeline-checkpoints-summary.md).
+>
+> **Roles removed on 2026-11-17:** there is no admin anymore (`require_admin`, `is_admin` and `ADMIN_ONLY` are deleted). Wherever this document says administrators only, any logged-in user may do it.
 
 | § | Content |
 |---|---|

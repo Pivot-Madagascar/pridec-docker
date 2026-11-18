@@ -8,6 +8,8 @@
 > `GET /pipeline/passes/{pass_id}/journal(.csv)`, `GET /pipeline/cycles` lists months with their passes, `cycle_chosen`
 > is no longer written, and leaving test mode pauses the test pass instead of emptying the test tables (§ 6.3 and Q6
 > superseded). See [../cycle-passes/cycle-passes.md](../cycle-passes/cycle-passes.md).
+>
+> **Roles removed on 2026-11-17:** there is no admin anymore (`require_admin`, `is_admin` and `ADMIN_ONLY` are deleted). Wherever this document says administrators only, any logged-in user may do it.
 
 A cycle (one month of pipeline, see [../pipeline-checkpoints/pipeline-checkpoints-summary.md](../pipeline-checkpoints/pipeline-checkpoints-summary.md#the-cycle))
 is made of 3 steps and about 80 items, each launched, finished, relaunched, reset or decided by a person.

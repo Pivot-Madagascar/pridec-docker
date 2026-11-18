@@ -3,6 +3,8 @@
 > **Status: analysis, 2026-10-22. Not implemented, not decided.** Open questions in § 8.
 > Builds on [../dry-run/dry-run.md](../dry-run/dry-run.md) (current state) and
 > [../cycle-passes/cycle-passes.md](../cycle-passes/cycle-passes.md) (leaving test mode pauses the test pass).
+>
+> **Roles removed on 2026-11-17:** there is no admin anymore (`require_admin`, `is_admin` and `ADMIN_ONLY` are deleted). Wherever this document says administrators only, any logged-in user may do it.
 
 | § | Content |
 |---|---|

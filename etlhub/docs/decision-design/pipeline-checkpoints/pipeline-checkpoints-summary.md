@@ -50,7 +50,7 @@ The smallest unit of forecast is the **`dataElement`** (named `pridec_historic_<
 4. **Decide**: read the report, then `approve` (or `reject` to redo the forecast).
 5. **Publish**: `post_forecast`. The run **closes** (its report is kept: `GET /pipeline/runs/{source}/{disease}/report`) and another pair can be opened.
 
-A run can be **abandoned** at any time but while a job runs, by any logged-in user (administrators only until 2026-10-28): nothing is published, and its steps start again from zero.
+A run can be **abandoned** at any time but while a job runs, by any logged-in user: nothing is published, and its steps start again from zero.
 
 ## The rules
 
@@ -58,7 +58,7 @@ A run can be **abandoned** at any time but while a job runs, by any logged-in us
 |---|---|---|
 | **R1** | Every run requires a `config.json` (`external_data.csv` is optional). | The step is not validated. |
 | **R2** | An action waits for its prerequisites to succeed. | 409 refusal. |
-| **R3** | **Only one job at a time.** The lock **never expires**. | 409 refusal. Crashed worker: `DELETE /pipeline/lock` (administrators: DHIS2 authority `ALL`). |
+| **R3** | **Only one job at a time.** The lock **never expires**. | 409 refusal. Crashed worker: `DELETE /pipeline/lock` (any user; asks a confirmation while the job may still run). |
 | **R4** | A step only counts if the previous one counts. | Following steps blocked; their successes are kept and count again later. |
 | **R5** | **Undoing a success needs a confirmation**: relaunching a successful action, replacing a file already used, reopening a finished run. | 409 `confirmation_required` refusal describing the impact; resend with `?confirm=true`. |
 | **R6** | **Only one forecast run open at a time.** | 409 refusal. |

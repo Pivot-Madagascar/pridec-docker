@@ -29,7 +29,7 @@ A **cycle** is the full run of the pipeline, **once a month**. It is named after
 - When the **month changes**, a new cycle starts automatically: the old one stays unfinished if it was not finished,
   and its open run is abandoned.
 - **Chosen cycle**: `PUT /pipeline/cycle` `{"cycle": "YYYYMM" | null}` (etlui: month input next to "Cycle") sends every launch, run, upload and approval to that cycle, and `GET /pipeline/checkpoints` shows it by default. `null` or the current month = follow the calendar month again (the default). Refused (409) for a future month, while a job runs, or while a run is open in the current cycle. A complete cycle can be chosen but takes no launch. A chosen past month does not follow the calendar: it stays until changed. Kept per mode (test mode forgets it). The ETL scripts do not read the cycle: it only files the checkpoints, the uploads and `forecast_start`.
-- Once the 3 steps are valid, it is **closed**: the month cannot run a second time. An administrator should have the ability to re-open any of the steps as needed.
+- Once the 3 steps are valid, it is **closed**: the month cannot run a second time. Re-opening a step is not provided (no roles since 2026-11-17).
 
 | # | Step | What must succeed | Order |
 |---|---|---|---|
@@ -168,7 +168,7 @@ The etlui **"Test mode" (test = YES)** button switches etlhub to test mode.
 | POST | `/pipeline/imports/approve` | `{"decision": "approve" \| "reject"}`: the `approve_imports` decision of step ① |
 | PUT | `/pipeline/cycle` | `{"cycle": "YYYYMM" \| null}`: the cycle launches go to (`null` = current month); 409 for a future month, a running job or an open run |
 | PUT | `/pipeline/mode` | `{"dry_run": true \| false}`: test or production mode (`confirm=true` to leave test mode with data) |
-| DELETE | `/pipeline/lock` | Frees the lock of a job whose worker was killed; the `running` item becomes `error` (administrators only). While the job may still run (a worker has it, or no worker answers): 409 `confirmation_required` until `?confirm=true` (2026-11-17) |
+| DELETE | `/pipeline/lock` | Frees the lock of a job whose worker was killed; the `running` item becomes `error` (any user since 2026-11-17). While the job may still run (a worker has it, or no worker answers): 409 `confirmation_required` until `?confirm=true` (2026-11-17) |
 | POST | `/calc_orgunit_alerts` | Job of the CSB runs, between `forecast` and `approve` (501 today: no script) |
 
 All these routes require an etlui session.

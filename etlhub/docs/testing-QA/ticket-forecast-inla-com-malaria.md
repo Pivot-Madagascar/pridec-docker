@@ -88,6 +88,8 @@ Proposed:
 - Give test mode an fkt fixture, or use the production files for fkt.
 - `validate_inputs` should fail, or warn, when a `pred_vars` column is entirely null, or when `external_data` shares no orgUnit with the disease data.
 
+*Partly fixed (2026-11-17):* `validate_inputs` now fails when `external_data` shares no orgUnit with the disease data (`validation_use_cases._check_external_data_level`). Not done: an fkt fixture for test mode, the check of an entirely null `pred_vars` column.
+
 ## Side issue 2: `validate_inputs` errors are lost
 
 `etl/scripts/validate_inputs.py` raises `ValidationError(errors=…, messages=…)` without passing a message to `Exception`. So `str(e)` is empty, and etlhub reports `validate_inputs failed: ` with no reason (`etlhub/application/use_cases/etl_use_cases.py:74`).

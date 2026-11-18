@@ -29,7 +29,6 @@ def error_doc(description: str, example: dict) -> dict:
 
 
 NOT_AUTHENTICATED = {401: error_doc("No valid session: log in with POST /auth/login", {"detail": "Not authenticated"})}
-ADMIN_ONLY = {403: error_doc("The user is not a DHIS2 superuser (authority ALL)", {"detail": "Administrators only"})}
 BLOCKED = {409: {
     "description": (
         "Refused by the pipeline gate, nothing written: a job is running, a previous step is not done, "

@@ -73,8 +73,7 @@ class FakeDHIS2:
         if request.url.path == "/api/me.json":
             if not authed:
                 return httpx.Response(401)
-            return httpx.Response(200, json={"id": "u1", "username": "admin", "email": None, "displayName": "Admin",
-                                                    "authorities": ["ALL"]})
+            return httpx.Response(200, json={"id": "u1", "username": "admin", "email": None, "displayName": "Admin"})
         if request.method == "POST" and request.url.path == "/api/apiToken":
             if not self._basic_ok(request):
                 return httpx.Response(401)
@@ -137,7 +136,7 @@ def test_login_sets_httponly_cookie_and_stores_the_token_server_side(https_clien
 
     assert response.status_code == 200
     assert response.json()["user"]["username"] == "admin"
-    assert response.json()["user"]["is_admin"] is True  # DHIS2 authority ALL (superuser)
+    assert "is_admin" not in response.json()["user"]  # no roles: every DHIS2 user of an allowed host is equal
     cookie = response.headers["set-cookie"]
     assert "etlhub_session=" in cookie
     assert "HttpOnly" in cookie and "Secure" in cookie and "SameSite=strict" in cookie
@@ -221,6 +220,28 @@ def test_logout_revokes_token_and_clears_session(https_client, dhis2):
     assert dhis2.tokens == {}
     assert auth_store.get_credential() is None
     assert https_client.get("/auth/me").status_code == 401
+
+
+def test_a_login_or_logout_while_a_job_runs_keeps_the_token_that_job_read(anon_app, https_client, dhis2, checkpoint_store):
+    _login(https_client)
+    first_uid = auth_store.get_credential()["pat_uid"]
+    checkpoint_store.start("import_gee", "import_gee_1")  # read DHIS_TOKEN at its start
+
+    other_browser = TestClient(anon_app, base_url="https://testserver")
+    assert _login(other_browser).status_code == 200
+    second_uid = auth_store.get_credential()["pat_uid"]
+    assert first_uid in dhis2.tokens  # the running import keeps working; the token expires on its own
+    assert https_client.get("/auth/me").status_code == 401  # its session is still replaced
+
+    assert other_browser.post("/auth/logout", headers={"Origin": FRONTEND}).status_code == 204
+    assert second_uid in dhis2.tokens and auth_store.get_credential() is None
+
+    # Logged out: etlhub no longer knows that token, it is left to expire (24 h at most).
+    checkpoint_store.finish("import_gee_1", "success")
+    _login(other_browser)
+    third_uid = auth_store.get_credential()["pat_uid"]
+    _login(https_client)  # no job any more: the previous token is revoked again
+    assert third_uid not in dhis2.tokens
 
 
 def test_expired_credential_logs_the_user_out(https_client, fake_redis):

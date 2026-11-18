@@ -10,6 +10,16 @@ from etl.scripts.validate_inputs import validate_inputs as _validate_inputs
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
+def _check_external_data_level(external_data: pd.DataFrame | None, disease_data: pd.DataFrame) -> None:
+    """The fkt and csb files have the same columns: only their orgUnits tell the level. None in common with the
+    disease data = the other level's file, and every external covariate of the forecast would be empty."""
+    if external_data is None or "orgUnit" not in external_data or "orgUnit" not in disease_data:
+        return  # no file, or no orgUnit column: etl's validate_inputs reports it
+    if not set(external_data["orgUnit"]) & set(disease_data["orgUnit"]):
+        raise ValueError("external_data.csv shares no orgUnit with disease_data.json: is it the file of the other "
+                         "level (fkt for a CSB run, or csb for an ADJ/COM run)? Every external covariate would be empty.")
+
+
 def validate_input_files(
     config_path: str | None = None,
     external_data_path: str | None = None,
@@ -45,6 +55,7 @@ def validate_input_files(
 
     orgunit_poly = gpd.read_file(paths["orgunit_poly"])
     external_data = pd.read_csv(paths["external_data"]) if os.path.exists(paths["external_data"]) else None
+    _check_external_data_level(external_data, disease_data)
 
     result = _validate_inputs(
         config=config_json,

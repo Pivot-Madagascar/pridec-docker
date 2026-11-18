@@ -25,7 +25,6 @@ vi.mock('@/services/api', async importOriginal => ({
 }))
 
 import JournalView from '@/views/Journal/JournalView.vue'
-import { useAuthStore } from '@/stores/auth'
 
 const event = (over: object) => ({
   cycle: '202610', pass_id: 'cccc3333', at: '2026-10-16T09:00:00.000000', step: 'data_import', item: 'import_gee', event: 'launched',
@@ -155,27 +154,16 @@ describe('JournalView', () => {
     expect(complete.findAll('button').filter(b => ['Resume', 'Abandon'].includes(b.text()))).toHaveLength(0) // the closed confirm dialog renders nothing
   })
 
-  it('offers the CSV export to administrators only', async () => {
+  it('offers the CSV export to every user', async () => {
     getJournal.mockResolvedValue([])
-    expect(mount(JournalView).find('a[download]').exists()).toBe(false)
-    await flushPromises()
-
-    useAuthStore().setUser({ id: '1', email: null, username: 'admin', displayName: null, is_admin: true })
     const link = mount(JournalView).find('a[download]')
     expect(link.attributes('href')).toBe('http://localhost:8111/pipeline/passes/cccc3333/journal.csv')
   })
 
-  it('lets administrators release the job lock at the bottom of the page: at once when etlhub finds the job dead', async () => {
+  it('lets any user release the job lock at the bottom of the page: at once when etlhub finds the job dead', async () => {
     getJournal.mockResolvedValue([])
     getCheckpoints.mockResolvedValue({ lock: { job_id: 'forecast_1a2b3c4d', task: 'forecast', acquired_at: '2026-10-28T09:00:00' } })
-    let wrapper = mount(JournalView)
-    await flushPromises()
-    expect(wrapper.find('[data-test="lock-zone"]').exists()).toBe(false)
-    expect(getCheckpoints).not.toHaveBeenCalled()
-    wrapper.unmount()
-
-    useAuthStore().setUser({ id: '1', email: null, username: 'admin', displayName: null, is_admin: true })
-    wrapper = mount(JournalView)
+    const wrapper = mount(JournalView)
     await flushPromises()
     const zone = wrapper.find('[data-test="lock-zone"]')
     expect(zone.text()).toContain('forecast (forecast_1a2b3c4d)')
@@ -187,7 +175,6 @@ describe('JournalView', () => {
   })
 
   it('asks a confirmation, with etlhub\'s message, when the job holding the lock is still running', async () => {
-    useAuthStore().setUser({ id: '1', email: null, username: 'admin', displayName: null, is_admin: true })
     getJournal.mockResolvedValue([])
     getCheckpoints.mockResolvedValue({ lock: { job_id: 'forecast_1a2b3c4d', task: 'forecast', acquired_at: '2026-10-28T09:00:00' } })
     const message = 'forecast (forecast_1a2b3c4d) is still running. Releasing the lock lets another job start'
