@@ -23,10 +23,6 @@ if args.help:
 
 
 from config import DHIS_TOKEN, DHIS_URL, PIVOT_URL, PIVOT_TOKEN, dryRun, setup_logging, check_envvars
-from requests.auth import HTTPBasicAuth
-import pandas as pd
-from datetime import date
-from dateutil.relativedelta import relativedelta
 import logging
 from pivot_dhis_tools import import_pivot_com
 
