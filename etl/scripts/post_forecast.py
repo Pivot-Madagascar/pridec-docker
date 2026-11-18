@@ -1,7 +1,4 @@
-from pivot_dhis_tools import post_dataElements
-import os
-import json
-import logging
+import argparse
 
 def print_help():
     print(f"""
@@ -9,55 +6,60 @@ Task: post_forecast
 
 Usage:
 -   POSTs a forecast in the form of output/forecast.json to the PRIDE-C instance
+-   POSTs calculated PRIDE-C Alerts from output/alerts.json to the PRIDE-C instance
 
 Notes:
 -   None
 """)
 
-def parse_args():
-    import argparse
-    parser = argparse.ArgumentParser(add_help=False)  # disable default help
-    parser.add_argument("--help", "-h", action="store_true")
-    return parser.parse_args()
+parser = argparse.ArgumentParser(add_help=False)  # disable default help
+parser.add_argument("--help", "-h", action="store_true")
 
-def post_forecast():
-    from .config import get_dhis_token, get_dhis_url, get_dry_run, setup_logging, check_envvars
+args = parser.parse_args()
 
-    DHIS_TOKEN = get_dhis_token()
-    DHIS_URL = get_dhis_url()
-    DRYRUN = get_dry_run()
+if args.help:
+    print_help()
+    exit(0)
 
-    setup_logging()
+from config import DHIS_TOKEN, DHIS_URL, dryRun, setup_logging, check_envvars
+from pivot_dhis_tools import post_dataElements
+import os
+import json
 
-    logger = logging.getLogger("post_forecasts")
+import logging
 
-    check_envvars(required_vars = {
-                'DHIS_TOKEN': DHIS_TOKEN,
-                'DHIS_URL': DHIS_URL})
+setup_logging()
 
-    logger.info("Posting forecasts to %s", DHIS_URL)
+logger = logging.getLogger("post_forecasts")
 
-    output_dir = os.path.join(os.getcwd(), 'output')
-    os.makedirs(output_dir, exist_ok=True)
 
-    try:
-        os.chmod(output_dir, 0o755)
-    except PermissionError:
-        pass
+check_envvars(required_vars = {
+            'DHIS_TOKEN': DHIS_TOKEN,
+            'DHIS_URL': DHIS_URL})
 
-    try:
-        with open('output/forecast.json', 'r') as file:
-            json_payload = json.load(file)
-    except FileNotFoundError as e:
-            logger.error("The file 'output/forecast.json' was not found. Run the forecast step first.")
-            raise e
+logger.info("Posting forecasts to %s", DHIS_URL)
 
-    post_dataElements(dhis_url = DHIS_URL, payload = json_payload,
-                       token= DHIS_TOKEN, dryRun=DRYRUN)
+forecast_payload = None
+alert_payload = None
 
-if __name__ == "__main__":
-    args = parse_args()
-    if args.help:
-        print_help()
-        exit(0)
-    post_forecast()
+try:
+    with open('output/forecast.json', 'r') as file:
+        json_payload = json.load(file)
+except FileNotFoundError as e:
+        logger.error("The file 'output/forecast.json' was not found and will not be posted. Run the forecast step first.")
+        raise SystemExit(1) from e
+
+post_dataElements(dhis_url = DHIS_URL, payload = json_payload,
+                   token= DHIS_TOKEN, dryRun=dryRun)
+
+logger.info("Posting alerts to %s", DHIS_URL)
+
+try:
+    with open('output/alerts.json', 'r') as file:
+        alert_payload = json.load(file)
+except FileNotFoundError:
+        logger.warning("The file 'output/alerts.json' was not found and will not be posted. Run the calc_orgUnit_alerts step first.")
+
+if alert_payload is not None: 
+    post_dataElements(dhis_url = DHIS_URL, payload = alert_payload,
+                    token= DHIS_TOKEN, dryRun=dryRun)
