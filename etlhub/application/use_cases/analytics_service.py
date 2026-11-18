@@ -7,6 +7,10 @@ from etlhub.domain.interfaces.event_publisher import EventPublisher
 from etlhub.domain.exceptions import ETLException
 from etlhub.domain.schemas import ETLResponse
 
+# Inline jobs running in this API process: whether the holder of the pipeline lock is still alive (DELETE /pipeline/lock).
+# ponytail: one set per process, right with a single API process (run_server.py); several would need a shared registry.
+RUNNING_INLINE: set[str] = set()
+
 
 class AnalyticsService:
     """post_forecast and update_key: run synchronously, inside the pipeline gate."""
@@ -19,10 +23,13 @@ class AnalyticsService:
     def _run(self, task_type: str, message: str, webhook_url: str | None, confirm: bool) -> ETLResponse:
         job_id = f"{task_type}_{uuid.uuid4().hex[:8]}"
         with self._gate.run(task_type, job_id, confirm):  # PipelineBlockedError propagates as is
+            RUNNING_INLINE.add(job_id)
             try:
                 run_etl_job(task_type, self._job_repo, job_id, self._events)
             except ETLException as e:
                 raise ETLException(f"{task_type} failed: {e}") from e
+            finally:
+                RUNNING_INLINE.discard(job_id)
         notify_webhook(webhook_url, job_id, "success", message)
         return ETLResponse(status="success", message=message, job_id=job_id, webhook_url=webhook_url)
 

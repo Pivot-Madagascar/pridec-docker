@@ -4,6 +4,7 @@ from datetime import datetime
 
 from etlhub.core.celery_app import celery_app
 from etlhub.domain.exceptions import ETLException
+from etlhub.application.use_cases.analytics_service import RUNNING_INLINE
 from etlhub.application.use_cases.etl_use_cases import ETL_JOBS, notify_webhook, run_etl_job
 from etlhub.infrastructure.forecast_runner import run_rscript
 from etlhub.infrastructure.job_store import JobStore
@@ -81,10 +82,25 @@ class CeleryTaskLauncher:
         # tracking page can follow it (an unknown job gets 4004).
         JobStore().set(job_id, {"job_id": job_id, "status": "pending", "message": "Queued"})
         try:
+            # task_id=job_id: is_active finds the job among the workers' tasks.
             if task_type == "forecast":
-                task_forecast.delay(job_id, webhook_url=webhook_url, **kwargs)
+                task_forecast.apply_async((job_id,), {"webhook_url": webhook_url, **kwargs}, task_id=job_id)
             else:
-                task_etl.delay(task_type, job_id, webhook_url=webhook_url, **kwargs)
+                task_etl.apply_async((task_type, job_id), {"webhook_url": webhook_url, **kwargs}, task_id=job_id)
         except Exception:
             gate.finish(job_id, "error")
             raise
+
+    def is_active(self, job_id: str) -> bool | None:
+        if job_id in RUNNING_INLINE:
+            return True
+        # Running or prefetched by a worker. A worker restarted after a kill prefetches the queued task again: active.
+        # The control broadcast waits celery's default 1 s for the workers' replies: it limits the question, not the job.
+        try:
+            replies = celery_app.control.inspect().query_task(job_id)  # {worker: {task_id: [state, info]}}, or None
+        except Exception as e:  # broker unreachable: unknown, the user decides
+            logger.warning("Could not ask the workers about %s: %s", job_id, e)
+            return None
+        if not replies:
+            return None
+        return any(tasks.get(job_id, ("ready",))[0] in ("active", "reserved") for tasks in replies.values())

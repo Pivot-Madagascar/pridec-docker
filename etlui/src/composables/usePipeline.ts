@@ -24,7 +24,7 @@ interface HttpError {
   response?: { status?: number; data?: { code?: unknown } }
 }
 
-function confirmationRequired(err: unknown): ConfirmationRequired | null {
+export function confirmationRequired(err: unknown): ConfirmationRequired | null {
   const response = (err as HttpError)?.response
   return response?.status === 409 && response.data?.code === 'confirmation_required'
     ? (response.data as ConfirmationRequired)

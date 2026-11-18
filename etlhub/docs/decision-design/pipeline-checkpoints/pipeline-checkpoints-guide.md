@@ -168,7 +168,7 @@ The etlui **"Test mode" (test = YES)** button switches etlhub to test mode.
 | POST | `/pipeline/imports/approve` | `{"decision": "approve" \| "reject"}`: the `approve_imports` decision of step ① |
 | PUT | `/pipeline/cycle` | `{"cycle": "YYYYMM" \| null}`: the cycle launches go to (`null` = current month); 409 for a future month, a running job or an open run |
 | PUT | `/pipeline/mode` | `{"dry_run": true \| false}`: test or production mode (`confirm=true` to leave test mode with data) |
-| DELETE | `/pipeline/lock` | Frees the lock of a job whose worker was killed; the `running` item becomes `error` (administrators only) |
+| DELETE | `/pipeline/lock` | Frees the lock of a job whose worker was killed; the `running` item becomes `error` (administrators only). While the job may still run (a worker has it, or no worker answers): 409 `confirmation_required` until `?confirm=true` (2026-11-17) |
 | POST | `/calc_orgunit_alerts` | Job of the CSB runs, between `forecast` and `approve` (501 today: no script) |
 
 All these routes require an etlui session.

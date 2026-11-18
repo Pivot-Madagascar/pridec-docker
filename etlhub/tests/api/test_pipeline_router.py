@@ -11,7 +11,7 @@ def queue(monkeypatch, job_store):
     """Celery replaced: records the queued jobs."""
     monkeypatch.setattr(tasks, "JobStore", lambda: job_store)
     queued = []
-    monkeypatch.setattr(tasks.task_etl, "delay", lambda task_type, *a, **k: queued.append((a, k)))
+    monkeypatch.setattr(tasks.task_etl, "apply_async", lambda args, kwargs, task_id: queued.append((args[1:], kwargs)))
     return queued
 
 
@@ -140,17 +140,62 @@ def test_calc_orgunit_alerts_is_not_implemented(client):
     assert "not implemented" in response.json()["message"]
 
 
-def test_release_lock(app, client, checkpoint_store, job_store):
-    from etlhub.core.dependencies import get_job_repository
-    job_store.set("dead", {"job_id": "dead", "status": "running"})
-    app.dependency_overrides[get_job_repository] = lambda: job_store
-    checkpoint_store.start("import_gee", "dead")
+class Liveness:
+    """TaskLauncher whose is_active answers what the test says (True, False, or None: no worker answered)."""
 
-    assert client.delete("/pipeline/lock").json() == {"released": "dead"}
+    def __init__(self, active):
+        self.active = active
+
+    def is_active(self, job_id):
+        return self.active
+
+
+@pytest.fixture
+def lock_held(app, checkpoint_store, job_store):
+    from etlhub.core.dependencies import get_job_repository, get_task_launcher
+    job_store.set("held", {"job_id": "held", "status": "running"})
+    app.dependency_overrides[get_job_repository] = lambda: job_store
+    checkpoint_store.start("import_gee", "held")
+
+    def answer(active):
+        app.dependency_overrides[get_task_launcher] = lambda: Liveness(active)
+
+    yield answer
+    app.dependency_overrides.pop(get_job_repository)
+    app.dependency_overrides.pop(get_task_launcher, None)
+
+
+def test_release_lock_of_a_dead_job_needs_no_confirmation(client, lock_held, job_store):
+    lock_held(False)
+
+    assert client.delete("/pipeline/lock").json() == {"released": "held"}
     assert client.get("/pipeline/checkpoints").json()["lock"] is None
     # Its end is seen by the toast and the tracking: no job left "running" for 24 h
-    assert job_store.get("dead")["status"] == "error"
-    app.dependency_overrides.pop(get_job_repository)
+    assert job_store.get("held")["status"] == "error"
+
+
+@pytest.mark.parametrize("active", [True, None])
+def test_release_lock_of_a_job_that_may_still_run_asks_for_confirmation(client, lock_held, job_store, active):
+    lock_held(active)
+
+    refused = client.delete("/pipeline/lock")
+
+    assert refused.status_code == 409
+    assert refused.json()["code"] == "confirmation_required"
+    assert refused.json()["impact"] == {"job_id": "held", "task": "import_gee", "active": active}
+    assert client.get("/pipeline/checkpoints").json()["lock"]["job_id"] == "held"  # nothing released
+    assert job_store.get("held")["status"] == "running"
+
+    assert client.delete("/pipeline/lock", params={"confirm": True}).json() == {"released": "held"}
+    assert job_store.get("held")["status"] == "error"
+
+
+def test_release_lock_without_lock(client, app):
+    from etlhub.core.dependencies import get_task_launcher
+    app.dependency_overrides[get_task_launcher] = lambda: Liveness(True)
+
+    assert client.delete("/pipeline/lock").json() == {"released": None}
+    app.dependency_overrides.pop(get_task_launcher)
 
 
 def test_a_task_end_records_the_checkpoint_and_frees_the_lock(checkpoint_store, queue):
@@ -183,7 +228,7 @@ def test_a_queueing_failure_frees_the_lock(checkpoint_store, monkeypatch, job_st
     def broker_down(*args, **kwargs):
         raise ConnectionError("broker down")
 
-    monkeypatch.setattr(tasks.task_etl, "delay", broker_down)
+    monkeypatch.setattr(tasks.task_etl, "apply_async", broker_down)
 
     with pytest.raises(ConnectionError):
         tasks.CeleryTaskLauncher().launch("import_gee", "import_gee_1")

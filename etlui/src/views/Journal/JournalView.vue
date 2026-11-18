@@ -174,19 +174,25 @@
         @close="selected = null"
       />
 
-      <!-- Administrators (etlhub enforces it too, 403): only when the worker of the job is dead, the lock never expires. -->
+      <!-- Administrators (etlhub enforces it too, 403). The lock never expires: etlhub asks the workers, frees it at once
+           when none runs the job, and otherwise sends a 409 confirmation_required, shown below (rule R5). -->
       <section v-if="isAdmin" class="space-y-3 rounded-lg border p-4" data-test="lock-zone" aria-labelledby="lock-title">
         <h2 id="lock-title" class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Job lock</h2>
         <p class="text-sm">
           <template v-if="lock">Held by <strong>{{ lock.task }} ({{ lock.job_id }})</strong> since {{ formatTime(lock.acquired_at) }}.</template>
           <template v-else>No job holds the lock.</template>
         </p>
-        <Button variant="destructive" :disabled="!lock" @click="releasing = true">Release the lock</Button>
+        <Button variant="destructive" :disabled="!lock || releasing" @click="release()">Release the lock</Button>
       </section>
 
-      <ConfirmDialog :open="releasing" title="Release the job lock?" confirm-label="Release" @confirm="confirmRelease" @cancel="releasing = false">
-        Only when the worker of <strong>{{ lock?.task }}</strong> is dead: the lock never expires on its own.
-        The running item becomes "error" and can be relaunched.
+      <ConfirmDialog
+        :open="!!pendingRelease"
+        :title="pendingRelease?.impact.active ? 'This job is still running' : 'Is this job still running?'"
+        confirm-label="Release anyway"
+        @confirm="confirmRelease"
+        @cancel="pendingRelease = null"
+      >
+        {{ pendingRelease?.message }} The running item becomes "error" and can be relaunched.
       </ConfirmDialog>
 
       <ConfirmDialog :open="abandoning" title="Abandon this cycle?" confirm-label="Abandon" @confirm="confirmAbandon" @cancel="abandoning = false">
@@ -254,7 +260,8 @@ const STATE_ICONS: Record<PassState, typeof CircleCheck> = {
 
 const route = useRoute()
 const router = useRouter()
-const { cycles, events, lock, loading, error, load, loadCycles, loadLock, csvUrl, resume, abandon, releaseLock } = useJournal()
+const { cycles, events, lock, pendingRelease, loading, error, load, loadCycles, loadLock, csvUrl, resume, abandon, releaseLock } =
+  useJournal()
 const isAdmin = computed(() => useAuthStore().user?.is_admin === true)
 
 // ?pass=<id> (the Dashboard link), else the newest pass of the target month once the list is loaded.
@@ -313,10 +320,17 @@ async function confirmAbandon() {
   if (current.value) await abandon(current.value.id)
 }
 
-async function confirmRelease() {
-  releasing.value = false
-  await releaseLock(passId.value)
+// First without confirm: etlhub frees the lock of a dead job at once, or asks (pendingRelease) while it may still run.
+async function release(confirm = false) {
+  releasing.value = true
+  try {
+    await releaseLock(passId.value, confirm)
+  } finally {
+    releasing.value = false
+  }
 }
+
+const confirmRelease = () => release(true)
 
 onMounted(refresh)
 </script>

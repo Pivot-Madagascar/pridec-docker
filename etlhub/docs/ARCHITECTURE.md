@@ -57,7 +57,7 @@ Outside the written rule but widespread: `api` → `domain` (DTOs), `infrastruct
 Worth knowing:
 - Forecast logs are appended line by line as `docker run` prints them (since 2026-10-21).
 - `etlui` marks a step `success` as soon as it receives the 202, without waiting for the job to finish.
-- No timeout anywhere (Celery, forecast `subprocess.run`). If the worker is killed, `job:{id}` stays `running` until the TTL (24 h) expires, and the WebSocket stays open.
+- No timeout on jobs (Celery, forecast `subprocess.Popen`, calls of the `etl/` scripts), by decision (2026-11-17): durations are never static, a forecast can exceed 10 minutes. If the worker is killed, `job:{id}` stays `running` until the TTL (24 h) expires, and the WebSocket stays open.
 - `/post_forecast` and `/update_key` do not follow this model: they run **synchronously** in the API, which blocks the asyncio loop.
 
 ## 5. State and persistence

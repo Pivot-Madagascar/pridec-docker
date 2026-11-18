@@ -165,7 +165,7 @@ describe('JournalView', () => {
     expect(link.attributes('href')).toBe('http://localhost:8111/pipeline/passes/cccc3333/journal.csv')
   })
 
-  it('lets administrators release the job lock at the bottom of the page, after a confirmation', async () => {
+  it('lets administrators release the job lock at the bottom of the page: at once when etlhub finds the job dead', async () => {
     getJournal.mockResolvedValue([])
     getCheckpoints.mockResolvedValue({ lock: { job_id: 'forecast_1a2b3c4d', task: 'forecast', acquired_at: '2026-10-28T09:00:00' } })
     let wrapper = mount(JournalView)
@@ -181,10 +181,32 @@ describe('JournalView', () => {
     expect(zone.text()).toContain('forecast (forecast_1a2b3c4d)')
     await zone.find('button').trigger('click')
     await flushPromises()
-    expect(releaseLock).not.toHaveBeenCalled() // a confirmation first
-    await wrapper.findAll('button').find(b => b.text() === 'Release')!.trigger('click')
+    expect(releaseLock).toHaveBeenCalledWith(false) // etlhub asks the workers: no worker runs it, freed
+    expect(wrapper.find('[data-test="confirm-btn"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('asks a confirmation, with etlhub\'s message, when the job holding the lock is still running', async () => {
+    useAuthStore().setUser({ id: '1', email: null, username: 'admin', displayName: null, is_admin: true })
+    getJournal.mockResolvedValue([])
+    getCheckpoints.mockResolvedValue({ lock: { job_id: 'forecast_1a2b3c4d', task: 'forecast', acquired_at: '2026-10-28T09:00:00' } })
+    const message = 'forecast (forecast_1a2b3c4d) is still running. Releasing the lock lets another job start'
+    releaseLock.mockRejectedValueOnce({
+      response: { status: 409, data: { code: 'confirmation_required', message, impact: { job_id: 'forecast_1a2b3c4d', task: 'forecast', active: true } } }
+    })
+    const wrapper = mount(JournalView)
     await flushPromises()
-    expect(releaseLock).toHaveBeenCalledTimes(1)
+
+    await wrapper.find('[data-test="lock-zone"] button').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('This job is still running')
+    expect(wrapper.text()).toContain(message)
+
+    releaseLock.mockResolvedValueOnce('forecast_1a2b3c4d')
+    await wrapper.find('[data-test="confirm-btn"]').trigger('click')
+    await flushPromises()
+    expect(releaseLock).toHaveBeenLastCalledWith(true)
+    expect(wrapper.find('[data-test="confirm-btn"]').exists()).toBe(false)
     wrapper.unmount()
   })
 

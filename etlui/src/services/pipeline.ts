@@ -65,9 +65,10 @@ export async function setCycle(cycle: string | null): Promise<void> {
   await api.put('/pipeline/cycle', { cycle })
 }
 
-// DELETE /pipeline/lock: frees the lock of a job whose worker died (the lock never expires).
-export async function releaseLock(): Promise<string | null> {
-  const response = await api.delete<{ released: string | null }>('/pipeline/lock')
+// DELETE /pipeline/lock: frees the lock of a job whose worker died (the lock never expires). etlhub asks the workers
+// first: while the job may still run, 409 confirmation_required until confirm=true.
+export async function releaseLock(confirm = false): Promise<string | null> {
+  const response = await api.delete<{ released: string | null }>('/pipeline/lock', withConfirm(confirm))
   return response.data.released
 }
 

@@ -61,11 +61,14 @@ def test_forecast_success_keeps_container_details(monkeypatch, job_store, webhoo
 
 def test_launch_records_the_job_as_pending_before_queueing(monkeypatch, job_store):
     queued = []
-    monkeypatch.setattr(tasks.task_etl, "delay", lambda *a, **k: queued.append(job_store.get("import_gee_1234abcd")))
+    monkeypatch.setattr(tasks.task_etl, "apply_async",
+                        lambda args, kwargs, task_id: queued.append((job_store.get("import_gee_1234abcd"), task_id)))
 
     tasks.CeleryTaskLauncher().launch("import_gee", "import_gee_1234abcd")
 
-    assert queued[0]["status"] == "pending"
+    record, task_id = queued[0]
+    assert record["status"] == "pending"
+    assert task_id == "import_gee_1234abcd"  # is_active finds the job among the workers' tasks by this id
 
 
 def test_generic_task_runs_the_job_with_its_kwargs(monkeypatch, job_store, webhooks):
@@ -122,3 +125,36 @@ def test_a_validate_inputs_failure_keeps_its_reason_in_the_job_message(job_store
     with pytest.raises(ETLException, match="validate_inputs failed: ERROR: missing predictor variables:mosquito_net"):
         etl_use_cases._execute_etl_job(job, etl_use_cases._JobLogger(job_store, "validate_inputs_1", etl_events),
                                        "validate_inputs")
+
+
+@pytest.mark.parametrize("replies, expected", [
+    ({"w1@host": {"import_gee_1": ["active", {}]}}, True),
+    ({"w1@host": {}, "w2@host": {"import_gee_1": ["reserved", {}]}}, True),  # prefetched by a restarted worker
+    ({"w1@host": {"import_gee_1": ["ready", {}]}}, False),  # finished
+    ({"w1@host": {}}, False),  # the workers answered: none runs it
+    (None, None),  # no worker answered: unknown
+])
+def test_is_active_asks_the_workers_by_job_id(monkeypatch, replies, expected):
+    asked = []
+
+    class Inspect:
+        def query_task(self, *ids):
+            asked.extend(ids)
+            return replies
+
+    monkeypatch.setattr(tasks.celery_app.control, "inspect", lambda: Inspect())
+
+    assert tasks.CeleryTaskLauncher().is_active("import_gee_1") is expected
+    assert asked == ["import_gee_1"]
+
+
+def test_is_active_is_true_for_an_inline_job_of_this_process_and_unknown_when_the_broker_is_down(monkeypatch):
+    def broker_down():
+        raise ConnectionError("broker down")
+
+    monkeypatch.setattr(tasks.celery_app.control, "inspect", broker_down)
+    monkeypatch.setattr(tasks, "RUNNING_INLINE", {"post_forecast_1"})
+
+    assert tasks.CeleryTaskLauncher().is_active("post_forecast_1") is True
+    assert tasks.CeleryTaskLauncher().is_active("import_gee_1") is None
+

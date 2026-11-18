@@ -8,9 +8,11 @@ from etlhub.api.auth import require_admin
 from etlhub.api.routers import ADMIN_ONLY, BLOCKED, error_doc
 from etlhub.application.use_cases.ingestion_service import current_import_params
 from etlhub.application.use_cases.journal_service import JournalService
-from etlhub.core.dependencies import get_job_repository, get_journal_service, get_pipeline_gate
+from etlhub.core.dependencies import get_job_repository, get_journal_service, get_pipeline_gate, get_task_launcher
+from etlhub.domain.exceptions import ConfirmationRequiredError
 from etlhub.domain.interfaces.job_repository import JobRepository
 from etlhub.domain.interfaces.pipeline_gate import PipelineGate
+from etlhub.domain.interfaces.task_launcher import TaskLauncher
 
 router = APIRouter(prefix="/pipeline", tags=["Pipeline"])
 
@@ -242,14 +244,30 @@ def abandon(pass_id: str = PASS_PATH, gate: PipelineGate = Depends(get_pipeline_
     description=(
         "For a job whose worker was killed: frees the lock and marks its running checkpoint and its job record as error "
         "(the toast, the tracking and the logs then see its end). "
-        "The lock never expires on its own. Returns the freed job_id, or null. Administrators only (DHIS2 authority ALL)."
+        "The lock never expires on its own. Returns the freed job_id, or null. Administrators only (DHIS2 authority ALL). "
+        "The workers are asked first: while the job still runs (or when no worker answers), 409 confirmation_required "
+        "with `impact` {job_id, task, active: true | null} until `confirm=true`."
     ),
     dependencies=[Depends(require_admin)],
-    responses=ADMIN_ONLY,
+    responses={**ADMIN_ONLY, **BLOCKED},
 )
-def release_lock(gate: PipelineGate = Depends(get_pipeline_gate),
-                 jobs: JobRepository = Depends(get_job_repository)) -> dict[str, str | None]:
-    released = gate.release_lock()
+def release_lock(confirm: bool = Query(False, description="Required while the job holding the lock may still run"),
+                 gate: PipelineGate = Depends(get_pipeline_gate),
+                 jobs: JobRepository = Depends(get_job_repository),
+                 launcher: TaskLauncher = Depends(get_task_launcher)) -> dict[str, str | None]:
+    lock = gate.progress()["lock"]
+    if lock is None:
+        return {"released": None}
+    job_id, task = lock["job_id"], lock["task"]
+    active = launcher.is_active(job_id)
+    if active is not False and not confirm:
+        why = (f"{task} ({job_id}) is still running" if active
+               else f"No worker answered: whether {task} ({job_id}) still runs is unknown")
+        raise ConfirmationRequiredError(
+            f"{why}. Releasing the lock lets another job start while it may still run: it is marked error, "
+            "but it goes on and can still write to DHIS2 and to input/ and output/.",
+            {"job_id": job_id, "task": task, "active": active})
+    released = gate.release_lock(job_id)
     job = jobs.get(released) if released else None
     # A worker that is not dead after all still overwrites this with its own end.
     if job and job.get("status") in ("pending", "running"):

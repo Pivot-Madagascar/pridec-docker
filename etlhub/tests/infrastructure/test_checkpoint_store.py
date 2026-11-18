@@ -1114,3 +1114,11 @@ def test_the_first_pass_of_a_cycle_has_nothing_to_carry(checkpoint_store, month)
 
     assert [_status(checkpoint_store.progress(), "data_import", i) for i in ("import_pivot_com", "approve_imports")] == [
         "pending", "pending"]
+
+
+def test_release_lock_of_a_given_job_leaves_the_lock_of_another_one(checkpoint_store):
+    checkpoint_store.start("import_gee", "newer")
+
+    assert checkpoint_store.release_lock("asked_about") is None
+    assert checkpoint_store.progress()["lock"]["job_id"] == "newer"
+    assert checkpoint_store.release_lock("newer") == "newer"

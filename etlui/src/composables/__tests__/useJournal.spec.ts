@@ -79,4 +79,23 @@ describe('useJournal', () => {
     expect(getJournal).toHaveBeenCalledWith('cccc3333') // its lock_released event shows
     expect(lock.value).toBeNull()
   })
+
+  it('keeps etlhub\'s 409 confirmation_required in pendingRelease, and shows any other refusal', async () => {
+    getCheckpoints.mockResolvedValue({ lock: null })
+    getCycles.mockResolvedValue([])
+    getJournal.mockResolvedValue([])
+    const asked = { code: 'confirmation_required', message: 'forecast_1 is still running', impact: { active: true } }
+    releaseLock.mockRejectedValueOnce({ response: { status: 409, data: asked } })
+    const { releaseLock: release, pendingRelease, error } = useJournal()
+
+    await release('cccc3333')
+    expect(pendingRelease.value).toEqual(asked)
+    expect(error.value).toBe('') // a question, not a refusal
+
+    releaseLock.mockRejectedValueOnce(new Error('boom'))
+    await release('cccc3333', true)
+    expect(releaseLock).toHaveBeenLastCalledWith(true)
+    expect(pendingRelease.value).toBeNull()
+    expect(error.value).not.toBe('')
+  })
 })

@@ -100,7 +100,10 @@ describe('pipeline service', () => {
     del.mockResolvedValue({ data: { released: 'dead_job' } })
 
     expect(await pipeline.releaseLock()).toBe('dead_job')
-    expect(del).toHaveBeenCalledWith('/pipeline/lock')
+    expect(del).toHaveBeenCalledWith('/pipeline/lock', undefined)
+
+    await pipeline.releaseLock(true) // the user confirmed etlhub's 409: the job may still run
+    expect(del).toHaveBeenLastCalledWith('/pipeline/lock', { params: { confirm: true } })
   })
 })
 

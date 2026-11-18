@@ -1118,10 +1118,14 @@ class CheckpointStore:
             self._set_test_mode(test_mode)
         return {"test_mode": test_mode}
 
-    def release_lock(self) -> str | None:
-        """Manual unlock (killed worker): its running checkpoint becomes error. Returns the freed job_id."""
+    def release_lock(self, job_id: str | None = None) -> str | None:
+        """Manual unlock (killed worker): its running checkpoint becomes error. Returns the freed job_id.
+
+        With job_id, only if that job still holds the lock: the one the user was asked about, not a newer one."""
         with self._transaction() as conn:
             row = conn.execute("SELECT job_id, task FROM pipeline_lock").fetchone()
+            if row and job_id not in (None, row[0]):
+                row = None
             if row:
                 conn.execute("UPDATE checkpoints SET status = 'error', updated_at = ?"
                              " WHERE job_id = ? AND status = 'running'", (_now(), row[0]))
