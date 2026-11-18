@@ -1,7 +1,7 @@
 import logging
 import uuid
 
-from etl.scripts.check_import_availability import availability_plan
+from etlhub.application.use_cases.check_import_availability import availability_plan
 from etlhub.application.use_cases.availability_service import import_params
 from etlhub.domain.interfaces.task_launcher import TaskLauncher
 from etlhub.domain.pipeline import IMPORT_TASKS

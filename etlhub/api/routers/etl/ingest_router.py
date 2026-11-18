@@ -77,7 +77,7 @@ for _args in [
     response_model=ImportAvailabilityReport,
     summary="Is the data of import_gee, import_pivot_com and import_pivot_csb already in DHIS2?",
     description=(
-        "Runs `etl/scripts/check_import_availability.py` synchronously, read only, with the session's DHIS2 token: "
+        "Runs the availability check synchronously, read only, with the session's DHIS2 token: "
         "per dataElement and period, the orgUnits with a stored value (`raw`, /api/dataValueSets) and with a value "
         "in analytics (`analytics`), plus DHIS2's last analytics build. Same periods and orgUnits as the imports. "
         "Shared: a section (one import) checked in the cycle (any pass, any user) is reused (`reused: true`) while "

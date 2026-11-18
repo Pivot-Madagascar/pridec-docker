@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 
-from etl.scripts.check_import_availability import availability_plan, availability_report
+from etlhub.application.use_cases.check_import_availability import availability_plan, availability_report
 from etlhub.domain.exceptions import ETLException
 from etlhub.domain.interfaces.pipeline_gate import PipelineGate
 

@@ -101,7 +101,7 @@ export interface JournalCycle {
   passes: JournalPass[]
 }
 
-// GET /import_availability (etl/scripts/check_import_availability.py). Counts: orgUnits with a value, per period (YYYYMM).
+// GET /import_availability (etlhub application/use_cases/check_import_availability.py). Counts: orgUnits with a value, per period (YYYYMM).
 export interface ElementAvailability {
   code: string
   raw: Record<string, number> | null // stored values (/api/dataValueSets); null if the query failed

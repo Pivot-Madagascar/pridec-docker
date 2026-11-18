@@ -52,7 +52,7 @@ sequenceDiagram
     participant UI as etlui (Dashboard)
     participant API as etlhub GET /import_availability
     participant S as AvailabilityService
-    participant SC as etl/scripts/check_import_availability.py
+    participant SC as use_cases/check_import_availability.py
     participant D as DHIS2
     participant CS as CheckpointStore (journal)
     UI->>UI: open modal + loader
@@ -97,8 +97,8 @@ Per dataElement (one request each, so an unknown code or a failing query only ma
 `last_analytics` is `lastAnalyticsTableSuccess` of `GET /api/system/info` (server local time, no time zone), `null` if
 DHIS2 does not give it.
 
-The CLI keeps working: `docker compose run etl check_availability` logs the same report as `raw/analytics` tables
-(always every section, never shared: the CLI has no etlhub store).
+No CLI: `etl/scripts/check_import_availability.py` and `cli.sh check_availability` were removed (2026-11-18);
+the check lives in etlhub only.
 
 ## 4. API
 
@@ -211,8 +211,7 @@ so every check also shows in the Tracking page.
 
 | Side | File |
 |---|---|
-| etl | `etl/scripts/check_import_availability.py` (`availability_plan()`, `availability_report(tasks)` + CLI), `etl/cli.sh` (`check_availability`) |
-| etlhub | `api/routers/etl/ingest_router.py` (route), `application/use_cases/availability_service.py`, `domain/schemas/etl.py`, `domain/interfaces/pipeline_gate.py` + `infrastructure/checkpoint_store.py` (table `availability_checks`, `reusable_availability`, `record_availability_check`), `core/dependencies.py` |
+| etlhub | `api/routers/etl/ingest_router.py` (route), `application/use_cases/check_import_availability.py` (`availability_plan()`, `availability_report(tasks)`), `application/use_cases/availability_service.py`, `domain/schemas/etl.py`, `domain/interfaces/pipeline_gate.py` + `infrastructure/checkpoint_store.py` (table `availability_checks`, `reusable_availability`, `record_availability_check`), `core/dependencies.py` |
 | etlhub tests | `tests/api/test_import_availability.py`, `tests/infrastructure/test_checkpoint_store.py` |
 | etlui | `services/pipeline.ts` (`getImportAvailability`), `types/pipeline.ts`, `composables/useImportAvailability.ts`, `views/Dashboard/components/ImportAvailabilityDialog.vue`, `Dashboard.vue` (Details button), `PreviewDialog.vue` (its frame: optional badge, `loadingLabel`, `actions` and `footer` slots), `Journal/JournalView.vue` (event colour) |
 | etlui tests | `services/__tests__/pipeline.spec.ts`, `composables/__tests__/useImportAvailability.spec.ts`, `views/Dashboard/__tests__/Dashboard.spec.ts` |

@@ -45,31 +45,31 @@ fi
 
 case "$TASK" in
 import_gee)
-    python scripts/import_gee.py "$@"
+    PYTHONPATH=/app python -m scripts.import_gee "$@"
     ;;
 
 import_pivot_com)
-    python scripts/import_pivot_COM.py "$@"
+    PYTHONPATH=/app python -m scripts.import_pivot_COM "$@"
     ;;
 
 import_pivot_csb)
-    python scripts/import_pivot_CSB.py "$@"
+    PYTHONPATH=/app python -m scripts.import_pivot_CSB "$@"
     ;;
 
 fetch_climate)
-    python scripts/fetch_pridec_climate.py "$@"
+    PYTHONPATH=/app python -m scripts.fetch_pridec_climate "$@"
     ;;
 
 fetch_disease)
-    python scripts/fetch_pridec_disease.py "$@"
+    PYTHONPATH=/app python -m scripts.fetch_pridec_disease "$@"
     ;;
 
 fetch_geojson)
-    python scripts/fetch_pridec_geojson.py "$@"
+    PYTHONPATH=/app python -m scripts.fetch_pridec_geojson "$@"
     ;;
 
 build_analytics)
-    python scripts/build_analytics.py "$@"
+    PYTHONPATH=/app python -m scripts.build_analytics "$@"
     ;;
 
 validate_inputs)
@@ -77,11 +77,11 @@ validate_inputs)
     ;;
 
 post_forecast)
-    python scripts/post_forecast.py "$@"
+    PYTHONPATH=/app python -m scripts.post_forecast "$@"
     ;;
 
 calc_CSB_alerts)
-    python scripts/calc_CSB_alerts.py "$@"
+    PYTHONPATH=/app python -m scripts.calc_CSB_alerts "$@"
     ;;
 
 calc_orgUnit_alerts)
@@ -89,7 +89,7 @@ calc_orgUnit_alerts)
     ;;
 
 update_key)
-    python scripts/update_pridec_key.py "$@"
+    PYTHONPATH=/app python -m scripts.update_pridec_key "$@"
     ;;
 
 *)

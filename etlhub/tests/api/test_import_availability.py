@@ -1,4 +1,4 @@
-"""GET /import_availability: the report of etl/scripts/check_import_availability.py, shared in the cycle, journaled and tracked."""
+"""GET /import_availability: the report of application/use_cases/check_import_availability.py, shared in the cycle, journaled and tracked."""
 import pandas as pd
 import pytest
 
@@ -135,7 +135,8 @@ def test_a_check_before_the_first_launch_needs_no_pass_and_is_shared_with_the_pa
 
 @pytest.fixture
 def dhis2(monkeypatch):
-    from etl.scripts import check_import_availability as script, config
+    from etl.scripts import config
+    from etlhub.application.use_cases import check_import_availability as script
     for name, value in {"get_dhis_url": "http://dhis2.test", "get_dhis_token": "t", "get_parent_ou": "P1",
                         "get_gee_variables": ["pridec_climate_precipitation", "unknown_code"]}.items():
         monkeypatch.setattr(config, name, lambda value=value: value)

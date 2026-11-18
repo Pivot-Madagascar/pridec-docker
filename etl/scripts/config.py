@@ -13,7 +13,8 @@ def _dhis2_credential(field: str, env_key: str) -> str | None:
     return os.getenv(env_key)
 
 def get_dry_run() -> bool:
-    return _get('DRYRUN', 'true').lower() == 'true'
+    """Fail safe: only DRYRUN=false (any case) writes to DHIS2; anything else (1, yes, empty, typo) is a dry run."""
+    return (_get('DRYRUN', 'true') or 'true').strip().lower() != 'false'
 
 def get_log_level() -> str:
     return _get('LOG_LEVEL', 'INFO').upper()
@@ -42,7 +43,6 @@ def get_gee_variables() -> list[str]:
     return list(AVAILABLE_VARIABLES)
 
 #run configurations
-dryRun = os.getenv('DRYRUN', 'true').lower() != 'false'
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
 
 DHIS_USER = os.getenv('DHIS_USER')
