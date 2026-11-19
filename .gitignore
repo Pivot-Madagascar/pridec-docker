@@ -81,3 +81,6 @@ redis-secret.conf
 
 # Screenshots of the end-to-end tests (e2e/)
 e2e/artifacts/
+
+# coverage.py data (pytest --cov)
+.coverage
