@@ -57,8 +57,11 @@ export async function decideImports(decision: 'approve' | 'reject'): Promise<voi
 }
 
 // PUT /pipeline/mode: TEST_MODE, the test passes kept apart (DRYRUN stays the .env's); leaving it pauses the active test pass.
-export async function setMode(testMode: boolean): Promise<boolean> {
-  const response = await api.put<{ test_mode: boolean }>('/pipeline/mode', { test_mode: testMode })
+// The user's mode (their session). While the mode left has an active pass, etlhub answers 409 confirmation_required
+// with impact.actions ['pause', 'abandon']: resent with the user's choice as pass_action.
+export type PassAction = 'pause' | 'abandon'
+export async function setMode(testMode: boolean, passAction?: PassAction): Promise<boolean> {
+  const response = await api.put<{ test_mode: boolean }>('/pipeline/mode', { test_mode: testMode, pass_action: passAction ?? null })
   return response.data.test_mode
 }
 

@@ -1,5 +1,5 @@
 <template>
-  <!-- Before step 1: the mode applies to the whole cycle (TEST_MODE on the server). DRYRUN: the pass switch
+  <!-- Before step 1: the user's mode (their session on the server; other users keep theirs). DRYRUN: the pass switch
        (dryRunEditable, Dashboard), sent with each launch; etlhub's default is true in test mode, else DRYRUN of .env. -->
   <section class="mode-toggle" :class="{ 'is-test': testMode }">
     <div class="mode-text">
@@ -7,6 +7,7 @@
       <span class="mode-hint">
         <template v-if="testMode">Test cycle: checkpoints, runs and uploads are kept apart from production.</template>
         <template v-else>Production cycle.</template>
+        Your choice only: other users keep their mode.
       </span>
       <span v-if="dryRun !== undefined" class="mode-hint" data-test="dry-run-hint" :class="{ 'mode-warn': !dryRun }">
         <template v-if="dryRun">DHIS2: dry run, the jobs write nothing.</template>

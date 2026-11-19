@@ -57,10 +57,10 @@
       </div>
 
       <!-- Before step 1: the mode applies to the whole cycle. -->
-      <ModeToggle :test-mode="state?.test_mode" :dry-run="dryRun" dry-run-editable :disabled="busy || state?.lock != null" @change="setMode" @dry-run="setDryRun" />
+      <ModeToggle :test-mode="state?.test_mode" :dry-run="dryRun" dry-run-editable :disabled="busy" @change="setMode" @dry-run="setDryRun" />
 
       <div v-if="state?.lock" class="lock-banner" role="status">
-        <span>Running: <strong>{{ state.lock.task }}</strong> ({{ state.lock.job_id }}) since {{ state.lock.acquired_at }}. One job at a time.</span>
+        <span>Running: <strong>{{ state.lock.task }}</strong><template v-if="state.lock.job_id"> ({{ state.lock.job_id }})</template> since {{ state.lock.acquired_at }}. One job at a time, both modes.</span>
       </div>
 
       <Accordion v-model:open="openSteps" :items="accordionItems">
@@ -181,7 +181,7 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbP
 import { pointTo } from '@/utils/attention'
 import type { RunFocus } from '@/views/Dashboard/components/runs'
 import SideLayout from '@/components/SideLayout.vue'
-import { computed, nextTick, ref, onMounted } from 'vue'
+import { computed, nextTick, ref, onMounted, watch } from 'vue'
 
 import Accordion from '@/views/Dashboard/components/Accordion.vue'
 import ActionCard from '@/views/Dashboard/components/ActionCard.vue'
@@ -220,6 +220,8 @@ const {
   pause, abandonPass
 } = usePipeline(addActivity)
 const active = computed(() => state.value?.pass?.state === 'active')
+// A mode never shows what happened in the other: the switch empties Recent Activity.
+watch(() => state.value?.test_mode, (mode, before) => { if (before !== undefined && mode !== before) activityLog.value = [] })
 const crumbs = computed(() => (state.value ? position(state.value) : []))
 const target = computed(() => (state.value ? positionItem(state.value) : null))
 

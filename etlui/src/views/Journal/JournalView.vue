@@ -177,7 +177,7 @@
       <section class="space-y-3 rounded-lg border p-4" data-test="lock-zone" aria-labelledby="lock-title">
         <h2 id="lock-title" class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Job lock</h2>
         <p class="text-sm">
-          <template v-if="lock">Held by <strong>{{ lock.task }} ({{ lock.job_id }})</strong> since {{ formatTime(lock.acquired_at) }}.</template>
+          <template v-if="lock">Held by <strong>{{ lock.task }}<template v-if="lock.job_id"> ({{ lock.job_id }})</template></strong> since {{ formatTime(lock.acquired_at) }}.</template>
           <template v-else>No job holds the lock.</template>
         </p>
         <Button variant="destructive" :disabled="!lock || releasing" @click="release()">Release the lock</Button>

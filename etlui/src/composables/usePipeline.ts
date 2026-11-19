@@ -12,13 +12,14 @@ import type { DefaultFile, InputName, ServerFile } from '@/types/inputs'
 export const POLL_MS = 3000
 
 type AddActivity = (action: string, message: string, success: boolean, job?: pipeline.LaunchedJob) => void
-type Call = (confirm: boolean) => Promise<unknown>
+// choice: the action the user picked when etlhub offered several (impact.actions), else undefined.
+type Call = (confirm: boolean, choice?: string) => Promise<unknown>
 
 export interface PendingConfirmation {
   label: string
   message: string
   impact: Record<string, unknown>
-  retry: () => Promise<boolean>
+  retry: (choice?: string) => Promise<boolean>
 }
 
 interface HttpError {
@@ -74,10 +75,10 @@ export function usePipeline(addActivity: AddActivity) {
   }
 
   // Runs one action. A 409 confirmation_required keeps it in `pending` until the user confirms or cancels.
-  const act = async (label: string, call: Call, confirm = false): Promise<boolean> => {
+  const act = async (label: string, call: Call, confirm = false, choice?: string): Promise<boolean> => {
     busy.value = true
     try {
-      const result = await call(confirm)
+      const result = await call(confirm, choice)
       if (isLaunchedJob(result) && result.jobId) {
         // The toast follows the job; the activity is its end, not the 202 (RecentActivity's Detail opens the request and logs)
         void followJob(label, result.jobId).then(end => addActivity(label, end.message, end.success, result))
@@ -89,7 +90,7 @@ export function usePipeline(addActivity: AddActivity) {
     } catch (err) {
       const confirmation = confirmationRequired(err)
       if (confirmation) {
-        pending.value = { label, message: confirmation.message, impact: confirmation.impact, retry: () => act(label, call, true) }
+        pending.value = { label, message: confirmation.message, impact: confirmation.impact, retry: (choice?: string) => act(label, call, true, choice) }
         return false
       }
       const message = plainError(errorMessage(err, `${label} failed`))
@@ -102,10 +103,10 @@ export function usePipeline(addActivity: AddActivity) {
     }
   }
 
-  const confirm = async (): Promise<boolean> => {
+  const confirm = async (choice?: string): Promise<boolean> => {
     const current = pending.value
     pending.value = null
-    return current ? current.retry() : false
+    return current ? current.retry(choice) : false
   }
 
   if (getCurrentScope()) onScopeDispose(stop)
@@ -119,7 +120,8 @@ export function usePipeline(addActivity: AddActivity) {
     decide: (decision: 'approve' | 'reject') => act(decision === 'approve' ? 'Approve forecast' : 'Reject forecast', () => pipeline.decideRun(decision)),
     skipAlerts: () => act('Skip alert thresholds', () => pipeline.skipAlerts()),
     decideImports: (decision: 'approve' | 'reject') => act(decision === 'approve' ? 'Approve imports' : 'Reject imports', () => pipeline.decideImports(decision)),
-    setMode: (testMode: boolean) => act(testMode ? 'Switch to test mode' : 'Switch to production', () => pipeline.setMode(testMode)),
+    setMode: (testMode: boolean) => act(testMode ? 'Switch to test mode' : 'Switch to production',
+      (_c, choice) => pipeline.setMode(testMode, choice as pipeline.PassAction | undefined)),
     setCycle: (cycle: string | null) => act(`Cycle ${cycle ?? 'of the current month'}`, () => pipeline.setCycle(cycle)),
     startPass: () => act('Start a new pass', c => pipeline.startPass(c)),
     pause: () => act('Pause the cycle', () => pipeline.pausePass()),

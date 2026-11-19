@@ -93,7 +93,9 @@ describe('pipeline service', () => {
     put.mockResolvedValue({ data: { test_mode: false } })
 
     expect(await pipeline.setMode(false)).toBe(false)
-    expect(put).toHaveBeenCalledWith('/pipeline/mode', { test_mode: false })
+    expect(put).toHaveBeenCalledWith('/pipeline/mode', { test_mode: false, pass_action: null })
+    await pipeline.setMode(true, 'abandon') // the user's choice for the active pass of the mode left
+    expect(put).toHaveBeenLastCalledWith('/pipeline/mode', { test_mode: true, pass_action: 'abandon' })
   })
 
   it('chooses the cycle with PUT /pipeline/cycle, null for the current month', async () => {

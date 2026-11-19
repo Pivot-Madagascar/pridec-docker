@@ -131,7 +131,10 @@ describe('Dashboard', () => {
   })
 
   it('shows the test mode before step 1 and switches it on the server', async () => {
-    setMode.mockResolvedValue(true)
+    setMode.mockImplementation(async () => {
+      getCheckpoints.mockResolvedValue(state({ test_mode: true }))
+      return true
+    })
     const wrapper = await mountPage()
 
     const html = wrapper.html()
@@ -144,7 +147,29 @@ describe('Dashboard', () => {
     expect(setMode).not.toHaveBeenCalled()
     await wrapper.findAll('[data-test="mode-btn"]').find(b => b.text() === 'YES')!.trigger('click')
     await flushPromises()
-    expect(setMode).toHaveBeenCalledWith(true)
+    expect(setMode).toHaveBeenCalledWith(true, undefined)
+    // A mode never shows what happened in the other: Recent Activity starts empty, even without the switch itself
+    expect(wrapper.find('[data-test="activity-aside"]').text()).not.toContain('Switch to test mode')
+    wrapper.unmount()
+  })
+
+  it('switching mode mid-pass asks to pause or abandon the pass, then sends the choice', async () => {
+    const message = 'Pass 3f9c1a2b (202610) is active in production mode, and a pass lives in one mode'
+    setMode
+      .mockRejectedValueOnce({ response: { status: 409, data: { code: 'confirmation_required', message, impact: {
+        pass_id: '3f9c1a2b', cycle: '202610', mode: 'production', to: 'test', actions: ['pause', 'abandon'] } } } })
+      .mockResolvedValueOnce(true)
+    const wrapper = await mountPage()
+
+    await wrapper.findAll('[data-test="mode-btn"]').find(b => b.text() === 'YES')!.trigger('click')
+    await flushPromises()
+    const dialog = wrapper.find('[data-test="impact-dialog"]')
+    expect(dialog.text()).toContain(message)
+    expect(dialog.text()).not.toContain('Confirm') // two choices instead
+    await dialog.find('[role="checkbox"]').trigger('click') // the impact is read
+    await dialog.find('[data-test="impact-action-abandon"]').trigger('click')
+    await flushPromises()
+    expect(setMode).toHaveBeenLastCalledWith(true, 'abandon')
     wrapper.unmount()
   })
 

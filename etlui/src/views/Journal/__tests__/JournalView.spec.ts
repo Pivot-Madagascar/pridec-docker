@@ -174,6 +174,20 @@ describe('JournalView', () => {
     wrapper.unmount()
   })
 
+  it('shows a lock held in the other mode without naming its job, and still lets the user release it', async () => {
+    getJournal.mockResolvedValue([])
+    getCheckpoints.mockResolvedValue({ lock: { job_id: null, task: 'a job of the other mode', acquired_at: '2026-10-28T09:00:00' } })
+    const wrapper = mount(JournalView)
+    await flushPromises()
+    const zone = wrapper.find('[data-test="lock-zone"]')
+    expect(zone.text()).toContain('Held by a job of the other mode since')
+    expect(zone.text()).not.toContain('null')
+    await zone.find('button').trigger('click')
+    await flushPromises()
+    expect(releaseLock).toHaveBeenCalledWith(false)
+    wrapper.unmount()
+  })
+
   it('asks a confirmation, with etlhub\'s message, when the job holding the lock is still running', async () => {
     getJournal.mockResolvedValue([])
     getCheckpoints.mockResolvedValue({ lock: { job_id: 'forecast_1a2b3c4d', task: 'forecast', acquired_at: '2026-10-28T09:00:00' } })

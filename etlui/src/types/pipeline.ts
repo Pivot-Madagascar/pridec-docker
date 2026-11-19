@@ -29,8 +29,9 @@ export interface ForecastRun {
   opened_at: string
 }
 
+// One lock for both modes: a job of the other mode comes as job_id null, task 'a job of the other mode' (never named).
 export interface PipelineLock {
-  job_id: string
+  job_id: string | null
   task: string
   acquired_at: string
 }
@@ -51,7 +52,7 @@ export interface Checkpoints {
   current_step: StepName | null
   run: ForecastRun | null
   lock: PipelineLock | null
-  test_mode: boolean // TEST_MODE: where the pipeline state lives, switched by PUT /pipeline/mode
+  test_mode: boolean // the user's mode, kept in their session (PUT /pipeline/mode); other users keep theirs
   dry_run: boolean // DRYRUN of the root .env, read only: whether the scripts write to DHIS2
   steps: PipelineStep[]
 }

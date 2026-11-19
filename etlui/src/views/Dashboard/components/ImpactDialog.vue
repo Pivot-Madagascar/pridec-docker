@@ -26,7 +26,14 @@
       </div>
       <AlertDialogFooter>
         <Button variant="outline" :disabled="busy" @click="emit('cancel')">Cancel</Button>
-        <Button :disabled="busy || !approved" @click="emit('confirm')">Confirm</Button>
+        <!-- etlhub offers several actions (leaving a mode mid-pass: pause or abandon it): one button each. -->
+        <template v-if="actions.length">
+          <Button v-for="action in actions" :key="action" :variant="action === 'abandon' ? 'destructive' : 'default'"
+            :disabled="busy || !approved" :data-test="`impact-action-${action}`" @click="emit('confirm', action)">
+            {{ ACTION_LABELS[action] ?? action }}
+          </Button>
+        </template>
+        <Button v-else :disabled="busy || !approved" @click="emit('confirm')">Confirm</Button>
       </AlertDialogFooter>
     </AlertDialogContent>
   </AlertDialog>
@@ -46,7 +53,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  confirm: []
+  confirm: [choice?: string]
   cancel: []
 }>()
 
@@ -63,8 +70,11 @@ const LABELS: Record<string, string> = {
   paused_pass: 'Paused pass (stays paused, resume it from the Journal)',
   mode: 'Mode',
   open_run: 'Open run discarded',
-  items_in_success: 'Test successes discarded'
+  items_in_success: 'Test successes discarded',
+  pass_id: 'Active pass',
+  to: 'Switching to'
 }
+const ACTION_LABELS: Record<string, string> = { pause: 'Pause the pass', abandon: 'Abandon the pass' }
 
 const approved = ref(false)
 
@@ -77,8 +87,14 @@ const format = (value: unknown): string => {
   return value == null ? 'none' : String(value)
 }
 
+const actions = computed(() => {
+  const offered = props.pending?.impact.actions
+  return Array.isArray(offered) ? offered.map(String) : []
+})
 const entries = computed(() =>
-  Object.entries(props.pending?.impact ?? {}).map(([key, value]) => ({ key, label: LABELS[key] ?? key, value: format(value) }))
+  Object.entries(props.pending?.impact ?? {})
+    .filter(([key]) => key !== 'actions') // the buttons
+    .map(([key, value]) => ({ key, label: LABELS[key] ?? key, value: format(value) }))
 )
 
 watch(
