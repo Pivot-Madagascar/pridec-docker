@@ -6,13 +6,14 @@ const getCycles = vi.fn()
 const setCycle = vi.fn()
 const resumePass = vi.fn()
 const startPass = vi.fn()
+const setMode = vi.fn()
 vi.mock('@/services/pipeline', () => ({
   getCheckpoints: (...args: unknown[]) => getCheckpoints(...args),
   getCycles: (...args: unknown[]) => getCycles(...args),
   setCycle: (...args: unknown[]) => setCycle(...args),
   resumePass: (...args: unknown[]) => resumePass(...args),
   startPass: (...args: unknown[]) => startPass(...args),
-  setMode: vi.fn(),
+  setMode: (...args: unknown[]) => setMode(...args),
   journalCsvUrl: vi.fn()
 }))
 vi.mock('@/services/inputs', () => ({ getInputFiles: vi.fn().mockResolvedValue({}), getDefaultFiles: vi.fn().mockResolvedValue({}) }))
@@ -44,13 +45,32 @@ async function mountPage() {
   await flushPromises()
   return wrapper
 }
-const startButton = (wrapper: Awaited<ReturnType<typeof mountPage>>) => wrapper.findAll('button').find(b => b.text() === 'Start')!
+type Page = Awaited<ReturnType<typeof mountPage>>
+const button = (wrapper: Page, text: string) => wrapper.findAll('button').find(b => b.text() === text)!
+const startButton = (wrapper: Page) => button(wrapper, 'Start')
+// The opening dialog asks the cycle; Continue moves it to the top of the page.
+async function closeCycleDialog(wrapper: Page) {
+  await button(wrapper, 'Continue').trigger('click')
+  await flushPromises()
+}
+// Picks a month of the year shown ('YYYY-MM'), in the cycle picker shown (the dialog's, then the top of the page's).
+async function pickMonth(wrapper: Page, month: string) {
+  await wrapper.find('[data-test="cycle-picker"]').trigger('click')
+  await flushPromises()
+  await wrapper.find(`[data-reka-month-picker-cell-trigger][data-value^="${month}"]`).trigger('click')
+  await flushPromises()
+}
 
 describe('HomeView', () => {
-  afterEach(() => mounted?.unmount())
+  afterEach(() => {
+    mounted?.unmount()
+    vi.useRealTimers()
+  })
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.useFakeTimers({ toFake: ['Date'] }) // only the clock: the current month is the default cycle
+    vi.setSystemTime(new Date(2026, 9, 20))
     getCheckpoints.mockResolvedValue(checkpoints())
     getCycles.mockResolvedValue([
       { cycle: '202610', target: true, passes: [pass('pppp1111', '202610', 'paused'), pass('tttt2222', '202610', 'paused', 'test')] },
@@ -62,7 +82,21 @@ describe('HomeView', () => {
     resumePass.mockResolvedValue({})
     const wrapper = await mountPage()
 
-    expect(wrapper.find<HTMLInputElement>('input[type="month"]').element.value).toBe('2026-10')
+    // The cycle is asked first, the current month by default, then shown at the top of the page
+    expect(wrapper.find('[data-test="cycle-dialog"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-test="cycle-picker"]')).toHaveLength(1)
+    expect(wrapper.find('[data-test="cycle-picker"]').attributes('value')).toBe('2026-10')
+    // Months only, never days; no future month
+    await wrapper.find('[data-test="cycle-dialog"] [data-test="cycle-picker"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('[data-reka-month-picker-cell-trigger]')).toHaveLength(12)
+    expect(wrapper.find('[data-reka-calendar-cell-trigger]').exists()).toBe(false)
+    expect(wrapper.find('[data-reka-month-picker-cell-trigger][data-value^="2026-11"]').attributes('data-disabled')).toBeDefined()
+    await wrapper.find('[data-test="cycle-picker"]').trigger('click') // closes the popover
+    await flushPromises()
+    await closeCycleDialog(wrapper)
+    expect(wrapper.find('[data-test="cycle-dialog"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="cycle-picker"]').attributes('value')).toBe('2026-10')
     expect(wrapper.text()).toContain('pppp1111')
     expect(wrapper.text()).not.toContain('tttt2222') // a test pass is not resumed in production
     expect(wrapper.find('[role="radio"][value="new"]').attributes('disabled')).toBeUndefined() // a new pass, after a confirm
@@ -83,7 +117,10 @@ describe('HomeView', () => {
     startPass.mockResolvedValue(undefined)
     const wrapper = await mountPage()
 
-    await wrapper.find('input[type="month"]').setValue('2026-09')
+    await closeCycleDialog(wrapper)
+    await pickMonth(wrapper, '2026-09')
+    expect(wrapper.find('[data-test="cycle-picker"]').attributes('value')).toBe('2026-09')
+    expect(wrapper.find('[data-reka-month-picker-cell-trigger]').exists()).toBe(false) // closed after the pick
     expect(wrapper.text()).toContain('complete') // the redo asks a confirm
     await startButton(wrapper).trigger('click')
     await flushPromises()
@@ -101,6 +138,7 @@ describe('HomeView', () => {
       .mockResolvedValueOnce(undefined)
     const wrapper = await mountPage()
 
+    await closeCycleDialog(wrapper)
     await wrapper.find('[role="radio"][value="new"]').trigger('click')
     await startButton(wrapper).trigger('click')
     await flushPromises()
@@ -119,7 +157,8 @@ describe('HomeView', () => {
     setCycle.mockRejectedValue({ response: { status: 409, data: { detail: 'A job is running' } } })
     const wrapper = await mountPage()
 
-    await wrapper.find('input[type="month"]').setValue('2026-09')
+    await closeCycleDialog(wrapper)
+    await pickMonth(wrapper, '2026-09')
     await startButton(wrapper).trigger('click')
     await flushPromises()
     expect(setCycle).toHaveBeenCalled()
@@ -128,9 +167,10 @@ describe('HomeView', () => {
 
   it('sends the user to the forecast page while a pass is active, without sending anything', async () => {
     getCheckpoints.mockResolvedValue(checkpoints({ pass: pass('aaaa4444', '202610', 'active') }))
-    await mountPage()
+    const wrapper = await mountPage()
 
     expect(replace).toHaveBeenCalledWith({ name: 'Dashboard' }) // replace: Back does not return to Home
+    expect(wrapper.find('[data-test="cycle-dialog"]').exists()).toBe(false) // no cycle to ask
     expect(setCycle).not.toHaveBeenCalled()
     expect(resumePass).not.toHaveBeenCalled()
     expect(startPass).not.toHaveBeenCalled()
@@ -140,5 +180,69 @@ describe('HomeView', () => {
     await mountPage()
 
     expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('asks in the opening dialog whether to resume the paused pass of the month or start a new one', async () => {
+    startPass.mockResolvedValue(undefined)
+    const wrapper = await mountPage()
+    const dialogChoice = () => wrapper.find('[data-test="cycle-dialog"] [data-test="pass-choice"]')
+
+    // October has a paused production pass: resuming it is offered and selected first
+    expect(dialogChoice().text()).toContain('pppp1111')
+    expect(dialogChoice().find('[role="radio"][value="pppp1111"]').attributes('data-state')).toBe('checked')
+    // September has none: no choice in the dialog
+    await pickMonth(wrapper, '2026-09')
+    expect(dialogChoice().exists()).toBe(false)
+    await pickMonth(wrapper, '2026-10')
+
+    await dialogChoice().find('[role="radio"][value="new"]').trigger('click')
+    await closeCycleDialog(wrapper)
+    expect(wrapper.find('[data-test="pass-choice"] [role="radio"][value="new"]').attributes('data-state')).toBe('checked') // kept on the page
+    await startButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(startPass).toHaveBeenCalledWith(false)
+    expect(resumePass).not.toHaveBeenCalled()
+  })
+
+  it('asks the mode before the cycle, and offers only the paused passes of the mode chosen', async () => {
+    setMode.mockImplementation(async (testMode: boolean) => {
+      getCheckpoints.mockResolvedValue(checkpoints({ test_mode: testMode }))
+      return testMode
+    })
+    const wrapper = await mountPage()
+    const dialog = () => wrapper.find('[data-test="cycle-dialog"]')
+
+    const html = dialog().html()
+    expect(html.indexOf('aria-label="Test mode"')).toBeGreaterThan(-1)
+    expect(html.indexOf('aria-label="Test mode"')).toBeLessThan(html.indexOf('data-test="cycle-picker"')) // mode first
+    expect(dialog().text()).toContain('pppp1111')
+
+    await dialog().findAll('[data-test="mode-btn"]').find(b => b.text() === 'YES')!.trigger('click')
+    await flushPromises()
+    expect(setMode).toHaveBeenCalledWith(true, undefined)
+    expect(dialog().text()).toContain('tttt2222') // the test pass of the month
+    expect(dialog().text()).not.toContain('pppp1111') // never the production one
+  })
+
+  it('lets the user switch their own mode while a job runs: it changes nothing shared', async () => {
+    getCheckpoints.mockResolvedValue(checkpoints({ lock: { job_id: null, task: 'a job of the other mode', acquired_at: 't' } }))
+    const wrapper = await mountPage()
+
+    const buttons = wrapper.findAll('[data-test="cycle-dialog"] [data-test="mode-btn"]')
+    expect(buttons).toHaveLength(2)
+    for (const button of buttons) expect(button.attributes('disabled')).toBeUndefined()
+  })
+
+  it('starts on the current month even when the server targets another one', async () => {
+    getCheckpoints.mockResolvedValue(checkpoints({ cycle: '202608' }))
+    setCycle.mockResolvedValue(undefined)
+    startPass.mockResolvedValue(undefined)
+    const wrapper = await mountPage()
+
+    await closeCycleDialog(wrapper)
+    await wrapper.find('[role="radio"][value="new"]').trigger('click') // October has a paused pass
+    await startButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(setCycle).toHaveBeenCalledWith('202610')
   })
 })

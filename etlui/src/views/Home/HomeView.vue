@@ -1,40 +1,46 @@
 <template>
+  <!-- New pass or resume a paused one: on the page, and in the opening dialog when the month has a paused pass. -->
+  <DefinePassChoice>
+    <fieldset class="space-y-2 text-sm text-foreground" data-test="pass-choice">
+      <legend class="mb-2 font-semibold">Pass</legend>
+      <RadioGroup v-model="choice">
+        <Label class="font-normal">
+          <RadioGroupItem value="new" />
+          New pass
+          <span class="text-xs text-muted-foreground">
+            <template v-if="paused.length">· the paused pass stays paused: Start asks to confirm a new pass</template>
+            <template v-else-if="complete">· the month is complete: Start asks to confirm a new pass</template>
+            <template v-else>· starts now, from Data Import</template>
+          </span>
+        </Label>
+        <Label v-for="p in paused" :key="p.id" class="font-normal">
+          <RadioGroupItem :value="p.id" />
+          Resume paused pass <span class="font-mono">{{ p.id }}</span>
+          <span class="text-xs text-muted-foreground">· started {{ formatTime(p.started_at) }} by {{ p.started_by ?? '-' }}</span>
+        </Label>
+      </RadioGroup>
+    </fieldset>
+  </DefinePassChoice>
+
   <Card class="mx-auto max-w-3xl gap-0 space-y-6 p-8">
     <div>
       <h1 class="text-2xl font-bold text-foreground">Start a pass</h1>
       <p class="text-sm text-muted-foreground">Choose the cycle, then start a new pass or resume a paused one. The forecast page follows.</p>
     </div>
 
-    <ModeToggle :test-mode="state?.test_mode" :dry-run="dryRun" :disabled="busy || state?.lock != null" @change="changeMode" />
+    <!-- The mode first: it decides which passes exist (a pass lives in one mode). -->
+    <ModeToggle :test-mode="state?.test_mode" :dry-run="dryRun" :disabled="busy" @change="changeMode" />
+
+    <div v-if="chosen" class="flex items-center gap-2 text-sm font-medium text-foreground">
+      Cycle
+      <CyclePicker v-model="month" :disabled="busy" />
+    </div>
 
     <p v-if="!state" class="text-sm text-muted-foreground">Loading the pipeline state…</p>
     <form v-else class="space-y-6" @submit.prevent="start">
-      <Label>
-        Cycle
-        <Input v-model="month" type="month" required :max="thisMonth" :disabled="busy" title="Month of the pass" class="w-auto" />
-      </Label>
+      <ReusePassChoice />
 
-      <fieldset v-if="month" class="space-y-2 text-sm text-foreground">
-        <legend class="mb-2 font-semibold">Pass</legend>
-        <RadioGroup v-model="choice">
-          <Label class="font-normal">
-            <RadioGroupItem value="new" />
-            New pass
-            <span class="text-xs text-muted-foreground">
-              <template v-if="paused.length">· the paused pass stays paused: Start asks to confirm a new pass</template>
-              <template v-else-if="complete">· the month is complete: Start asks to confirm a new pass</template>
-              <template v-else>· starts now, from Data Import</template>
-            </span>
-          </Label>
-          <Label v-for="p in paused" :key="p.id" class="font-normal">
-            <RadioGroupItem :value="p.id" />
-            Resume paused pass <span class="font-mono">{{ p.id }}</span>
-            <span class="text-xs text-muted-foreground">· started {{ formatTime(p.started_at) }} by {{ p.started_by ?? '-' }}</span>
-          </Label>
-        </RadioGroup>
-      </fieldset>
-
-      <div v-if="month">
+      <div>
         <h2 class="mb-2 text-sm font-semibold text-foreground">Parameters of this pass</h2>
         <p v-if="configStore.error" class="mb-2 text-sm text-destructive">{{ configStore.error }}</p>
         <dl class="grid grid-cols-[12rem_1fr] gap-x-4 gap-y-1 text-sm">
@@ -50,35 +56,58 @@
       </div>
 
       <div class="flex justify-end">
-        <Button type="submit" size="lg" :disabled="busy || !month">Start</Button>
+        <Button type="submit" size="lg" :disabled="busy">Start</Button>
       </div>
     </form>
+    <!-- Closing it any way keeps the month shown: it stays editable at the top of the page. -->
+    <Dialog :open="askCycle" @update:open="chosen = true">
+      <DialogContent data-test="cycle-dialog">
+        <form class="grid gap-4" @submit.prevent="chosen = true">
+          <DialogHeader>
+            <DialogTitle>Choose the mode, then the cycle</DialogTitle>
+            <DialogDescription>Test or production first, then the month of the pass. Both stay editable at the top of the page.</DialogDescription>
+          </DialogHeader>
+          <ModeToggle :test-mode="state?.test_mode" :dry-run="dryRun" :disabled="busy" @change="changeMode" />
+          <div class="flex items-center gap-2 text-sm font-medium">
+            Cycle
+            <CyclePicker v-model="month" />
+          </div>
+          <ReusePassChoice v-if="paused.length" />
+          <DialogFooter>
+            <Button type="submit">Continue</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
     <ImpactDialog :pending="pending" :busy="busy" @confirm="confirmNew" @cancel="cancel" />
   </Card>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { createReusableTemplate } from '@vueuse/core'
 import { useRouter } from 'vue-router'
 import ImpactDialog from '@/views/Dashboard/components/ImpactDialog.vue'
 import ModeToggle from '@/views/Dashboard/components/ModeToggle.vue'
+import CyclePicker from './CyclePicker.vue'
 import { useJournal } from '@/composables/useJournal'
 import { usePipeline } from '@/composables/usePipeline'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useConfigStore } from '@/stores/config'
 
 const router = useRouter()
+const [DefinePassChoice, ReusePassChoice] = createReusableTemplate()
 const { state, busy, pending, dryRun, refresh, setCycle, setMode, resume, startPass, confirm, cancel } = usePipeline(() => {}) // no Recent Activity on this page
 const { cycles, loadCycles } = useJournal()
 const configStore = useConfigStore()
 
 const now = new Date()
-const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}` // the server refuses a future month
-const month = ref('') // 'YYYY-MM' of <input type="month">
+const month = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`) // 'YYYY-MM', the current month first
+const chosen = ref(false) // the opening dialog was closed: the cycle moves to the top of the page
 const choice = ref('new') // 'new' or the id of a paused pass
 
 // A pass is active: Home has nothing to start, the forecast page takes over (replace: Back does not loop here).
@@ -92,10 +121,8 @@ const passes = computed(() => {
 const paused = computed(() => passes.value.filter(p => p.state === 'paused'))
 const complete = computed(() => passes.value[0]?.state === 'complete')
 
-// The target month of the server, until the user picks one.
-watch(() => state.value?.cycle, c => {
-  if (c && !month.value) month.value = `${c.slice(0, 4)}-${c.slice(4)}`
-})
+// Asked once the state is known, unless a pass is active (the page then leaves for the forecast page).
+const askCycle = computed(() => !chosen.value && state.value != null && state.value.pass?.state !== 'active')
 // A month with a paused pass: resuming is the default (a new pass needs a confirm, the paused one stays).
 watch(paused, list => { choice.value = list[0]?.id ?? 'new' })
 
@@ -130,8 +157,9 @@ async function start(): Promise<void> {
   if (ok) await router.push({ name: 'Dashboard' })
 }
 
-async function confirmNew(): Promise<void> {
-  if (await confirm()) await router.push({ name: 'Dashboard' })
+async function confirmNew(choice?: string): Promise<void> {
+  const startingPass = choice === undefined // a choice answers a mode switch, which stays on Home
+  if ((await confirm(choice)) && startingPass) await router.push({ name: 'Dashboard' })
 }
 
 const formatTime = (at: string) => new Date(at).toLocaleString()
