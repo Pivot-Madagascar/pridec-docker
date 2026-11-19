@@ -78,3 +78,6 @@ redis-secret.conf
 .claude/
 # oh-my-claudecode local state
 .omc/
+
+# Screenshots of the end-to-end tests (e2e/)
+e2e/artifacts/

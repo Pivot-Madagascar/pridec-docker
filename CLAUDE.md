@@ -8,6 +8,7 @@ Multi-service repo. Each service owns its details; this file only holds the map 
 - `etlhub/` — FastAPI + Celery + Redis API that exposes the ETL scripts and the forecast pipeline. **Read `etlhub/CLAUDE.md` before working there.**
 - `etlui/` — Vue front-end for `etlhub`. Has its own `CLAUDE.md`.
 - `forecast/` — R forecast pipeline, run in Docker by `etlhub`.
+- `e2e/` — end-to-end scenario in a headless Chromium (pytest + Playwright, `e2e/requirements.txt`) against a running stack: `DHIS2_TEST_URL=… DHIS2_TEST_USERNAME=… DHIS2_TEST_PASSWORD=… test-venv/bin/python -m pytest e2e -v` (needs no active test pass and no running job; screenshots in `e2e/artifacts/`). It launches real jobs in test mode (DHIS2 writes in dry run, GEE, the forecast in Docker): ask before running it. CI: `.github/workflows/e2e-playwright.yml` (manual and on PRs, environment `init_test`, secrets listed in its header).
 - Root: `compose.yaml` (only `etl` and `forecast`), `install.sh`, `pridec` (wrapper around `docker compose run`), `input/`, `output/`, `logs/`.
 
 ## Rules for the whole repo
@@ -24,7 +25,7 @@ Multi-service repo. Each service owns its details; this file only holds the map 
 - `etlhub/CLAUDE.md` — rules and gotchas for the API service
 - `etlhub/docs/` — `ARCHITECTURE.md`, `known-issues.md`, `DEVELOPMENT.md` (test, architecture and clean-code state, proposed rules)
 - `etlhub/docs/testing-QA/` — manual test logs (`test-incident-log.md`, `test-pipeline-michelle.md`) and local tickets (`ticket-*.md`)
-- `etlhub/docs/decision-design/` — design and decision docs, implemented or under discussion, one folder per feature (`pipeline-checkpoints/`, `pipeline-config/`, `default-input-files/`, `cycle-journal/`, `cycle-passes/`, `pass-folders/`, `dry-run/`, `import-availability/`, `db-migrations/`, `foreign-keys/`). A new feature's docs go in a new folder there
+- `etlhub/docs/decision-design/` — design and decision docs, implemented or under discussion, one folder per feature (`pipeline-checkpoints/`, `pipeline-config/`, `default-input-files/`, `cycle-journal/`, `cycle-passes/`, `pass-folders/`, `dry-run/`, `import-availability/`, `db-migrations/`, `foreign-keys/`, `mode-isolation/`). A new feature's docs go in a new folder there
 - `etlui/docs/decision-design/` — same for etlui (`tailwind-migration/`, `shadcn-migration/`, `page-layout/`)
 - `.claude/skills/etlhub/` — how etlhub is built (architecture, tables)
 - `.claude/skills/etlhub-practices/` — how to change etlhub well (templates, migrations, checklists)
