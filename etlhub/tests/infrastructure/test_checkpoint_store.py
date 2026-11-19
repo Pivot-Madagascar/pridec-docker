@@ -1,4 +1,5 @@
 import itertools
+import shutil
 import sqlite3
 from contextlib import closing
 
@@ -655,11 +656,11 @@ def test_replacing_a_used_config_resets_only_the_open_run(checkpoint_store):
     assert _status(checkpoint_store.progress(), "forecast", "ADJ/Malaria:post_forecast") == "success"
 
 
-# --- test mode (TEST_MODE) -----------------------------------------------------------------
+# --- test mode: the mode of the request or job served (the user's) ---------------------------------
 
 def test_test_mode_keeps_checkpoints_in_redis_only(checkpoint_store, tmp_path):
     _pass(checkpoint_store, "import_gee")  # production
-    checkpoint_store.set_mode(True)
+    checkpoint_store.mode["test_mode"] = True
 
     _pass(checkpoint_store, "import_pivot_com")
 
@@ -672,36 +673,116 @@ def test_test_mode_keeps_checkpoints_in_redis_only(checkpoint_store, tmp_path):
     assert rows == [("import_gee",)]  # nothing written to the SQLite file in test mode
 
 
-def test_leaving_test_mode_pauses_the_test_pass_and_keeps_its_state(checkpoint_store):
+def test_each_mode_keeps_its_active_pass_a_switch_changes_nothing_shared(checkpoint_store):
     _pass(checkpoint_store, "import_gee")
-    checkpoint_store.set_mode(True)
+    production_pass = checkpoint_store.progress()["pass"]
+    checkpoint_store.mode["test_mode"] = True
     _import(checkpoint_store)
     checkpoint_store.open_run("CSB/Malaria")
     test_pass = checkpoint_store.progress()["pass"]
 
-    assert checkpoint_store.set_mode(False) == {"test_mode": False}  # nothing discarded: no confirmation
+    checkpoint_store.mode["test_mode"] = False  # another user, or the same one switching: nothing is paused
 
     state = checkpoint_store.progress()
-    assert (state["test_mode"], state["run"]) == (False, None)
-    assert _status(state, "data_import", "import_gee") == "success"  # production untouched
+    assert (state["pass"]["id"], state["pass"]["state"], state["run"]) == (production_pass["id"], "active", None)
     with pytest.raises(PipelineBlockedError, match=f"No pass {test_pass['id']} in production mode"):
         checkpoint_store.resume(test_pass["id"])
-    checkpoint_store.set_mode(True)
-    checkpoint_store.resume(test_pass["id"])
-    assert checkpoint_store.progress()["run"]["couple"] == "CSB/Malaria"
+    checkpoint_store.mode["test_mode"] = True
+    state = checkpoint_store.progress()
+    assert (state["pass"]["id"], state["pass"]["state"], state["run"]["couple"]) == (test_pass["id"], "active", "CSB/Malaria")
 
 
-def test_switching_mode_is_refused_while_a_job_runs(checkpoint_store):
-    checkpoint_store.start("import_gee", "busy")
+def test_leaving_a_mode_without_active_pass_asks_nothing(checkpoint_store):
+    assert checkpoint_store.leave_mode(None) is None
+
+
+def test_leaving_a_mode_mid_pass_asks_to_pause_or_abandon_it(checkpoint_store):
+    checkpoint_store.mode["test_mode"] = True
+    _import(checkpoint_store)
+    p = checkpoint_store.progress()["pass"]
+
+    with pytest.raises(ConfirmationRequiredError) as asked:
+        checkpoint_store.leave_mode(None)
+
+    assert asked.value.impact == {"pass_id": p["id"], "cycle": p["cycle"], "mode": "test", "to": "production",
+                                  "actions": ["pause", "abandon"]}
+    assert checkpoint_store.progress()["pass"]["state"] == "active"  # nothing done before the choice
+
+
+@pytest.mark.parametrize("action, state", [("pause", "paused"), ("abandon", "abandoned")])
+def test_the_pass_left_by_a_mode_change_says_so_in_its_journal(checkpoint_store, action, state):
+    checkpoint_store.mode["test_mode"] = True
+    _import(checkpoint_store)
+    p = checkpoint_store.progress()["pass"]
+
+    assert checkpoint_store.leave_mode(action)["state"] == state
+
+    last = checkpoint_store.journal(p["id"])[-1]
+    assert (last["event"], last["detail"]) == (state, {
+        "cause": "mode_change", "reason": "Mode changed manually by the user: from test to production"})
+    assert checkpoint_store.leave_mode(None) is None  # no active pass left in test mode
+
+
+def test_a_pass_cannot_be_left_while_a_job_runs(checkpoint_store):
+    checkpoint_store.start("import_gee", "import_gee_00000001")
 
     with pytest.raises(PipelineBlockedError, match="one job at a time"):
-        checkpoint_store.set_mode(True)
+        checkpoint_store.leave_mode("pause")
+    assert checkpoint_store.progress()["pass"]["state"] == "active"
 
 
-def test_leaving_an_empty_test_mode_needs_no_confirmation(checkpoint_store):
-    checkpoint_store.set_mode(True)
+def test_one_job_at_a_time_across_both_modes_the_other_modes_job_unnamed(checkpoint_store):
+    checkpoint_store.start("import_gee", "import_gee_00000001")  # production
+    checkpoint_store.mode["test_mode"] = True
 
-    assert checkpoint_store.set_mode(False) == {"test_mode": False}
+    with pytest.raises(PipelineBlockedError, match="^A job of the other mode is running since .*: one job at a time"):
+        checkpoint_store.start("import_pivot_com", "import_pivot_com_00000002")
+    assert checkpoint_store.progress()["lock"] == {"job_id": None, "task": "a job of the other mode",
+                                                   "acquired_at": checkpoint_store.progress()["lock"]["acquired_at"]}
+    checkpoint_store.mode["test_mode"] = False
+    assert checkpoint_store.progress()["lock"]["job_id"] == "import_gee_00000001"
+    checkpoint_store.finish("import_gee_00000001", "success")
+
+    checkpoint_store.mode["test_mode"] = True
+    checkpoint_store.start("import_pivot_com", "import_pivot_com_00000002")  # free again
+    checkpoint_store.mode["test_mode"] = False
+    with pytest.raises(PipelineBlockedError, match="^A job of the other mode"):
+        checkpoint_store.start("import_gee", "import_gee_00000003")
+
+
+def test_a_killed_job_is_released_from_either_mode_and_journaled_in_its_own(checkpoint_store):
+    checkpoint_store.mode["test_mode"] = True
+    checkpoint_store.start("import_gee", "import_gee_0000000a")
+    test_pass = checkpoint_store.progress()["pass"]["id"]
+    checkpoint_store.mode["test_mode"] = False
+
+    assert checkpoint_store.release_lock("import_gee_0000000a") == "import_gee_0000000a"
+
+    assert checkpoint_store.progress()["lock"] is None
+    assert checkpoint_store.journal(test_pass) == []  # production reads nothing of it
+    checkpoint_store.mode["test_mode"] = True
+    assert checkpoint_store.journal(test_pass)[-1]["event"] == "lock_released"
+    assert _status(checkpoint_store.progress(), "data_import", "import_gee") == "error"
+
+
+def test_each_mode_works_in_its_own_folders_and_an_old_test_pass_folder_moves_on_use(checkpoint_store, tmp_path):
+    _import(checkpoint_store)  # a production pass: it emptied ./input when it started
+    (tmp_path / "input" / "climate_data.json").write_text("production")
+    checkpoint_store.mode["test_mode"] = True
+    _import(checkpoint_store)
+    test_pass = checkpoint_store.progress()["pass"]
+    for root in ("input", "output"):  # a pass of before test/: its folders are still in ./input, ./output
+        shutil.rmtree(tmp_path / "test" / root / test_pass["cycle"] / test_pass["id"], ignore_errors=True)
+    legacy = tmp_path / "input" / test_pass["cycle"] / test_pass["id"]
+    legacy.mkdir(parents=True)
+    (legacy / "config_Malaria.json").write_text("{}")  # a kept upload of that pass
+
+    checkpoint_store.open_run("CSB/Malaria")  # empties the working files of the mode's folders
+    assert (tmp_path / "input" / "climate_data.json").read_text() == "production"  # production untouched
+
+    checkpoint_store.pause()  # saves the test pass's work into its folder: the old one moves first
+    assert not legacy.exists()
+    assert (tmp_path / "test" / "input" / test_pass["cycle"] / test_pass["id"] / "config_Malaria.json").exists()
 
 
 # --- journal ------------------------------------------------------------------------------
@@ -858,48 +939,71 @@ def test_closing_the_cycle_is_journaled_once(checkpoint_store, month):
     assert _events(checkpoint_store)[-1] == ("cycle_closed", None)
 
 
-def test_the_test_journal_stays_in_redis_and_production_never_sees_its_events(checkpoint_store, month, tmp_path):
+def test_the_test_journal_stays_in_redis_and_each_mode_reads_only_its_own(checkpoint_store, month, tmp_path):
     _pass(checkpoint_store, "import_gee")
     production = checkpoint_store.progress()["pass"]["id"]
-    checkpoint_store.set_mode(True)
+    checkpoint_store.mode["test_mode"] = True
     _pass(checkpoint_store, "import_pivot_com")
     test = checkpoint_store.progress()["pass"]["id"]
-    checkpoint_store.set_mode(False)
+    checkpoint_store.mode["test_mode"] = False
 
     assert [(e["mode"], e["event"]) for e in checkpoint_store.journal(production)] == [
-        ("production", "pass_started"), ("production", "launched"), ("production", "succeeded"),
-        ("production", "mode_changed"), ("production", "mode_changed")]
-    assert [(e["mode"], e["event"], e["item"]) for e in checkpoint_store.journal(test)] == [
-        ("test", "pass_started", None), ("test", "launched", "import_pivot_com"),
-        ("test", "succeeded", "import_pivot_com"), ("test", "paused", None)]
+        ("production", "pass_started"), ("production", "launched"), ("production", "succeeded")]
+    assert checkpoint_store.journal(test) == []  # a test pass is never readable in production
     items = sqlite3.connect(tmp_path / "etlhub.db").execute("SELECT DISTINCT item FROM pipeline_events").fetchall()
     assert ("import_pivot_com",) not in items  # never in the SQLite file
+
+    checkpoint_store.mode["test_mode"] = True
+    assert [(e["mode"], e["event"], e["item"]) for e in checkpoint_store.journal(test)] == [
+        ("test", "pass_started", None), ("test", "launched", "import_pivot_com"),
+        ("test", "succeeded", "import_pivot_com")]
+    assert checkpoint_store.journal(production) == []  # nor a production pass in test mode
 
     checkpoint_store._blob.delete()  # Redis flushed: the test pass is gone, no error
     assert checkpoint_store.journal(test) == []
 
 
-def test_cycles_lists_months_with_their_passes(checkpoint_store, month):
+def test_a_mode_knows_only_the_jobs_its_own_pipeline_launched(checkpoint_store):
+    _pass(checkpoint_store, "import_gee")
+    production_job = checkpoint_store.progress()["steps"][0]["items"][0]["job_id"]
+    checkpoint_store.mode["test_mode"] = True
+    _pass(checkpoint_store, "import_pivot_com")
+    test_job = next(i["job_id"] for i in checkpoint_store.progress()["steps"][0]["items"] if i["item"] == "import_pivot_com")
+
+    assert checkpoint_store.current_mode() == "test"
+    assert (checkpoint_store.has_job(test_job), checkpoint_store.has_job(production_job)) == (True, False)
+    checkpoint_store.mode["test_mode"] = False
+    assert checkpoint_store.current_mode() == "production"
+    assert (checkpoint_store.has_job(production_job), checkpoint_store.has_job(test_job)) == (True, False)
+    assert checkpoint_store.has_job("import_gee_00000000") is False
+
+
+def test_cycles_lists_months_with_the_passes_of_the_current_mode_only(checkpoint_store, month):
     _all_runs(checkpoint_store)
     for task in ("build_analytics", "update_key"):
         _pass(checkpoint_store, task)  # 202610: a complete pass
     _pass(checkpoint_store, "import_gee", confirm=True)  # 202610 again: a second pass
     checkpoint_store.pause()
     month("202611")
-    checkpoint_store.set_mode(True)
+    checkpoint_store.mode["test_mode"] = True
     _pass(checkpoint_store, "import_gee")  # 202611: a test pass
-    checkpoint_store.set_mode(False)
+    checkpoint_store.mode["test_mode"] = False
     month("202612")  # the target: no pass yet
 
     cycles = {c["cycle"]: c for c in checkpoint_store.cycles()}
 
-    assert list(cycles) == ["202612", "202611", "202610"]
+    assert list(cycles) == ["202612", "202610"]  # 202611 has a test pass only: not listed in production
     assert (cycles["202612"]["target"], cycles["202612"]["passes"]) == (True, [])
-    (test,) = cycles["202611"]["passes"]
-    assert (test["mode"], test["state"], test["events"]) == ("test", "paused", 4)  # started, launched, succeeded, paused
     second, first = cycles["202610"]["passes"]  # newest first
     assert (second["state"], first["state"], first["started_by"]) == ("paused", "complete", "worker")
     assert first["events"] > second["events"] > 0 and first["last_at"]
+    assert {p["mode"] for c in cycles.values() for p in c["passes"]} == {"production"}
+
+    checkpoint_store.mode["test_mode"] = True
+    cycles = {c["cycle"]: c for c in checkpoint_store.cycles()}
+    (test,) = cycles["202611"]["passes"]
+    assert (test["mode"], test["state"], test["events"]) == ("test", "active", 3)  # started, launched, succeeded
+    assert [p for c in cycles.values() for p in c["passes"]] == [test]  # no production pass in test mode
 
 
 _LEGACY_SCHEMA = """
@@ -1074,30 +1178,11 @@ def test_the_store_refuses_a_row_whose_pass_does_not_exist(checkpoint_store, tes
             conn.execute("INSERT INTO checkpoints VALUES ('nope', 'data_import', 'import_gee', NULL, 'success', 'x')")
 
 
-def test_test_mode_starts_from_dryrun_once_then_is_independent(monkeypatch):
-    from etlhub.infrastructure import checkpoint_store as module
-
-    class Redis(dict):
-        def set(self, key, value, nx=False):
-            if not (nx and key in self):
-                self[key] = value
-
-    redis = Redis()
-    monkeypatch.setattr(module, "get_redis", lambda: redis)
-    monkeypatch.setattr(module, "dry_run_enabled", lambda: True)  # the pipeline was in test mode through DRYRUN
-
-    assert module.test_mode_enabled() is True
-
-    monkeypatch.setattr(module, "dry_run_enabled", lambda: True)
-    module.write_test_mode(False)
-    assert module.test_mode_enabled() is False  # TEST_MODE alone from now on
-
-
 def test_a_launch_without_choice_is_dry_run_in_test_mode_and_follows_env_in_production(checkpoint_store):
     checkpoint_store.mode["dry_run"] = False  # .env: the scripts write to DHIS2
 
     assert (checkpoint_store.progress()["test_mode"], checkpoint_store.progress()["dry_run"]) == (False, False)
-    assert checkpoint_store.set_mode(True) == {"test_mode": True}
+    checkpoint_store.mode["test_mode"] = True
     assert (checkpoint_store.progress()["test_mode"], checkpoint_store.progress()["dry_run"]) == (True, True)
 
 

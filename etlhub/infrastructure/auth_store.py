@@ -45,9 +45,20 @@ def delete_credential() -> None:
 
 
 def create_session(user: dict, pat_uid: str, ttl: int) -> str:
+    """A new session starts in test mode: the user chooses production on Home."""
     session_id = secrets.token_urlsafe(32)
-    get_redis().set(_session_key(session_id), json.dumps({"user": user, "pat_uid": pat_uid}), ex=ttl)
+    get_redis().set(_session_key(session_id), json.dumps({"user": user, "pat_uid": pat_uid, "test_mode": True}), ex=ttl)
     return session_id
+
+
+def set_session_mode(session_id: str, test_mode: bool) -> bool:
+    """The user's mode, in their session only (never the server's): False when the session is gone."""
+    key = _session_key(session_id)
+    data, ttl = get_redis().get(key), get_redis().ttl(key)
+    if not data or ttl <= 0:
+        return False
+    get_redis().set(key, json.dumps({**json.loads(data), "test_mode": test_mode}), ex=ttl)
+    return True
 
 
 def get_session(session_id: str) -> dict | None:

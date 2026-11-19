@@ -1,10 +1,15 @@
 import contextlib
 import io
 import logging
+import os
+import shutil
+from collections.abc import Iterator
+from pathlib import Path
 
 import httpx
 
-from etlhub.core.job_context import job_dry_run
+from etlhub.core.config import get_settings
+from etlhub.core.job_context import current_test_mode, job_dry_run, work_dir
 from etlhub.domain.exceptions import ETLException
 from etlhub.domain.interfaces.event_publisher import EventPublisher
 from etlhub.domain.interfaces.job_repository import JobRepository
@@ -82,7 +87,40 @@ def _reason(e: Exception) -> str:
 
 def run_etl_job(task_type: str, job_store: JobRepository, job_id: str, events: EventPublisher, **kwargs) -> None:
     fn = SYNC_JOBS[task_type] if task_type in SYNC_JOBS else ETL_JOBS[task_type][0]
-    _execute_etl_job(fn, _JobLogger(job_store, job_id, events), task_type, **kwargs)
+    with _into_mode_folder(task_type):
+        _execute_etl_job(fn, _JobLogger(job_store, job_id, events), task_type, **kwargs)
+
+
+# The file each fetch_* script of etl/ writes into os.getcwd()/input (no parameter): the production folder.
+FETCH_OUTPUTS = {"fetch_climate": "climate_data.json", "fetch_disease": "disease_data.json",
+                 "fetch_geojson": "orgUnit_poly.geojson"}
+
+
+@contextlib.contextmanager
+def _into_mode_folder(task_type: str) -> Iterator[None]:
+    """A test-mode fetch: its file goes to test/input; production's in ./input is put back as it was, even on failure.
+
+    ponytail: safe only because one job runs at a time, both modes together (a production job would otherwise see
+    the test file meanwhile). An input-folder setting in the three scripts (etl/) would remove the shuffle.
+    """
+    name = FETCH_OUTPUTS.get(task_type)
+    if name is None or not current_test_mode():
+        yield
+        return
+    written = Path(os.getcwd()) / "input" / name
+    aside = written.with_name(f".{name}.production")
+    if written.exists():
+        os.replace(written, aside)
+    try:
+        yield
+        if written.exists():
+            target = work_dir(get_settings().data_dir, "input", True) / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(written, target)
+    finally:
+        written.unlink(missing_ok=True)  # what a failed fetch left
+        if aside.exists():
+            os.replace(aside, written)
 
 
 def notify_webhook(webhook_url: str | None, job_id: str, status: str, message: str) -> None:

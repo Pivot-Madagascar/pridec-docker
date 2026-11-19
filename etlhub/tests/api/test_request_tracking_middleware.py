@@ -15,7 +15,7 @@ class Recorder:
     def save(self, log):
         self.logs.append(log)
 
-    def list_recent(self, limit=50, endpoint=None):  # GET /api/tracking/requests reads the same tracker
+    def list_recent(self, limit=50, endpoint=None, mode=None):  # GET /api/tracking/requests reads the same tracker
         return []
 
 
@@ -43,6 +43,18 @@ def test_unhandled_error_is_recorded_as_500_with_the_error(app, recorded, crash_
     assert response.status_code == 500
     assert recorded[-1]["status_code"] == 500
     assert recorded[-1]["error"] == "RuntimeError: boom"
+
+
+def test_a_request_is_recorded_with_the_mode_of_its_session(anon_app, recorded, monkeypatch):
+    from etlhub.api.auth import dhis2_auth
+    monkeypatch.setattr(get_settings(), "tracked_endpoints", "/pipeline/checkpoints,/docs")
+    monkeypatch.setattr(dhis2_auth, "session_from_cookies", lambda cookies: {"user": {"username": "jdoe"}, "test_mode": True})
+    client = TestClient(anon_app)
+
+    client.get("/pipeline/checkpoints")
+    assert recorded[-1]["mode"] == "test"
+    client.get("/docs")  # no session: listed in no mode
+    assert "mode" not in recorded[-1]
 
 
 def test_tracking_routes_are_never_recorded_even_without_filter(app, recorded):
@@ -123,6 +135,6 @@ def test_a_confirmation_request_is_recorded_with_its_code(app, recorded, checkpo
 def test_a_journaled_request_is_recorded_and_flagged_for_the_journal(app, recorded, monkeypatch):
     monkeypatch.setattr(get_settings(), "tracked_endpoints", "/nothing")
 
-    TestClient(app).put("/pipeline/mode", json={"test_mode": True})
+    TestClient(app).post("/pipeline/passes")  # journaled: pass_started
 
     assert recorded[-1]["journal"] is True

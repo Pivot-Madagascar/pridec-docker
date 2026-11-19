@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from etlhub.api.routers import error_doc
 from etlhub.core.config import get_settings
+from etlhub.core.job_context import current_test_mode, work_dir
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/output", tags=["Output Files"])
@@ -27,7 +28,7 @@ router = APIRouter(prefix="/output", tags=["Output Files"])
     },
 )
 async def get_forecast_report():
-    report_path = os.path.join(get_settings().data_dir, "output", "forecast_report.html")
+    report_path = work_dir(get_settings().data_dir, "output", current_test_mode()) / "forecast_report.html"
 
     if not os.path.exists(report_path):
         raise HTTPException(
@@ -57,7 +58,7 @@ async def get_forecast_report():
 )
 def download_archive():
     # Plain `def`: FastAPI runs it in a thread, so zipping does not block the event loop.
-    root = Path(get_settings().data_dir)
+    root = work_dir(get_settings().data_dir, "input", current_test_mode()).parent  # the mode's: test/ in test mode
     buffer = io.BytesIO()
     # ponytail: zip built in memory (a few MB per run); stream from a temp file if runs grow to hundreds of MB.
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:

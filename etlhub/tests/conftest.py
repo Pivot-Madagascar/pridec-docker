@@ -50,10 +50,10 @@ def checkpoint_store(tmp_path, monkeypatch):
     """The real pipeline gate, on a temporary db: launches never touch logs/etlhub.db."""
     from etlhub.infrastructure import checkpoint_store as module
     # data_dir = tmp_path: input/ and output/ are emptied when a run opens, uploads/ keeps the uploaded files.
-    mode = {"test_mode": False, "dry_run": True}  # production by default; tests switch it through store.set_mode or mode[...]
+    mode = {"test_mode": False, "dry_run": True}  # the mode served: production by default; tests switch mode[...]
     store = module.CheckpointStore(
         tmp_path / "etlhub.db", data_dir=tmp_path, apply_context=lambda ctx: store.contexts.append(ctx),
-        test_mode=lambda: mode["test_mode"], set_test_mode=lambda value: mode.update(test_mode=value),
+        test_mode=lambda: mode["test_mode"],
         dry_run=lambda: mode["dry_run"], blob=FakeBlob(),
     )
     store.contexts = []  # run contexts the jobs received (instead of Redis)
@@ -107,8 +107,31 @@ class OpenGate:
         from etlhub.domain.pipeline import this_month
         return this_month()
 
+    def current_mode(self):
+        return "production"
+
+    def has_job(self, job_id):
+        return True
+
 
 TEST_USER = {"id": "u1", "email": None, "username": "tester", "displayName": "Tester"}
+
+
+@pytest.fixture(autouse=True)
+def production_mode():
+    """The mode served (core/job_context): production, unless a test says otherwise. Outside a session it is test."""
+    from etlhub.core.job_context import pipeline_test_mode
+    token = pipeline_test_mode.set(False)
+    yield
+    pipeline_test_mode.reset(token)
+
+
+async def _logged_in() -> dict:
+    """get_current_user of a production session. Async, as the real one: a ContextVar set in a sync dependency stays
+    in its worker thread."""
+    from etlhub.core.job_context import pipeline_test_mode
+    pipeline_test_mode.set(False)
+    return TEST_USER
 
 
 @pytest.fixture
@@ -116,7 +139,7 @@ def app():
     """The app with a logged-in user: router tests are not about authentication."""
     from etlhub.main import app
     from etlhub.api.auth import get_current_user
-    app.dependency_overrides[get_current_user] = lambda: TEST_USER
+    app.dependency_overrides[get_current_user] = _logged_in
     yield app
     app.dependency_overrides.pop(get_current_user, None)
 
@@ -174,7 +197,7 @@ def job_store():
 @pytest.fixture
 def mock_request_tracker():
     class MockRequestTracker:
-        def list_recent(self, limit: int = 50, endpoint: str | None = None):
+        def list_recent(self, limit: int = 50, endpoint: str | None = None, mode: str | None = None):
             return []
         def get(self, request_id: str):
             return None
@@ -202,7 +225,7 @@ def override_dependencies(app, mock_task_launcher, job_store, mock_request_track
         return ForecastService(mock_task_launcher, job_store)
     
     def get_mock_tracking_service():
-        return TrackingService(mock_request_tracker, job_store)
+        return TrackingService(mock_request_tracker, job_store, OpenGate())
     
     app.dependency_overrides[get_ingestion_service] = get_mock_ingestion_service
     app.dependency_overrides[get_analytics_service] = get_mock_analytics_service

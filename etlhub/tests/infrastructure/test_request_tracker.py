@@ -45,6 +45,16 @@ def test_list_recent_newest_first_with_limit_and_filter(tracker):
     assert [l["request_id"] for l in tracker.list_recent(endpoint="import_gee")] == ["c", "a"]
 
 
+def test_list_recent_keeps_the_requests_of_one_mode(tracker):
+    tracker.save({**_log("p", "http://x/import_gee"), "mode": "production"})
+    tracker.save({**_log("t", "http://x/import_gee"), "mode": "test"})
+    tracker.save(_log("legacy", "http://x/import_gee"))  # recorded before the mode was: no mode, never listed
+
+    assert [l["request_id"] for l in tracker.list_recent(mode="test")] == ["t"]
+    assert [l["request_id"] for l in tracker.list_recent(mode="production")] == ["p"]
+    assert [l["request_id"] for l in tracker.list_recent()] == ["legacy", "t", "p"]  # no mode given: all
+
+
 def test_save_deletes_entries_older_than_the_retention(tracker, tmp_path):
     tracker.save(_log("old", "http://x/import_gee"))
     with sqlite3.connect(tmp_path / "etlhub.db") as conn:

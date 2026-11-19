@@ -1,5 +1,4 @@
 from functools import lru_cache
-from pathlib import Path
 from fastapi import Depends
 
 from etlhub.infrastructure.job_store import JobStore
@@ -26,6 +25,7 @@ from etlhub.application.use_cases.input_upload_service import InputUploadService
 from etlhub.application.use_cases.journal_service import JournalService
 from etlhub.application.use_cases.availability_service import AvailabilityService
 from etlhub.core.config import get_settings
+from etlhub.core.job_context import current_test_mode, work_dir
 
 
 @lru_cache
@@ -94,9 +94,10 @@ def get_ingestion_service(
 def get_tracking_service(
     request_tracker: RequestTrackerProtocol = Depends(get_request_tracker_repo),
     job_repo: JobRepository = Depends(get_job_repository),
+    gate: PipelineGate = Depends(get_pipeline_gate),
 ) -> TrackingService:
-    return TrackingService(request_tracker, job_repo)
+    return TrackingService(request_tracker, job_repo, gate)
 
 
 def get_input_upload_service(gate: PipelineGate = Depends(get_pipeline_gate)) -> InputUploadService:
-    return InputUploadService(Path(get_settings().data_dir) / "input", gate, DefaultFiles())
+    return InputUploadService(work_dir(get_settings().data_dir, "input", current_test_mode()), gate, DefaultFiles())

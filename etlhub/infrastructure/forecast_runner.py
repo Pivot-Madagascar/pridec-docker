@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime
 
 from etlhub.core.config import get_settings
+from etlhub.core.job_context import current_test_mode, work_dir
 from etlhub.infrastructure.job_store import JobStore
 from etlhub.infrastructure.config_store import ConfigStore
 from etlhub.infrastructure import etl_events
@@ -70,14 +71,16 @@ def run_rscript(job_id, params, job_store: JobStore):
     host_pwd = get_settings().host_pwd
     env_file = None
 
-    input_vol = f"{host_pwd}/input:/app/input:ro"
-    output_vol = f"{host_pwd}/output:/app/output:rw"
+    # Host side of the mounts: the job's mode (test/input, test/output in test); the container keeps /app/input, /app/output.
+    input_dir, output_dir = (work_dir(host_pwd, name, current_test_mode()) for name in ("input", "output"))
+    input_vol = f"{input_dir}:/app/input:ro"
+    output_vol = f"{output_dir}:/app/output:rw"
 
     try:
         env_file = _build_dynamic_env_file(host_pwd, job_id)
         # Create output/ ourselves: if it is missing, Docker creates the mount source as root
         # and the container, running as our user, could not write into it.
-        os.makedirs(os.path.join(host_pwd, "output"), exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
         cmd = [
             'docker', 'run', '--rm',
             '--env-file', env_file,

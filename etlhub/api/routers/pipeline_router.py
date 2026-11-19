@@ -1,13 +1,17 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from etlhub.api.routers import BLOCKED, error_doc
 from etlhub.application.use_cases.ingestion_service import current_import_params
 from etlhub.application.use_cases.journal_service import JournalService
-from etlhub.core.dependencies import get_job_repository, get_journal_service, get_pipeline_gate, get_task_launcher
+from etlhub.api.auth.dhis2_auth import SESSION_COOKIE
+from etlhub.core.dependencies import (get_auth_store, get_job_repository, get_journal_service, get_pipeline_gate,
+                                      get_task_launcher)
+from etlhub.core.job_context import current_test_mode
+from etlhub.domain.interfaces.auth_store import AuthStore
 from etlhub.domain.exceptions import ConfirmationRequiredError
 from etlhub.domain.interfaces.job_repository import JobRepository
 from etlhub.domain.interfaces.pipeline_gate import PipelineGate
@@ -33,6 +37,8 @@ class Decision(BaseModel):
 
 class Mode(BaseModel):
     test_mode: bool
+    # What becomes of the active pass of the mode left (a pass lives in one mode); asked with a 409 when missing.
+    pass_action: Literal["pause", "abandon"] | None = None
 
 
 class Cycle(BaseModel):
@@ -146,17 +152,28 @@ def decide_imports(body: Decision, gate: PipelineGate = Depends(get_pipeline_gat
 
 @router.put(
     "/mode",
-    summary="Switch test mode (TEST_MODE)",
+    summary="Choose your mode (test or production)",
     description=(
-        "test_mode=true: the checkpoints, runs and uploads are kept apart from production (Redis only). "
-        "test_mode=false: back to production; the active test pass is paused, its state kept in Redis to resume it "
-        "in test mode. Refused while a job runs. DHIS2 writes are not switched here: they follow DRYRUN in the root .env, "
-        "returned read-only as dry_run by GET /pipeline/checkpoints with test_mode."
+        "The caller's mode, kept in their session: every later request of this session, and the jobs it launches, "
+        "work in it; other users keep theirs. A session starts in test mode. test_mode=true: passes, runs, journal, "
+        "requests and files kept apart from production (Redis, test/input, test/output); nothing of the other mode "
+        "is readable. A pass lives in one mode: while the mode left has an active pass, 409 confirmation_required "
+        "with `impact` {pass_id, cycle, mode, to, actions: [pause, abandon]} until `pass_action` says which; that pass "
+        "is then paused or abandoned (journal: cause mode_change, reason 'Mode changed manually by the user'), which "
+        "is refused while a job runs. The same mode again changes nothing. DHIS2 writes are not switched here: "
+        "the default DRYRUN of a launch is true in test mode, else DRYRUN of the root .env (dry_run in "
+        "GET /pipeline/checkpoints)."
     ),
-    responses={200: {"content": {"application/json": {"example": {"test_mode": True}}}}, **BLOCKED},
+    responses={200: {"content": {"application/json": {"example": {"test_mode": True}}}},
+               401: error_doc("The session is gone", {"detail": "Not authenticated"}), **BLOCKED},
 )
-def set_mode(body: Mode, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
-    return gate.set_mode(body.test_mode)
+def set_mode(body: Mode, request: Request, store: AuthStore = Depends(get_auth_store),
+             gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
+    if body.test_mode != current_test_mode():
+        gate.leave_mode(body.pass_action)  # ConfirmationRequiredError (409) while its pass is active and no choice
+    if not store.set_session_mode(request.cookies.get(SESSION_COOKIE, ""), body.test_mode):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {"test_mode": body.test_mode}
 
 
 @router.put(
@@ -243,9 +260,10 @@ def abandon(pass_id: str = PASS_PATH, gate: PipelineGate = Depends(get_pipeline_
     description=(
         "For a job whose worker was killed: frees the lock and marks its running checkpoint and its job record as error "
         "(the toast, the tracking and the logs then see its end). "
-        "The lock never expires on its own. Returns the freed job_id, or null. "
-        "The workers are asked first: while the job still runs (or when no worker answers), 409 confirmation_required "
-        "with `impact` {job_id, task, active: true | null} until `confirm=true`."
+        "The lock never expires on its own. One lock for both modes: a job of the other mode can be released too, "
+        "never named (job_id null, task 'a job of the other mode'). Returns the freed job_id, or null (nothing held, "
+        "or a job of the other mode). The workers are asked first: while the job still runs (or when no worker "
+        "answers), 409 confirmation_required with `impact` {job_id, task, active: true | null} until `confirm=true`."
     ),
     responses=BLOCKED,
 )
@@ -253,34 +271,35 @@ def release_lock(confirm: bool = Query(False, description="Required while the jo
                  gate: PipelineGate = Depends(get_pipeline_gate),
                  jobs: JobRepository = Depends(get_job_repository),
                  launcher: TaskLauncher = Depends(get_task_launcher)) -> dict[str, str | None]:
-    lock = gate.progress()["lock"]
-    if lock is None:
+    held = gate.held_lock()
+    if held is None:
         return {"released": None}
-    job_id, task = lock["job_id"], lock["task"]
+    job_id = held["job_id"]
+    shown_id, task = (job_id, held["task"]) if held["own"] else (None, "a job of the other mode")
+    shown = f"{task} ({job_id})" if held["own"] else "A job of the other mode"
     active = launcher.is_active(job_id)
     if active is not False and not confirm:
-        why = (f"{task} ({job_id}) is still running" if active
-               else f"No worker answered: whether {task} ({job_id}) still runs is unknown")
+        why = f"{shown} is still running" if active else f"No worker answered: whether {shown} still runs is unknown"
         raise ConfirmationRequiredError(
             f"{why}. Releasing the lock lets another job start while it may still run: it is marked error, "
             "but it goes on and can still write to DHIS2 and to input/ and output/.",
-            {"job_id": job_id, "task": task, "active": active})
+            {"job_id": shown_id, "task": task, "active": active})
     released = gate.release_lock(job_id)
     job = jobs.get(released) if released else None
     # A worker that is not dead after all still overwrites this with its own end.
     if job and job.get("status") in ("pending", "running"):
         jobs.set(released, {**job, "status": "error", "message": "Lock released by a user (worker killed)"})
-    return {"released": released}
+    return {"released": released if held["own"] else None}
 
 
 @router.get(
     "/cycles",
     summary="Cycles and their passes",
     description=(
-        "Every month with passes, plus the target month, newest first: `cycle`, `target` (launches go to it) and "
-        "`passes`, newest first: id, state (active, paused, complete, abandoned), started_at, started_by, `mode` "
-        "(production, or test: kept in Redis only), `events` and `last_at` (latest event, or null; both leave out "
-        "mode_changed)."
+        "Every month with passes of the current mode (TEST_MODE), plus the target month, newest first: `cycle`, "
+        "`target` (launches go to it) and `passes`, newest first: id, state (active, paused, complete, abandoned), "
+        "started_at, started_by, `mode` (the current one: a mode never lists the other's passes), `events` and "
+        "`last_at` (latest event, or null; both leave out mode_changed)."
     ),
 )
 def list_cycles(gate: PipelineGate = Depends(get_pipeline_gate)) -> list[dict]:
@@ -292,7 +311,8 @@ _JOURNAL_DESCRIPTION = (
     "decided, skipped, run_opened, run_closed, run_abandoned, lock_released, mode_changed, paused, resumed, abandoned, "
     "cycle_closed. Each event has its "
     "actor (DHIS2 username, `worker`, `system`), `mode` (`production`, or `test` while Redis keeps the test journal) and "
-    "`request`: the HTTP request that caused it, or null. Refusals (409) are not events: see /api/tracking/requests. "
+    "`request`: the HTTP request that caused it, or null. Only a pass of the current mode has events: a pass of the "
+    "other mode reads as empty, like an unknown one. Refusals (409) are not events: see /api/tracking/requests. "
     "Not seen: the `pridec` command line, build_analytics launched from DHIS2."
 )
 

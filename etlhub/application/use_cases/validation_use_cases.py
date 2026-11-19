@@ -6,6 +6,7 @@ import geopandas as gpd
 import pandas as pd
 
 from etl.scripts.validate_inputs import validate_inputs as _validate_inputs
+from etlhub.core.job_context import current_test_mode
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
@@ -29,15 +30,17 @@ def validate_input_files(
     input_dir: str | None = None,
 ) -> None:
     """Validates the forecast inputs and writes the *_valid files next to them. Its output is the job log."""
-    # Paths are relative to the repo root (the API only accepts paths under input/), not to the worker's cwd.
-    input_base = PROJECT_ROOT / (input_dir or "input")
+    # Paths are relative to the repo root (the API only accepts paths under input/), not to the worker's cwd;
+    # in test mode to test/, whose input/ is the test one.
+    root = PROJECT_ROOT / "test" if current_test_mode() else PROJECT_ROOT
+    input_base = root / (input_dir or "input")
 
     paths = {
-        "config": str(PROJECT_ROOT / (config_path or input_base / "config.json")),
-        "external_data": str(PROJECT_ROOT / (external_data_path or input_base / "external_data.csv")),
-        "disease_data": str(PROJECT_ROOT / (disease_data_path or input_base / "disease_data.json")),
-        "climate_data": str(PROJECT_ROOT / (climate_data_path or input_base / "climate_data.json")),
-        "orgunit_poly": str(PROJECT_ROOT / (orgunit_poly_path or input_base / "orgUnit_poly.geojson")),
+        "config": str(root / (config_path or input_base / "config.json")),
+        "external_data": str(root / (external_data_path or input_base / "external_data.csv")),
+        "disease_data": str(root / (disease_data_path or input_base / "disease_data.json")),
+        "climate_data": str(root / (climate_data_path or input_base / "climate_data.json")),
+        "orgunit_poly": str(root / (orgunit_poly_path or input_base / "orgUnit_poly.geojson")),
     }
 
     for p in [paths["config"], paths["disease_data"], paths["climate_data"], paths["orgunit_poly"]]:

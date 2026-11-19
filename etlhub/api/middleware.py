@@ -123,8 +123,9 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
                     "client_host": request.client.host if request.client else None,
                     "error": error,
                     "job_id": job_id,
-                    # 409 reason and code, and the journal flag the purge reads (core/request_context.py).
-                    **{k: context[k] for k in ("reason", "code", "journal") if k in context},
+                    # 409 reason and code, the journal flag the purge reads (core/request_context.py), and the mode
+                    # of the user's session (get_current_user): a request without session is listed in no mode.
+                    **{k: context[k] for k in ("reason", "code", "journal", "mode") if k in context},
                 }
                 # SQLite write off the event loop.
                 await run_in_threadpool(get_request_tracker_repo().save, log)

@@ -9,6 +9,7 @@ from starlette.websockets import WebSocketState
 import redis.asyncio as aioredis
 from etlhub.core.config import get_settings
 from etlhub.core.dependencies import get_job_repository
+from etlhub.domain.interfaces.pipeline_gate import PipelineGate
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +51,12 @@ async def _complete(websocket: WebSocket, job_id: str, final_status: str | None)
     await websocket.close(code=1000)
 
 
-async def handle_etl_logs_ws(websocket: WebSocket, job_id: str):
+async def handle_etl_logs_ws(websocket: WebSocket, job_id: str, gate: PipelineGate):
     """Stream a job's logs: history first, then live entries until the job ends.
 
-    Closes with 4004 only for an unknown job (no job record and no logs). A known job
-    that has not logged anything yet gets an empty history and stays connected.
+    Closes with 4004 only for an unknown job (no job record and no logs), a job of the other mode included (the
+    pipeline of the current mode did not launch it). A known job that has not logged anything yet gets an empty
+    history and stays connected.
     """
     # The session and origin are checked by the router dependency (get_current_user).
     await websocket.accept()
@@ -69,7 +71,7 @@ async def handle_etl_logs_ws(websocket: WebSocket, job_id: str):
         history = await asyncio.to_thread(get_job_repository().get_logs, job_id)
         status = await _get_status(job_id)
 
-        if history is None and status is None:
+        if (history is None and status is None) or not await asyncio.to_thread(gate.has_job, job_id):
             await websocket.close(code=4004, reason="Unknown job")
             return
 

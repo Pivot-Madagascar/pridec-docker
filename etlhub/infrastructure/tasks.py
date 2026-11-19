@@ -3,6 +3,7 @@ import traceback
 from datetime import datetime
 
 from etlhub.core.celery_app import celery_app
+from etlhub.core.job_context import current_test_mode, pipeline_test_mode
 from etlhub.domain.exceptions import ETLException
 from etlhub.application.use_cases.analytics_service import RUNNING_INLINE
 from etlhub.application.use_cases.etl_use_cases import ETL_JOBS, notify_webhook, run_etl_job
@@ -33,7 +34,16 @@ def _update_task_status(job_store: JobStore, job_id: str, status: str, message: 
         logger.warning("Could not publish the %s status of %s: %s", status, job_id, e)
 
 
-def _run_task(job_id: str, task_name: str, run_fn, webhook_url: str | None = None):
+def _run_task(job_id: str, task_name: str, run_fn, webhook_url: str | None = None, test_mode: bool | None = None):
+    """test_mode: the mode of the user who launched the job (None: a task queued before it was sent, test)."""
+    token = pipeline_test_mode.set(test_mode)  # the job's store, folders and end, in the launcher's mode
+    try:
+        _run(job_id, task_name, run_fn, webhook_url)
+    finally:
+        pipeline_test_mode.reset(token)
+
+
+def _run(job_id: str, task_name: str, run_fn, webhook_url: str | None) -> None:
     job_store = JobStore()
     _update_task_status(job_store, job_id, "running", f"Starting {task_name}")
     try:
@@ -53,10 +63,11 @@ def _run_task(job_id: str, task_name: str, run_fn, webhook_url: str | None = Non
 
 
 @celery_app.task
-def task_etl(task_type: str, job_id: str, webhook_url: str | None = None, **kwargs):
+def task_etl(task_type: str, job_id: str, webhook_url: str | None = None, test_mode: bool | None = None, **kwargs):
     """Every ETL_JOBS entry; kwargs go to the job function (validate_inputs paths)."""
     _run_task(job_id, ETL_JOBS[task_type][1],
-              lambda job_store, job_id: run_etl_job(task_type, job_store, job_id, etl_events, **kwargs), webhook_url)
+              lambda job_store, job_id: run_etl_job(task_type, job_store, job_id, etl_events, **kwargs), webhook_url,
+              test_mode)
 
 
 def _forecast(job_store, job_id: str, params: dict) -> None:
@@ -67,8 +78,9 @@ def _forecast(job_store, job_id: str, params: dict) -> None:
 
 
 @celery_app.task
-def task_forecast(job_id: str, params: dict, webhook_url: str | None = None):
-    _run_task(job_id, "forecast pipeline", lambda job_store, job_id: _forecast(job_store, job_id, params), webhook_url)
+def task_forecast(job_id: str, params: dict, webhook_url: str | None = None, test_mode: bool | None = None):
+    _run_task(job_id, "forecast pipeline", lambda job_store, job_id: _forecast(job_store, job_id, params), webhook_url,
+              test_mode)
 
 
 class CeleryTaskLauncher:
@@ -81,13 +93,14 @@ class CeleryTaskLauncher:
         # Known from the 202 on, before a worker picks it up: the log WebSocket and the
         # tracking page can follow it (an unknown job gets 4004).
         JobStore().set(job_id, {"job_id": job_id, "status": "pending", "message": "Queued"})
+        mode = {"test_mode": current_test_mode()}  # the user's: the worker serves the job in it
         try:
             # task_id=job_id: is_active finds the job among the workers' tasks.
             if task_type == "forecast":
-                task_forecast.apply_async((job_id,), {"webhook_url": webhook_url, **kwargs}, task_id=job_id)
+                task_forecast.apply_async((job_id,), {"webhook_url": webhook_url, **mode, **kwargs}, task_id=job_id)
             else:
-                task_etl.apply_async((task_type, job_id), {"webhook_url": webhook_url, "dry_run": dry_run, **kwargs},
-                                     task_id=job_id)
+                task_etl.apply_async((task_type, job_id),
+                                     {"webhook_url": webhook_url, "dry_run": dry_run, **mode, **kwargs}, task_id=job_id)
         except Exception:
             gate.finish(job_id, "error")
             raise

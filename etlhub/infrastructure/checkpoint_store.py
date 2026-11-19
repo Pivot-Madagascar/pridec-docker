@@ -5,12 +5,13 @@ import shutil
 import sqlite3
 import uuid
 from collections.abc import Callable, Iterator
-from contextlib import closing, contextmanager
+from contextlib import AbstractContextManager, closing, contextmanager
 from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 
 from etlhub.core.config import get_settings
+from etlhub.core.job_context import current_test_mode, work_dir
 from etlhub.core.request_context import request_context
 from etlhub.domain import pipeline
 from etlhub.domain.exceptions import ConfirmationRequiredError, ETLException, PipelineBlockedError
@@ -234,30 +235,10 @@ def apply_to_config_store(context: dict[str, str | None]) -> None:
         raise ETLException("Could not write the forecast run context (DISEASE_CODE, OU_LEVEL) to Redis")
 
 
-TEST_MODE_KEY = "pipeline:test_mode"
-
-
 def dry_run_enabled() -> bool:
     """DRYRUN as the ETL scripts read it: Redis, loaded from .env at each API start (main.py lifespan), default true."""
     from etl.scripts.config import get_dry_run
     return get_dry_run()
-
-
-def test_mode_enabled() -> bool:
-    """TEST_MODE: etlhub's own test mode (Redis), switched by PUT /pipeline/mode only. Independent of DRYRUN.
-
-    ponytail: one-time migration from the days DRYRUN was also the test mode: the first read starts in the mode DRYRUN
-    gives. DRYRUN stays in Redis (the API reloads it from .env at each start). Delete once every deployment ran it.
-    """
-    value = get_redis().get(TEST_MODE_KEY)
-    if value is None:
-        value = "true" if dry_run_enabled() else "false"
-        get_redis().set(TEST_MODE_KEY, value, nx=True)
-    return value == "true"
-
-
-def write_test_mode(value: bool) -> None:
-    get_redis().set(TEST_MODE_KEY, "true" if value else "false")
 
 
 class RedisBlob:
@@ -287,30 +268,41 @@ class CheckpointStore:
 
     def __init__(self, db_path: str | Path | None = None, data_dir: str | Path | None = None,
                  apply_context: Callable[[dict], None] = apply_to_config_store,
-                 test_mode: Callable[[], bool] = test_mode_enabled, set_test_mode: Callable[[bool], None] = write_test_mode,
+                 test_mode: Callable[[], bool] = current_test_mode,
                  dry_run: Callable[[], bool] = dry_run_enabled,
                  blob: RedisBlob | None = None):
-        """In test mode (TEST_MODE) everything is kept in Redis (`blob`), never in the SQLite file.
+        """In test mode everything is kept in Redis (`blob`) and test/input, test/output; never in the SQLite file,
+        except the single job lock of both modes. test_mode: the mode of the request or job served (the user's).
 
         The Redis keys and the uploads folder keep their dry_run names: they hold the test state of before TEST_MODE.
         """
         settings = get_settings()
-        self._test_mode, self._set_test_mode, self._dry_run = test_mode, set_test_mode, dry_run
+        self._test_mode, self._dry_run = test_mode, dry_run
         self._blob = blob or RedisBlob()
         self._db_path = Path(db_path or Path(settings.logs_dir) / "etlhub.db")
-        data_dir = Path(data_dir or settings.data_dir)
-        self._input_dir, self._output_dir = data_dir / "input", data_dir / "output"
-        self._uploads_root = data_dir / "uploads"  # before the pass folders (2026-10-27): read by the migrations only
+        self._data_dir = Path(data_dir or settings.data_dir)
+        self._uploads_root = self._data_dir / "uploads"  # before the pass folders (2026-10-27): read by the migrations only
         self._apply_context = apply_context
+
+    @property
+    def _input_dir(self) -> Path:
+        """input/ of the mode served: ./input in production, test/input in test."""
+        return work_dir(self._data_dir, "input", self._test_mode())
+
+    @property
+    def _output_dir(self) -> Path:
+        return work_dir(self._data_dir, "output", self._test_mode())
 
     # --- helpers (inside a transaction) ---------------------------------------------------
 
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:
         """Same SQL in both modes: the SQLite file in production, an in-memory copy kept in Redis in test mode."""
-        transaction = self._memory_transaction if self._test_mode() else self._file_transaction
-        with transaction() as conn:
+        with self._mode_transaction(self._test_mode()) as conn:
             yield conn
+
+    def _mode_transaction(self, test_mode: bool) -> AbstractContextManager[sqlite3.Connection]:
+        return self._memory_transaction() if test_mode else self._file_transaction()
 
     @contextmanager
     def _memory_transaction(self) -> Iterator[sqlite3.Connection]:
@@ -320,7 +312,13 @@ class CheckpointStore:
                 conn.deserialize(data)
             self._check_schema(conn, _BLOB)  # a failure saves nothing: the blob is set at the end
             conn.execute("PRAGMA foreign_keys = ON")  # off by default, per connection, ignored inside a transaction
-            conn.execute("BEGIN")
+            # The job lock of both modes is the file's: attached, and taken up front with it (IMMEDIATE covers every
+            # attached db). Order Redis lock, then file; a production transaction never takes the Redis lock.
+            if not self._db_path.is_file():
+                with self._file_transaction():  # creates the file and its schema
+                    pass
+            conn.execute("ATTACH DATABASE ? AS shared", (str(self._db_path),))
+            conn.execute("BEGIN IMMEDIATE")
             try:
                 yield conn
                 conn.execute("COMMIT")
@@ -380,12 +378,14 @@ class CheckpointStore:
         """The pass of a job (its launched event), else the active one, else the target month without a pass."""
         return self._get_pass(conn, pass_id) or self._active(conn) or {"id": None, "cycle": self._target(conn)}
 
-    def _set_state(self, conn: sqlite3.Connection, p: dict, state: str, cause: str, actor: str | None = None) -> None:
+    def _set_state(self, conn: sqlite3.Connection, p: dict, state: str, cause: str, actor: str | None = None,
+                   reason: str | None = None) -> None:
         conn.execute("UPDATE passes SET state = ? WHERE id = ?", (state, p["id"]))
         p["state"] = state
         if state == "paused":  # the working files go with the pass, to come back on resume
             self._save_work(p)
-        self._event(conn, p, "resumed" if state == "active" else state, detail={"cause": cause}, actor=actor)
+        detail = {"cause": cause, **({"reason": reason} if reason else {})}
+        self._event(conn, p, "resumed" if state == "active" else state, detail=detail, actor=actor)
 
     def _settle(self, conn: sqlite3.Connection) -> None:
         """The calendar moved on: the active pass that followed it is paused (a pass on a chosen month stays active)."""
@@ -432,16 +432,38 @@ class CheckpointStore:
         return dict(zip(_RUN_COLUMNS, row)) if row else None
 
     @staticmethod
-    def _check_lock_free(conn: sqlite3.Connection) -> None:
-        # The lock never expires: a killed worker keeps it until DELETE /pipeline/lock.
-        row = conn.execute("SELECT job_id, task, acquired_at FROM pipeline_lock").fetchone()
-        if row:
-            raise PipelineBlockedError(f"{row[1]} ({row[0]}) is running since {row[2]}: one job at a time")
+    def _lock_table(conn: sqlite3.Connection) -> str:
+        """The single job lock of both modes: the SQLite file's table (attached as `shared` in test mode)."""
+        attached = any(row[1] == "shared" for row in conn.execute("PRAGMA database_list"))
+        return "shared.pipeline_lock" if attached else "pipeline_lock"
 
     @staticmethod
-    def _take_lock(conn: sqlite3.Connection, job_id: str, task: str) -> None:
-        conn.execute("INSERT INTO pipeline_lock (id, job_id, task, acquired_at) VALUES (1, ?, ?, ?)",
+    def _owns(conn: sqlite3.Connection, job_id: str) -> bool:
+        """Whether the job belongs to this connection's mode (its journal or checkpoints name it)."""
+        return bool(conn.execute("SELECT 1 FROM pipeline_events WHERE job_id = ?"
+                                 " UNION SELECT 1 FROM checkpoints WHERE job_id = ?", (job_id, job_id)).fetchone())
+
+    def _lock(self, conn: sqlite3.Connection) -> dict | None:
+        """The job holding the lock; one of the other mode only as such (no task, no id: never readable here)."""
+        row = conn.execute(f"SELECT job_id, task, acquired_at FROM {self._lock_table(conn)}").fetchone()
+        if not row:
+            return None
+        if not self._owns(conn, row[0]):
+            row = (None, "a job of the other mode", row[2])
+        return dict(zip(("job_id", "task", "acquired_at"), row))
+
+    def _check_lock_free(self, conn: sqlite3.Connection) -> None:
+        # The lock never expires: a killed worker keeps it until DELETE /pipeline/lock. One job at a time, both modes.
+        if lock := self._lock(conn):
+            job = f"{lock['task']} ({lock['job_id']})" if lock["job_id"] else "A job of the other mode"
+            raise PipelineBlockedError(f"{job} is running since {lock['acquired_at']}: one job at a time")
+
+    def _take_lock(self, conn: sqlite3.Connection, job_id: str, task: str) -> None:
+        conn.execute(f"INSERT INTO {self._lock_table(conn)} (id, job_id, task, acquired_at) VALUES (1, ?, ?, ?)",
                      (job_id, task, _now()))
+
+    def _free_lock(self, conn: sqlite3.Connection, job_id: str) -> None:
+        conn.execute(f"DELETE FROM {self._lock_table(conn)} WHERE job_id = ?", (job_id,))
 
     @staticmethod
     def _upsert(conn: sqlite3.Connection, p: dict, step: str, item: str, job_id: str | None, state: str) -> None:
@@ -484,7 +506,15 @@ class CheckpointStore:
 
     def _pass_dir(self, p: dict, root: Path | None = None) -> Path:
         """The pass folder: input/<cycle>/<pass>/ (uploads), or output/<cycle>/<pass>/ (reports) with root=output/."""
-        return (root or self._input_dir) / p["cycle"] / p["id"]
+        root = root or self._input_dir
+        folder = root / p["cycle"] / p["id"]
+        legacy = self._data_dir / root.name / p["cycle"] / p["id"]
+        if self._test_mode() and not folder.exists() and legacy.is_dir():
+            # ponytail: a test pass of before test/input, test/output (2026-11-19) kept its folders in ./input,
+            # ./output: moved on first use. Delete once every deployment resumed or abandoned its old test passes.
+            folder.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(legacy, folder)
+        return folder
 
     def _kept_file(self, p: dict, name: str, couple: str) -> Path:
         """config.json is kept per disease, external_data.csv per org unit level (fkt or csb)."""
@@ -753,7 +783,7 @@ class CheckpointStore:
         with self._transaction() as conn:
             row = conn.execute("SELECT step, item FROM checkpoints WHERE job_id = ?", (job_id,)).fetchone()
             conn.execute("UPDATE checkpoints SET status = ?, updated_at = ? WHERE job_id = ?", (state, _now(), job_id))
-            conn.execute("DELETE FROM pipeline_lock WHERE job_id = ?", (job_id,))
+            self._free_lock(conn, job_id)
             # The launched event, not the checkpoint: a reset may have deleted the job's row before it ended.
             step, item, pass_id = self._launched(conn, job_id) or (*(row or (None, None)), None)
             p = self._pass_of(conn, pass_id)
@@ -835,7 +865,7 @@ class CheckpointStore:
                             {"confirm": True} if confirm else None)
                 self._reset(conn, p, reset, "input_change", job_id)
                 self._keep(p, name, couple, removed)
-                conn.execute("DELETE FROM pipeline_lock WHERE job_id = ?", (job_id,))
+                self._free_lock(conn, job_id)
         except BaseException:  # the change itself or its recording: the lock must not stay taken
             self.finish(job_id, "error")
             raise
@@ -890,13 +920,34 @@ class CheckpointStore:
                 self._carry_over(conn, p, carry_over, None, self.default_dry_run())
         return {c: p[c] for c in _PASS_COLUMNS}
 
-    def pause(self) -> dict:
+    def pause(self, cause: str = "manual", reason: str | None = None) -> dict:
         """Pauses the active pass: its checkpoints and open forecast run stay as they are, to resume from the Journal."""
         with self._transaction() as conn:
             self._check_lock_free(conn)
             p = self._current(conn)
-            self._set_state(conn, p, "paused", "manual")
+            self._set_state(conn, p, "paused", cause, reason=reason)
         return p
+
+    def leave_mode(self, action: str | None) -> dict | None:
+        """The user leaves the mode served: its active pass is paused or abandoned (`action`), as they chose; a pass
+        lives in one mode. None: no active pass, nothing to do. Without action: ConfirmationRequiredError, nothing done.
+        Refused while a job runs, as pause and abandon are."""
+        with self._transaction() as conn:
+            self._settle(conn)
+            active = self._active(conn)
+        if active is None:
+            return None
+        mode, other = ("test", "production") if self._test_mode() else ("production", "test")
+        if action is None:
+            raise ConfirmationRequiredError(
+                f"Pass {active['id']} ({active['cycle']}) is active in {mode} mode, and a pass lives in one mode: "
+                f"pause it (resume it later in {mode} mode) or abandon it before switching to {other}.",
+                {"pass_id": active["id"], "cycle": active["cycle"], "mode": mode, "to": other,
+                 "actions": ["pause", "abandon"]})
+        reason = f"Mode changed manually by the user: from {mode} to {other}"
+        if action == "pause":
+            return self.pause("mode_change", reason)
+        return self.abandon(active["id"], "mode_change", reason)
 
     def resume(self, pass_id: str) -> dict:
         """Makes a paused pass of the current mode active again; launches go to its month."""
@@ -914,7 +965,7 @@ class CheckpointStore:
             self._set_state(conn, p, "active", "manual")
         return p
 
-    def abandon(self, pass_id: str) -> dict:
+    def abandon(self, pass_id: str, cause: str = "manual", reason: str | None = None) -> dict:
         """Abandons an active or paused pass for good: its open run is abandoned, its files are deleted except the
         reports of its closed runs (its checkpoints and journal stay readable)."""
         with self._transaction() as conn:
@@ -928,7 +979,7 @@ class CheckpointStore:
                 self._event(conn, p, "run_abandoned", "forecast", detail={"couple": run["couple"], "by": "pass_abandoned"})
             if p["state"] == "active":  # the working files are its own
                 self._clear_workdirs()
-            self._set_state(conn, p, "abandoned", "manual")
+            self._set_state(conn, p, "abandoned", cause, reason=reason)
             shutil.rmtree(self._pass_dir(p), ignore_errors=True)
             _clear(self._pass_dir(p, self._output_dir), _is_kept)
         return p
@@ -1121,67 +1172,70 @@ class CheckpointStore:
             rows = self._rows(conn, p["id"]) if p else {}
             run = self._open_run(conn, p["id"]) if p else None
             cycle = p["cycle"] if p else self._target(conn)
-            lock = conn.execute("SELECT job_id, task, acquired_at FROM pipeline_lock").fetchone()
+            lock = self._lock(conn)
         state = progress(rows, run["couple"] if run else None)
         state["cycle"] = cycle
         state["pass"] = p
         state["run"] = run
-        state["lock"] = dict(zip(("job_id", "task", "acquired_at"), lock)) if lock else None
+        state["lock"] = lock
         state["test_mode"] = self._test_mode()
         state["dry_run"] = self.default_dry_run()  # DRYRUN of a launch that does not choose (the pass switch starts on it)
         return state
 
-    # --- test mode (TEST_MODE) ---------------------------------------------------------------
+    # --- lock -------------------------------------------------------------------------------
 
-    def set_mode(self, test_mode: bool) -> dict:
-        """Switches TEST_MODE (where the pipeline state lives; DRYRUN, .env, stays as it is). Refused while a job runs.
-
-        Leaving test mode pauses the active test pass: all test state stays in Redis, to resume in test mode.
-        """
-        current = self._test_mode()
-        if test_mode == current:
-            return {"test_mode": current}
-        if current:  # test -> production
-            with self._memory_transaction() as conn:
-                self._check_lock_free(conn)
-                if active := self._active(conn):
-                    self._set_state(conn, active, "paused", "test_exit")
-        with self._file_transaction() as conn:
-            if not current:
-                self._check_lock_free(conn)
-            # A production fact (production paused or resumed): in the active production pass, if any.
-            self._event(conn, self._pass_of(conn, None), "mode_changed", detail={"to": "test" if test_mode else "production"})
-            self._set_test_mode(test_mode)
-        return {"test_mode": test_mode}
+    def held_lock(self) -> dict | None:
+        """The job holding the lock, both modes': {job_id, task, own}. For the unlock route only, which asks the workers
+        about that job; one of the other mode (own false) is never shown (progress and messages say so, no more)."""
+        with self._transaction() as conn:
+            row = conn.execute(f"SELECT job_id, task FROM {self._lock_table(conn)}").fetchone()
+            return {"job_id": row[0], "task": row[1], "own": self._owns(conn, row[0])} if row else None
 
     def release_lock(self, job_id: str | None = None) -> str | None:
-        """Manual unlock (killed worker): its running checkpoint becomes error. Returns the freed job_id.
+        """Manual unlock (killed worker), from either mode: the lock is both modes'. Returns the freed job_id.
 
-        With job_id, only if that job still holds the lock: the one the user was asked about, not a newer one."""
+        The job's running checkpoint becomes error and lock_released is journaled in the job's own mode. With job_id,
+        only if that job still holds the lock: the one the user was asked about, not a newer one."""
         with self._transaction() as conn:
-            row = conn.execute("SELECT job_id, task FROM pipeline_lock").fetchone()
-            if row and job_id not in (None, row[0]):
-                row = None
-            if row:
-                conn.execute("UPDATE checkpoints SET status = 'error', updated_at = ?"
-                             " WHERE job_id = ? AND status = 'running'", (_now(), row[0]))
-                conn.execute("DELETE FROM pipeline_lock WHERE job_id = ?", (row[0],))
-                step, item, pass_id = self._launched(conn, row[0]) or (None, None, None)
-                self._event(conn, self._pass_of(conn, pass_id), "lock_released", step, item, row[0], {"task": row[1]})
-        return row[0] if row else None
+            row = conn.execute(f"SELECT job_id, task FROM {self._lock_table(conn)}").fetchone()
+            if not row or job_id not in (None, row[0]):
+                return None
+            mine = self._owns(conn, row[0])
+        test_mode = self._test_mode() if mine else not self._test_mode()  # a lock without trace: freed as the other's
+        with self._mode_transaction(test_mode) as conn:
+            if not conn.execute(f"SELECT 1 FROM {self._lock_table(conn)} WHERE job_id = ?", (row[0],)).fetchone():
+                return None  # ended meanwhile
+            conn.execute("UPDATE checkpoints SET status = 'error', updated_at = ?"
+                         " WHERE job_id = ? AND status = 'running'", (_now(), row[0]))
+            self._free_lock(conn, row[0])
+            step, item, pass_id = self._launched(conn, row[0]) or (None, None, None)
+            self._event(conn, self._pass_of(conn, pass_id), "lock_released", step, item, row[0], {"task": row[1]})
+        return row[0]
 
     # --- journal ------------------------------------------------------------------------------
 
+    def _mode_journal(self) -> tuple[str, Callable[[], AbstractContextManager[sqlite3.Connection | None]]]:
+        """The current mode and its store: production (SQLite file) or test (Redis blob). A mode never reads the other's."""
+        return ("test", self._test_journal) if self._test_mode() else ("production", self._file_transaction)
+
+    def current_mode(self) -> str:
+        """The current mode: 'production' or 'test' (TEST_MODE)."""
+        return self._mode_journal()[0]
+
+    def has_job(self, job_id: str) -> bool:
+        """Whether the pipeline of the current mode launched this job (its journal names it): never one of the other mode."""
+        _, store = self._mode_journal()
+        with store() as conn:
+            return bool(conn and conn.execute("SELECT 1 FROM pipeline_events WHERE job_id = ? LIMIT 1", (job_id,)).fetchone())
+
     def journal(self, pass_id: str) -> list[dict]:
-        """Events of a pass, oldest first. A pass lives in one store: production (SQLite file) or test (Redis blob)."""
-        events = []
-        for mode, store in (("production", self._file_transaction), ("test", self._test_journal)):
-            with store() as conn:
-                events += self._events(conn, pass_id, mode) if conn else []
-        return events
+        """Events of a pass of the current mode, oldest first; [] for a pass of the other mode, as for an unknown one."""
+        mode, store = self._mode_journal()
+        with store() as conn:
+            return self._events(conn, pass_id, mode) if conn else []
 
     def cycles(self) -> list[dict]:
-        """Every month with passes (and the target month), newest first; each with its passes, newest first.
+        """Every month with passes of the current mode (and the target month), newest first; each with its passes, newest first.
 
         A pass: id, cycle, state, started_at, started_by, mode, events and last_at (mode_changed and
         the availability_* reads left out of both: they measure the pipeline's work, not mode switches or reads).
@@ -1189,12 +1243,11 @@ class CheckpointStore:
         count = ("SELECT pass_id, count(*), max(at) FROM pipeline_events"
                  " WHERE event NOT IN ('mode_changed', 'availability_checked', 'availability_reused')"
                  " AND pass_id IS NOT NULL GROUP BY pass_id")
-        passes = []
-        for mode, store in (("production", self._file_transaction), ("test", self._test_journal)):
-            with store() as conn:
-                stats = {p: (n, at) for p, n, at in conn.execute(count)} if conn else {}
-                passes += [{**p, "mode": mode, **dict(zip(("events", "last_at"), stats.get(p["id"], (0, None))))}
-                           for p in (self._passes(conn) if conn else [])]
+        mode, store = self._mode_journal()
+        with store() as conn:
+            stats = {p: (n, at) for p, n, at in conn.execute(count)} if conn else {}
+            passes = [{**p, "mode": mode, **dict(zip(("events", "last_at"), stats.get(p["id"], (0, None))))}
+                      for p in (self._passes(conn) if conn else [])]
         with self._transaction() as conn:
             target = self._target(conn)
         return [{"cycle": c, "target": c == target,

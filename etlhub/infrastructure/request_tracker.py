@@ -69,13 +69,15 @@ class RequestTracker:
             ).fetchall()
         return {request_id: json.loads(data) for request_id, data in rows}
 
-    def list_recent(self, limit: int = 50, endpoint: str | None = None) -> list[dict]:
+    def list_recent(self, limit: int = 50, endpoint: str | None = None, mode: str | None = None) -> list[dict]:
+        """Newest first. With a mode, only the requests recorded in it (one recorded before the mode was has none)."""
         with closing(self._connect()) as conn:
             rows = conn.execute(
                 "SELECT data FROM request_log"
-                " WHERE :endpoint IS NULL OR instr(url, :endpoint) > 0"
+                " WHERE (:endpoint IS NULL OR instr(url, :endpoint) > 0)"
+                " AND (:mode IS NULL OR json_extract(data, '$.mode') = :mode)"
                 " ORDER BY created_at DESC, rowid DESC LIMIT :limit",
-                {"endpoint": endpoint, "limit": limit},
+                {"endpoint": endpoint, "mode": mode, "limit": limit},
             ).fetchall()
         return [json.loads(r[0]) for r in rows]
 

@@ -14,11 +14,33 @@ def _job(fake, status, message=None):
     fake.data[f"job:{JOB}"] = json.dumps({"job_id": JOB, "status": status, "message": message, "started": "t0"})
 
 
+@pytest.fixture(autouse=True)
+def gate(app):
+    """The pipeline gate of the current mode: it launched JOB unless a test says otherwise."""
+    from types import SimpleNamespace
+    from etlhub.core.dependencies import get_pipeline_gate
+    fake = SimpleNamespace(jobs={JOB})
+    fake.has_job = lambda job_id: job_id in fake.jobs
+    app.dependency_overrides[get_pipeline_gate] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_pipeline_gate, None)
+
+
 def _connect(app):
     return TestClient(app).websocket_connect(f"/api/tracking/etl-logs/{JOB}")
 
 
 def test_unknown_job_is_closed_with_4004(app, fake_ws_redis):
+    with _connect(app) as ws:
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_json()
+    assert closed.value.code == 4004
+
+
+def test_a_job_of_the_other_mode_is_closed_with_4004(app, fake_ws_redis, gate):
+    _job(fake_ws_redis, "running")
+    gate.jobs.clear()  # launched in the other mode
+
     with _connect(app) as ws:
         with pytest.raises(WebSocketDisconnect) as closed:
             ws.receive_json()

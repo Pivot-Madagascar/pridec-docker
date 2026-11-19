@@ -14,6 +14,7 @@ from starlette.requests import HTTPConnection
 
 from etlhub.api.middleware import is_allowed_origin
 from etlhub.core.config import get_settings, split_csv
+from etlhub.core.job_context import pipeline_test_mode
 from etlhub.core.request_context import request_context
 from etlhub.core.dependencies import get_auth_store
 
@@ -122,14 +123,14 @@ def revoke_pat(client: httpx.Client, url: str, uid: str, *, auth: tuple | None =
     return True
 
 
-def user_from_cookies(cookies) -> dict | None:
-    """User of the session cookie, valid only while it belongs to the active DHIS2 token."""
+def session_from_cookies(cookies) -> dict | None:
+    """Session of the cookie ({user, pat_uid, test_mode}), valid only while it belongs to the active DHIS2 token."""
     session_id = cookies.get(SESSION_COOKIE)
     session = get_auth_store().get_session(session_id) if session_id else None
     credential = get_auth_store().get_credential() if session else None
     if not session or not credential or credential["pat_uid"] != session["pat_uid"]:
         return None
-    return session["user"]
+    return session
 
 
 async def get_current_user(connection: HTTPConnection) -> dict:
@@ -138,10 +139,15 @@ async def get_current_user(connection: HTTPConnection) -> dict:
     # CORS does not cover WebSockets: check the origin here (HTTP is checked by check_origin).
     if is_websocket and not is_allowed_origin(connection.headers.get("origin")):
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)  # handshake refused
-    user = await run_in_threadpool(user_from_cookies, connection.cookies)
-    if user is not None:
+    session = await run_in_threadpool(session_from_cookies, connection.cookies)
+    if session is not None:
+        user = session["user"]
+        # The user's mode serves this request (and the jobs it launches); a session from before it had none: test.
+        test_mode = session.get("test_mode", True)
+        pipeline_test_mode.set(test_mode)
         if (context := request_context.get()) is not None:
             context["actor"] = user.get("username")  # the pipeline journal records who acted
+            context["mode"] = "test" if test_mode else "production"  # the request log's mode (middleware)
         return user
     if is_websocket:
         # Accept first: a refused handshake only shows code 1006 to the browser.

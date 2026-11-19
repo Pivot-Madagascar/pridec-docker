@@ -173,3 +173,19 @@ def test_the_scripts_read_the_dryrun_of_their_launch_during_the_job_only(job_sto
 
     assert seen == [chosen]
     assert job_dry_run.get() is None  # after the job: DRYRUN of Redis (.env) again
+
+
+def test_a_job_is_queued_with_the_users_mode_and_served_in_it(monkeypatch, job_store, webhooks):
+    from etlhub.core.job_context import current_test_mode, pipeline_test_mode
+    queued, seen = [], []
+    monkeypatch.setattr(tasks.task_etl, "apply_async", lambda args, kwargs, task_id: queued.append(kwargs))
+    pipeline_test_mode.set(True)  # a test-mode session launches
+
+    tasks.CeleryTaskLauncher().launch("import_gee", "import_gee_1234abcd")
+    assert queued[0]["test_mode"] is True
+
+    monkeypatch.setattr(tasks, "run_etl_job", lambda *a, **kw: seen.append(current_test_mode()))
+    pipeline_test_mode.set(False)  # the worker's own context: production by default in the tests
+    tasks.task_etl.run("import_gee", "import_gee_1234abcd", test_mode=True)
+    assert seen == [True]
+    assert current_test_mode() is False  # reset after the job

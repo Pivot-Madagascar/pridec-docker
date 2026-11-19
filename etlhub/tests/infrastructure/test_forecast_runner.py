@@ -85,3 +85,16 @@ def test_forecast_lines_are_stored_and_published_as_the_container_prints_them(ru
     assert events == [("stored", "one\n"), ("published", "one"), ("stored", "two\n"), ("published", "two"),
                       ("stored", "three\n"), ("published", "three")]
     assert status["status"] == "success" and status["logs"] == "one\ntwo\nthree\n"
+
+
+def test_a_test_mode_forecast_mounts_the_test_folders(runner_env, monkeypatch, job_store):
+    from etlhub.core.job_context import pipeline_test_mode
+    seen = {}
+    monkeypatch.setattr(forecast_runner.subprocess, "Popen", _fake_popen("stop here", 1, lambda cmd, kw: seen.update(cmd=cmd)))
+    pipeline_test_mode.set(True)
+
+    forecast_runner.run_rscript("forecast_test", PARAMS, job_store)
+
+    volumes = [seen["cmd"][i + 1] for i, arg in enumerate(seen["cmd"]) if arg == "-v"]
+    assert volumes == [f"{runner_env}/test/input:/app/input:ro", f"{runner_env}/test/output:/app/output:rw"]
+    assert (runner_env / "test" / "output").is_dir()

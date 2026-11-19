@@ -1,3 +1,4 @@
+from etlhub.domain.interfaces.pipeline_gate import PipelineGate
 from etlhub.domain.interfaces.request_tracker import RequestTrackerProtocol
 from etlhub.domain.interfaces.job_repository import JobRepository
 from etlhub.domain.schemas.tracking import RequestLog, ETLLog
@@ -8,9 +9,13 @@ _UNFINISHED = {"pending", "running"}
 
 
 class TrackingService:
-    def __init__(self, request_tracker: RequestTrackerProtocol, job_repo: JobRepository):
+    """Requests and job logs of the current mode only: what happens in one mode is never readable in the other
+    (404, as for an unknown id)."""
+
+    def __init__(self, request_tracker: RequestTrackerProtocol, job_repo: JobRepository, gate: PipelineGate):
         self._request_tracker = request_tracker
         self._job_repo = job_repo
+        self._gate = gate
 
     def _with_job_status(self, log: dict) -> dict:
         """job_status from the job record (Redis, 24 h): None without a job_id or once it expired.
@@ -21,17 +26,20 @@ class TrackingService:
         return {**log, "job_status": job.get("status") if job else None}
 
     def list_requests(self, limit: int = 50, endpoint: str | None = None) -> list[RequestLog]:
-        logs = (self._with_job_status(log) for log in self._request_tracker.list_recent(limit, endpoint))
+        recent = self._request_tracker.list_recent(limit, endpoint, self._gate.current_mode())
+        logs = (self._with_job_status(log) for log in recent)
         return [RequestLog(**log) for log in logs if log["job_status"] not in _UNFINISHED]
 
     def get_request(self, request_id: str) -> RequestLog:
         log = self._request_tracker.get(request_id)
-        if log is None:
+        if log is None or log.get("mode") != self._gate.current_mode():
             raise JobNotFoundError(f"Request not found: {request_id}")
         return RequestLog(**self._with_job_status(log))
 
     def get_etl_logs(self, job_id: str) -> ETLLog:
         """Logs and, while the job record exists (24 h), its status and message."""
+        if not self._gate.has_job(job_id):
+            raise JobNotFoundError(f"ETL logs not found for this job_id: {job_id}")
         logs = self._job_repo.get_logs(job_id)
         job = self._job_repo.get(job_id) or {}
         if logs is None and not job:

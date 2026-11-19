@@ -1,4 +1,6 @@
 """The pipeline gate seen from the API and from the Celery tasks (real gate, temporary db)."""
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -190,6 +192,23 @@ def test_release_lock_of_a_job_that_may_still_run_asks_for_confirmation(client, 
     assert job_store.get("held")["status"] == "error"
 
 
+def test_release_lock_of_the_other_modes_job_never_names_it(client, lock_held, job_store, checkpoint_store):
+    asked = []
+    lock_held(True)
+    from etlhub.core.dependencies import get_task_launcher
+    client.app.dependency_overrides[get_task_launcher] = lambda: SimpleNamespace(is_active=lambda j: asked.append(j) or True)
+    checkpoint_store.mode["test_mode"] = True  # "held" is a production job; this user is in test mode
+
+    refused = client.delete("/pipeline/lock")
+
+    assert refused.status_code == 409
+    assert refused.json()["impact"] == {"job_id": None, "task": "a job of the other mode", "active": True}
+    assert "held" not in refused.json()["message"] and asked == ["held"]  # the workers are asked about the real job
+    assert client.delete("/pipeline/lock", params={"confirm": True}).json() == {"released": None}  # never named
+    assert client.get("/pipeline/checkpoints").json()["lock"] is None
+    assert job_store.get("held")["status"] == "error"
+
+
 def test_release_lock_without_lock(client, app):
     from etlhub.core.dependencies import get_task_launcher
     app.dependency_overrides[get_task_launcher] = lambda: Liveness(True)
@@ -238,12 +257,56 @@ def test_a_queueing_failure_frees_the_lock(checkpoint_store, monkeypatch, job_st
     assert state["steps"][0]["items"][0]["status"] == "error"
 
 
-def test_mode_switch_through_the_api(client, checkpoint_store):
-    assert client.put("/pipeline/mode", json={"test_mode": True}).json() == {"test_mode": True}
-    _import(checkpoint_store)
+def test_the_mode_is_switched_in_the_callers_session_only(app):
+    from types import SimpleNamespace
+    from etlhub.core.dependencies import get_auth_store
+    sessions = {"mine": False}
 
-    assert client.put("/pipeline/mode", json={"test_mode": False}).json() == {"test_mode": False}  # nothing discarded
-    assert client.get("/pipeline/checkpoints").json()["test_mode"] is False
+    def set_session_mode(session_id, test_mode):
+        return session_id in sessions and not sessions.update({session_id: test_mode})
+
+    app.dependency_overrides[get_auth_store] = lambda: SimpleNamespace(set_session_mode=set_session_mode)
+    try:
+        client = TestClient(app, cookies={"etlhub_session": "mine"})
+        assert client.put("/pipeline/mode", json={"test_mode": True}).json() == {"test_mode": True}
+        assert sessions == {"mine": True}  # this session only: nothing global
+        assert client.put("/pipeline/mode", json={"test_mode": True, "pass_action": "later"}).status_code == 422
+        gone = TestClient(app, cookies={"etlhub_session": "expired"})
+        assert gone.put("/pipeline/mode", json={"test_mode": False}).status_code == 401
+    finally:
+        app.dependency_overrides.pop(get_auth_store, None)
+
+
+def test_switching_mode_mid_pass_asks_first_then_pauses_or_abandons_it(app, checkpoint_store):
+    from etlhub.core.dependencies import get_auth_store
+    sessions = {"mine": False}
+    app.dependency_overrides[get_auth_store] = lambda: SimpleNamespace(
+        set_session_mode=lambda sid, test_mode: not sessions.update({sid: test_mode}))
+    _import(checkpoint_store)  # a production pass is active
+    client = TestClient(app, cookies={"etlhub_session": "mine"})
+    try:
+        asked = client.put("/pipeline/mode", json={"test_mode": True})
+        assert asked.status_code == 409 and asked.json()["code"] == "confirmation_required"
+        assert asked.json()["impact"]["actions"] == ["pause", "abandon"]
+        assert sessions == {"mine": False}  # not switched before the choice
+
+        assert client.put("/pipeline/mode", json={"test_mode": False}).json() == {"test_mode": False}  # same mode: nothing
+        assert client.put("/pipeline/mode", json={"test_mode": True, "pass_action": "abandon"}).json() == {"test_mode": True}
+        assert sessions == {"mine": True}
+        assert checkpoint_store.progress()["pass"]["state"] == "abandoned"
+    finally:
+        app.dependency_overrides.pop(get_auth_store, None)
+
+
+def test_a_request_is_served_in_the_mode_of_its_session(anon_app, monkeypatch, checkpoint_store):
+    from etlhub.api.auth import dhis2_auth
+    from etlhub.core.job_context import current_test_mode
+    seen = []
+    monkeypatch.setattr(checkpoint_store, "_test_mode", lambda: seen.append(current_test_mode()) or current_test_mode())
+    for test_mode in (True, False):
+        monkeypatch.setattr(dhis2_auth, "session_from_cookies",
+                            lambda cookies, t=test_mode: {"user": {"username": "jdoe"}, "test_mode": t})
+        assert TestClient(anon_app).get("/pipeline/checkpoints").json()["test_mode"] is test_mode
 
 
 def test_cycle_choice_through_the_api(client):
@@ -312,7 +375,7 @@ def test_the_journal_csv(journal_client, queue):
 def test_the_logged_in_user_is_the_actor_of_the_events(anon_app, monkeypatch, checkpoint_store):
     from etlhub.api.auth import dhis2_auth
     from etlhub.infrastructure.checkpoint_store import get_checkpoint_store
-    monkeypatch.setattr(dhis2_auth, "user_from_cookies", lambda cookies: {"username": "jdoe"})
+    monkeypatch.setattr(dhis2_auth, "session_from_cookies", lambda cookies: {"user": {"username": "jdoe"}, "test_mode": False})
     checkpoint_store.start("import_gee", "g")
     checkpoint_store.finish("g", "success")
 
