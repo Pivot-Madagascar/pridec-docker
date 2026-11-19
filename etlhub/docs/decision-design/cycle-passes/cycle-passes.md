@@ -77,7 +77,7 @@ Taken on 2026-10-21.
 | P9 | How is a pass started? | **The Dashboard month picker is kept.** It starts a pass, only when no pass is active. **Several passes can be paused at once**, on different months or the same month. |
 | P10 | Pause with a running job or an open forecast run | **Refused while a job runs** (one job at a time). **An open forecast run stays open** in the paused pass and is continued on resume. |
 | P11 | Who may abandon, and can the month be redone after? | **Every logged-in user**, with confirmation. **The month can be redone** in a new pass. |
-| P12 | Automatic pause | **On calendar month change**, only for the pass that **follows the calendar**; a pass started by hand on another month (202504 via the picker) stays active. **On leaving test mode**, the active test pass is paused, its state kept in Redis. |
+| P12 | Automatic pause | **On calendar month change**, only for the pass that **follows the calendar**; a pass started by hand on another month (202504 via the picker) stays active. **On leaving test mode**, the active test pass is paused, its state kept in Redis. **Superseded 2026-11-19**: the mode is per user, nothing is paused when one switches (`mode-isolation/` § 5c). |
 | P13 | Who is attached to a pass, a launch, a run? | **Each one to the logged-in user who triggered it**, visible in the Journal. A pass is started by one user; its launches, runs, decisions, pauses, resumes and abandon can each be done by a different user (2026-10-22). |
 
 ## 5. The model: passes and their states
@@ -254,12 +254,13 @@ Actors: **operator** (logged-in DHIS2 user), **system** (month change, mode chan
 - **Precondition:** production mode; `t1` (test) paused.
 - **Flow:** the operator opens the Journal and looks at `t1`.
 - **Result:** Resume disabled, reason "Test pass: switch to test mode first". The journal stays readable.
+  **Superseded 2026-11-19** (mode isolation): `t1` is not listed in production and its journal reads as empty; see `etlhub/docs/decision-design/mode-isolation/`.
 
 ### UC13 Same month in production and in test
 
 - **Flow:** production pass `p1` on 202504 and test pass `t1` on 202504 exist.
 - **Result:** the Journal shows 202504 with both passes, each marked with its mode. Pausing or abandoning one never
-  touches the other (two stores).
+  touches the other (two stores). **Superseded 2026-11-19** (mode isolation): each mode lists only its own pass; see `etlhub/docs/decision-design/mode-isolation/`.
 
 ### UC14 A job ends after its pass was abandoned
 
