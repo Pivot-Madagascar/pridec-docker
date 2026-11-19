@@ -937,7 +937,7 @@ def test_a_store_keyed_by_month_is_split_into_passes_at_each_cycle_closed(checkp
 
     (line,) = checkpoint_store.migrate()
 
-    assert line.startswith(f"{tmp_path / 'etlhub.db'}: version 0 -> 1, backup ")
+    assert line.startswith(f"{tmp_path / 'etlhub.db'}: version 0 -> 2, backup ")
     (backup,) = tmp_path.glob("etlhub.db.v0-*.bak")
     assert "cycle" in {r[1] for r in sqlite3.connect(backup).execute("PRAGMA table_info(checkpoints)")}
     (cycle,) = [c for c in checkpoint_store.cycles() if c["cycle"] == "202504"]
@@ -966,7 +966,7 @@ def test_a_db_behind_this_code_is_refused_until_migrated_by_hand(checkpoint_stor
     for read in (checkpoint_store.progress, checkpoint_store.check_schema):
         with pytest.raises(SchemaVersionError, match="version 0.*python -m etlhub.migrate"):
             read()
-    assert checkpoint_store.migrate(check=True) == [f"{tmp_path / 'etlhub.db'}: version 0 -> 1"]
+    assert checkpoint_store.migrate(check=True) == [f"{tmp_path / 'etlhub.db'}: version 0 -> 2"]
     assert not list(tmp_path.glob("*.bak"))  # check changes nothing
 
     checkpoint_store.migrate()
@@ -978,11 +978,11 @@ def test_a_db_newer_than_this_code_is_refused_even_by_migrate(checkpoint_store, 
     from etlhub.infrastructure.checkpoint_store import SchemaVersionError
     checkpoint_store.progress()  # a new db: created at SCHEMA_VERSION
     with closing(sqlite3.connect(tmp_path / "etlhub.db")) as db:
-        assert db.execute("PRAGMA user_version").fetchone() == (1,)
-        db.execute("PRAGMA user_version = 2")  # left by a newer etlhub
+        assert db.execute("PRAGMA user_version").fetchone() == (2,)
+        db.execute("PRAGMA user_version = 3")  # left by a newer etlhub
 
     for call in (checkpoint_store.progress, checkpoint_store.migrate):
-        with pytest.raises(SchemaVersionError, match="version 2, newer than this code"):
+        with pytest.raises(SchemaVersionError, match="version 3, newer than this code"):
             call()
 
 
@@ -994,10 +994,84 @@ def test_the_test_mode_db_in_redis_is_migrated_with_its_own_backup(checkpoint_st
 
     (line,) = checkpoint_store.migrate()
 
-    assert line.startswith("the test-mode db (Redis pipeline:dry_run:db): version 0 -> 1")
+    assert line.startswith("the test-mode db (Redis pipeline:dry_run:db): version 0 -> 2")
     (backup,) = tmp_path.glob("test_mode.db.v0-*.bak")
     assert "cycle" in {r[1] for r in sqlite3.connect(backup).execute("PRAGMA table_info(checkpoints)")}
     assert [c["cycle"] for c in checkpoint_store.cycles() if c["passes"]] == ["202504"]
+
+
+# --- migration 2: FOREIGN KEY pass_id -> passes(id) (foreign-keys.md) ----------------------------
+
+_FK_TABLES = ("checkpoints", "forecast_runs", "pipeline_events", "availability_checks")
+
+
+def _v1_db(path, orphan=False):
+    """A db at schema version 1: today's tables without their FOREIGN KEY, external_data still in forecast_runs."""
+    from etlhub.infrastructure.checkpoint_store import _SCHEMA
+    with closing(sqlite3.connect(path)) as db:
+        db.executescript(_SCHEMA.replace(" REFERENCES passes(id)", "") + """
+            ALTER TABLE forecast_runs ADD COLUMN external_data TEXT DEFAULT 'none';
+            PRAGMA user_version = 1;
+            INSERT INTO passes VALUES ('p1', '202611', 'active', '2026-11-01T08:00:00', 'alice');
+            INSERT INTO checkpoints VALUES ('p1', 'data_import', 'import_gee', 'j1', 'success', '2026-11-01T09:00:00');
+            INSERT INTO forecast_runs (pass_id, couple, state, disease_code, ou_level, opened_at)
+                VALUES ('p1', 'ADJ/Malaria', 'open', 'x', '6', '2026-11-01T10:00:00');
+            INSERT INTO pipeline_events (cycle, pass_id, at, event) VALUES
+                ('202611', NULL, '2026-11-01T07:00:00', 'mode_changed'), ('202611', 'p1', '2026-11-01T08:00:00', 'launched');
+            INSERT INTO availability_checks (cycle, pass_id, task, params, checked_at, section)
+                VALUES ('202611', NULL, 'import_gee', '{}', '2026-10-31T08:00:00', '{}');
+        """)
+        if orphan:  # a pass deleted by hand
+            db.execute("INSERT INTO checkpoints VALUES ('gone', 'data_import', 'import_gee', NULL, 'success', 'x')")
+            db.commit()
+
+
+def test_migration_2_adds_the_foreign_keys_and_keeps_every_row(checkpoint_store, tmp_path):
+    db_path = tmp_path / "etlhub.db"
+    _v1_db(db_path)
+
+    (line,) = checkpoint_store.migrate()
+
+    assert line.startswith(f"{db_path}: version 1 -> 2, backup ")
+    (backup,) = tmp_path.glob("etlhub.db.v1-*.bak")
+    with closing(sqlite3.connect(backup)) as db:
+        assert db.execute("PRAGMA foreign_key_list(checkpoints)").fetchall() == []
+    with closing(sqlite3.connect(db_path)) as db:
+        for table in _FK_TABLES:
+            fks = [(r[2], r[3], r[4]) for r in db.execute(f"PRAGMA foreign_key_list({table})")]
+            assert fks == [("passes", "pass_id", "id")], table
+            assert db.execute(f"SELECT count(*) FROM {table}").fetchone() == ((2,) if table == "pipeline_events" else (1,))
+        assert "external_data" not in {r[1] for r in db.execute("PRAGMA table_info(forecast_runs)")}
+        indexes = {name for (name,) in db.execute("SELECT name FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL")}
+        assert indexes >= {"one_active_pass", "ix_checkpoints_job_id", "one_open_run_per_pass", "ix_pipeline_events_pass",
+                           "ix_pipeline_events_job_id", "ix_availability_checks"}
+        assert db.execute("SELECT id, event FROM pipeline_events ORDER BY id").fetchall() == [
+            (1, "mode_changed"), (2, "launched")]  # the journal keeps its ids...
+        new = db.execute("INSERT INTO pipeline_events (cycle, at, event) VALUES ('202611', 'x', 'e')").lastrowid
+        assert new == 3  # ...and goes on after them
+        assert not any(name.endswith("_v1") for (name,) in db.execute("SELECT name FROM sqlite_master"))
+    assert checkpoint_store.migrate() == []
+
+
+def test_migration_2_refuses_an_orphan_row_and_leaves_the_db_at_version_1(checkpoint_store, tmp_path):
+    _v1_db(tmp_path / "etlhub.db", orphan=True)
+
+    with pytest.raises(sqlite3.IntegrityError, match="checkpoints"):
+        checkpoint_store.migrate()
+
+    with closing(sqlite3.connect(tmp_path / "etlhub.db")) as db:
+        assert db.execute("PRAGMA user_version").fetchone() == (1,)
+        assert db.execute("PRAGMA foreign_key_list(checkpoints)").fetchall() == []
+        assert db.execute("SELECT count(*) FROM checkpoints").fetchone() == (2,)
+
+
+@pytest.mark.parametrize("test_mode", [False, True])
+def test_the_store_refuses_a_row_whose_pass_does_not_exist(checkpoint_store, test_mode):
+    checkpoint_store.mode["test_mode"] = test_mode
+
+    with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+        with checkpoint_store._transaction() as conn:
+            conn.execute("INSERT INTO checkpoints VALUES ('nope', 'data_import', 'import_gee', NULL, 'success', 'x')")
 
 
 def test_test_mode_starts_from_dryrun_once_then_is_independent(monkeypatch):

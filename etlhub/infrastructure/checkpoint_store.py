@@ -37,7 +37,7 @@ _PASSES = """CREATE TABLE IF NOT EXISTS passes (
 _SCHEMA = _PASSES + """;
 CREATE UNIQUE INDEX IF NOT EXISTS one_active_pass ON passes(state) WHERE state = 'active';
 CREATE TABLE IF NOT EXISTS checkpoints (
-    pass_id    TEXT NOT NULL,
+    pass_id    TEXT NOT NULL REFERENCES passes(id),
     step       TEXT NOT NULL,
     item       TEXT NOT NULL,
     job_id     TEXT,
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS pipeline_lock (
     acquired_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS forecast_runs (
-    pass_id       TEXT NOT NULL,
+    pass_id       TEXT NOT NULL REFERENCES passes(id),
     couple        TEXT NOT NULL,
     state         TEXT NOT NULL,
     disease_code  TEXT NOT NULL,
@@ -79,14 +79,14 @@ CREATE TABLE IF NOT EXISTS pipeline_events (  -- the journal: appended in the tr
     actor      TEXT,
     request_id TEXT,
     detail     TEXT,
-    pass_id    TEXT  -- NULL: a mode_changed with no active pass
+    pass_id    TEXT REFERENCES passes(id)  -- NULL: a mode_changed with no active pass
 );
 CREATE INDEX IF NOT EXISTS ix_pipeline_events_pass ON pipeline_events(pass_id, id);
 CREATE INDEX IF NOT EXISTS ix_pipeline_events_job_id ON pipeline_events(job_id);
 CREATE TABLE IF NOT EXISTS availability_checks (  -- sections of GET /import_availability, shared by the cycle's users
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     cycle          TEXT NOT NULL,
-    pass_id        TEXT,  -- NULL: checked before the month's first launch
+    pass_id        TEXT REFERENCES passes(id),  -- NULL: checked before the month's first launch
     task           TEXT NOT NULL,
     params         TEXT NOT NULL,  -- JSON of what the section checked: dhis_url, task, elements, periods, org_units
     checked_at     TEXT NOT NULL,  -- when the check started, local time like pipeline_events.at
@@ -319,6 +319,7 @@ class CheckpointStore:
             if data:
                 conn.deserialize(data)
             self._check_schema(conn, _BLOB)  # a failure saves nothing: the blob is set at the end
+            conn.execute("PRAGMA foreign_keys = ON")  # off by default, per connection, ignored inside a transaction
             conn.execute("BEGIN")
             try:
                 yield conn
@@ -335,6 +336,7 @@ class CheckpointStore:
         with closing(sqlite3.connect(self._db_path, timeout=5, isolation_level=None)) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             self._check_schema(conn, str(self._db_path))
+            conn.execute("PRAGMA foreign_keys = ON")  # off by default, per connection, ignored inside a transaction
             conn.execute("BEGIN IMMEDIATE")
             try:
                 yield conn
@@ -525,10 +527,35 @@ class CheckpointStore:
                                                        (run["opened_at"],)).fetchone()):
                 self._reset(conn, p, list(run_items(run["couple"])), "pass_folders")
 
+    def _migration_2(self, conn: sqlite3.Connection, uploads: Path) -> None:
+        """FOREIGN KEY pass_id -> passes(id) on the 4 tables that carry it (2026-11-18, foreign-keys.md).
+
+        SQLite cannot add a constraint to a table: each one is renamed, created again from _SCHEMA and filled back
+        (migrate() keeps foreign_keys off, as SQLite's table rebuild procedure asks). A row whose pass does not exist
+        fails the migration: nothing changes. forecast_runs.external_data (dbs from before 2026-10-12, unused) is dropped.
+        """
+        tables = ("checkpoints", "forecast_runs", "pipeline_events", "availability_checks")
+        for (index,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL"
+                                     f" AND tbl_name IN ({', '.join('?' * len(tables))})", tables).fetchall():
+            conn.execute(f"DROP INDEX {index}")  # _SCHEMA creates them again on the new tables
+        for table in tables:
+            conn.execute(f"ALTER TABLE {table} RENAME TO {table}_v1")
+        # Not executescript: it would commit the caller's transaction. ";\n" ends a statement (comments hold "; ").
+        for statement in _SCHEMA.split(";\n"):
+            conn.execute(statement)
+        for table in tables:
+            columns = ", ".join(r[1] for r in conn.execute(f"PRAGMA table_info({table})"))
+            conn.execute(f"INSERT INTO {table} ({columns}) SELECT {columns} FROM {table}_v1")
+            conn.execute(f"DROP TABLE {table}_v1")
+        if orphans := conn.execute("PRAGMA foreign_key_check").fetchall():
+            raise sqlite3.IntegrityError(
+                f"{len(orphans)} row(s) refer to a pass that does not exist (table, rowid): "
+                f"{[(t, rowid) for t, rowid, *_ in orphans[:10]]}; fix them, then run python -m etlhub.migrate again")
+
     # Schema migrations (docs/decision-design/db-migrations/db-migrations.md): MIGRATIONS[i] takes a db from version i
     # to i + 1, applied by hand only (migrate()). Never edit a released one: a change to _SCHEMA ships with a new
     # migration and its test on a db of the previous version.
-    MIGRATIONS = (_migration_1,)
+    MIGRATIONS = (_migration_1, _migration_2)
 
     def _check_schema(self, conn: sqlite3.Connection, where: str) -> None:
         """A new db gets the schema at SCHEMA_VERSION; any other one must already be at it: nothing migrates here."""

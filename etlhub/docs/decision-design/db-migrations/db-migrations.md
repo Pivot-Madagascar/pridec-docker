@@ -67,3 +67,4 @@ A change to `_SCHEMA` (table, column, index) ships in the same commit with:
 | Version | Date | Change |
 |---|---|---|
 | 1 | 2026-10-22, 2026-10-27 | month-keyed store → passes; `uploads/` → pass folders (numbered on 2026-11-04) |
+| 2 | 2026-11-18 | `FOREIGN KEY pass_id → passes(id)` on `checkpoints`, `forecast_runs`, `pipeline_events`, `availability_checks` (tables rebuilt; `forecast_runs.external_data` dropped); `PRAGMA foreign_keys = ON` in the store's transactions. See `../foreign-keys/foreign-keys.md` |
