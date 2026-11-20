@@ -16,12 +16,11 @@ export async function getImportAvailability(refresh = false): Promise<ImportAvai
 
 // POST /<task> (or /forecast/ with {}: etlhub's ForecastParams defaults are the files written by validate_inputs): 202 with a job_id for Celery jobs, 200 for post_forecast and update_key.
 // The X-Request-ID (a UUID) becomes the request_id etlhub tracks: GET /api/tracking/requests/{requestId} finds this launch.
-// dryRun: the pass switch, sent with every launch; etlhub reads it for the jobs that write to DHIS2 only (others ignore it).
+// No dry_run: a job takes the DRYRUN fixed by its pass when it started (etlhub refuses another one).
 export type LaunchedJob = { jobId: string | null; requestId: string }
-export async function launchJob(task: string, confirm = false, dryRun?: boolean): Promise<LaunchedJob> {
+export async function launchJob(task: string, confirm = false): Promise<LaunchedJob> {
   const requestId = crypto.randomUUID()
-  const params = { ...withConfirm(confirm)?.params, ...(dryRun === undefined ? {} : { dry_run: dryRun }) }
-  const config = { params, headers: { 'X-Request-ID': requestId } }
+  const config = { params: withConfirm(confirm)?.params ?? {}, headers: { 'X-Request-ID': requestId } }
   const response =
     task === 'forecast'
       ? await api.post('/forecast/', {}, config)
@@ -83,9 +82,11 @@ export async function pausePass(): Promise<void> {
 }
 
 // POST /pipeline/passes: starts a new pass on the target month at once (409 confirmation_required after a complete
-// or paused pass of that month: the paused one stays paused).
-export async function startPass(confirm = false): Promise<void> {
-  await api.post('/pipeline/passes', undefined, withConfirm(confirm))
+// or paused pass of that month: the paused one stays paused). Fixed for the whole pass (pass-config.md): geeVariables,
+// what its import_gee imports (400 if empty or unknown), and dryRun (undefined: etlhub's default); etlhub also fixes
+// PARENT_OU, LOG_LEVEL and the DHIS2 URL of the login.
+export async function startPass(confirm = false, geeVariables: string[], dryRun?: boolean): Promise<void> {
+  await api.post('/pipeline/passes', { gee_variables: geeVariables, dry_run: dryRun }, withConfirm(confirm))
 }
 
 // POST /pipeline/passes/{id}/resume: a paused pass of the current mode becomes active again.

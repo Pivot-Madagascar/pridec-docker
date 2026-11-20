@@ -65,7 +65,7 @@ describe('usePipeline', () => {
 
     expect(await launch('import_gee', 'Import GEE')).toBe(true)
 
-    expect(launchJob).toHaveBeenCalledWith('import_gee', false, undefined) // state not read yet: etlhub's default
+    expect(launchJob).toHaveBeenCalledWith('import_gee', false) // no dry_run: etlhub applies the pass's
     expect(followJob).toHaveBeenCalledWith('Import GEE', 'import_gee_1')
     expect(showNotification).not.toHaveBeenCalled()
     expect(addActivity).not.toHaveBeenCalled() // the 202 is not an activity
@@ -102,7 +102,7 @@ describe('usePipeline', () => {
     expect(showNotification).not.toHaveBeenCalledWith(expect.anything(), 'error')
 
     expect(await confirm()).toBe(true)
-    expect(launchJob).toHaveBeenLastCalledWith('import_gee', true, true) // the dry_run of the state read meanwhile
+    expect(launchJob).toHaveBeenLastCalledWith('import_gee', true)
     expect(pending.value).toBeNull()
   })
 
@@ -130,18 +130,15 @@ describe('usePipeline', () => {
     expect(getCheckpoints).toHaveBeenCalledTimes(3)
   })
 
-  it('keeps the DRYRUN switch for the cycle and mode, and sends it with every launch', async () => {
+  it('shows the DRYRUN fixed by the pass, else etlhub\'s default, and never sends it with a launch', async () => {
     launchJob.mockResolvedValue({ jobId: null, requestId: 'req-1' })
-    const { launch, refresh, dryRun, setDryRun, state } = usePipeline(addActivity)
+    const { launch, refresh, dryRun, state } = usePipeline(addActivity)
     await refresh()
-    expect(dryRun.value).toBe(true) // etlhub's default
+    expect(dryRun.value).toBe(true) // no pass yet: etlhub's default
 
-    setDryRun(false)
+    state.value = { ...STATE, pass: { id: 'p1', dry_run: false } } as typeof state.value
+    expect(dryRun.value).toBe(false) // fixed when the pass started
     await launch('import_gee', 'Import GEE')
-    expect(launchJob).toHaveBeenLastCalledWith('import_gee', false, false)
-    expect(usePipeline(addActivity).dryRun.value).toBeUndefined() // another page: kept, read once its state loads
-
-    state.value = { ...STATE, cycle: '202611' } as typeof state.value
-    expect(dryRun.value).toBe(true) // another cycle starts on the default
+    expect(launchJob).toHaveBeenLastCalledWith('import_gee', false)
   })
 })

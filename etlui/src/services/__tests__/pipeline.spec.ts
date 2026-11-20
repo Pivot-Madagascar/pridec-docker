@@ -51,15 +51,6 @@ describe('pipeline service', () => {
     expect(post).toHaveBeenNthCalledWith(2, '/import_gee', undefined, { ...CONFIRM, headers: { 'X-Request-ID': expect.any(String) } })
   })
 
-  it('sends the pass DRYRUN switch as dry_run (etlhub uses it for the jobs writing to DHIS2)', async () => {
-    post.mockResolvedValue({ data: { job_id: 'import_gee_1' } })
-
-    await pipeline.launchJob('import_gee', true, false)
-
-    expect(post).toHaveBeenCalledWith('/import_gee', undefined,
-      { params: { confirm: true, dry_run: false }, headers: { 'X-Request-ID': expect.any(String) } })
-  })
-
   it('launches the forecast on /forecast/ with the etlhub default paths', async () => {
     post.mockResolvedValue({ data: { job_id: 'forecast_1' } })
 
@@ -145,6 +136,14 @@ describe('cycle journal', () => {
 
     expect(post.mock.calls).toEqual([
       ['/pipeline/passes/current/pause'], ['/pipeline/passes/3f9c1a2b/resume'], ['/pipeline/passes/3f9c1a2b/abandon']])
+  })
+
+  it('starts a pass with its fixed GEE variables and DRYRUN in the body, confirm in the query', async () => {
+    post.mockResolvedValue({ data: { id: '3f9c1a2b', state: 'active' } })
+
+    await pipeline.startPass(true, ['v1', 'v3'], false)
+
+    expect(post).toHaveBeenCalledWith('/pipeline/passes', { gee_variables: ['v1', 'v3'], dry_run: false }, { params: { confirm: true } })
   })
 })
 

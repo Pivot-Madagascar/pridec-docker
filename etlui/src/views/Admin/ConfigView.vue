@@ -20,8 +20,7 @@ const form = ref({
   parent_ou: '',
   ou_level: '' as number | string | null,
   disease_code: '',
-  log_level: '',
-  gee_variables: ''
+  log_level: ''
 })
 const showSuccess = ref(false)
 
@@ -33,8 +32,7 @@ const fillForm = () => {
     parent_ou: config.parent_ou || '',
     ou_level: config.ou_level ?? '',
     disease_code: config.disease_code || '',
-    log_level: config.log_level || '',
-    gee_variables: config.gee_variables || ''
+    log_level: config.log_level || ''
   }
 }
 
@@ -49,9 +47,7 @@ const handleSave = async () => {
     parent_ou: form.value.parent_ou || null,
     ou_level: form.value.ou_level ? Number(form.value.ou_level) : null,
     disease_code: form.value.disease_code || null,
-    log_level: (form.value.log_level || null) as ConfigUpdate['log_level'],
-    // '' is sent as is: it means all GEE variables
-    gee_variables: form.value.gee_variables.trim()
+    log_level: (form.value.log_level || null) as ConfigUpdate['log_level']
   }
   await configStore.updateConfig(payload)
   flashSuccess()
@@ -145,15 +141,13 @@ const handleReload = async () => {
         </Select>
       </div>
 
-      <div class="form-group">
-        <Label for="gee_variables">GEE variables</Label>
-        <Input
-          id="gee_variables"
-          v-model="form.gee_variables"
-          type="text"
-          pattern="[A-Za-z0-9_]+( *, *[A-Za-z0-9_]+)*"
-          placeholder="Empty = all variables (comma-separated names)"
-        />
+      <!-- Read only, from pridec_gee: each pass chooses its own on Home when it starts. -->
+      <div class="form-group" data-test="gee-variables">
+        <Label>GEE variables available</Label>
+        <ul class="list-inside list-disc font-mono text-xs text-muted-foreground">
+          <li v-for="name in configStore.config?.gee_variables ?? []" :key="name">{{ name }}</li>
+        </ul>
+        <p class="hint">From pridec_gee. Each pass chooses its own on Home, when it starts.</p>
       </div>
 
       <p class="hint">Values are reset from .env each time etlhub starts.</p>

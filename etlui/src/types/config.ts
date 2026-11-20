@@ -7,13 +7,13 @@ export interface ConfigResponse {
   ou_level: number | null
   disease_code: string | null
   log_level: LogLevel | null
-  // Comma-separated GEE variable names; '' or null = all available variables.
-  gee_variables: string | null
+  // Read only: every GEE variable of pridec_gee. A pass chooses its own when it starts (Home).
+  gee_variables: string[]
 }
 
 export const LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'] as const
 export type LogLevel = (typeof LOG_LEVELS)[number]
 
 export type ConfigUpdate = Partial<
-  Pick<ConfigResponse, 'parent_ou' | 'ou_level' | 'disease_code' | 'log_level' | 'gee_variables'>
+  Pick<ConfigResponse, 'parent_ou' | 'ou_level' | 'disease_code' | 'log_level'>
 >

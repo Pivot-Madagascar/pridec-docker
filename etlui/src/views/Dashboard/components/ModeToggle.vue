@@ -1,6 +1,6 @@
 <template>
-  <!-- Before step 1: the user's mode (their session on the server; other users keep theirs). DRYRUN: the pass switch
-       (dryRunEditable, Dashboard), sent with each launch; etlhub's default is true in test mode, else DRYRUN of .env. -->
+  <!-- Before step 1: the user's mode (their session on the server; other users keep theirs). DRYRUN: chosen for a new
+       pass on Home (dryRunEditable), then fixed for the pass; etlhub's default is true in test mode, else DRYRUN of .env. -->
   <section class="mode-toggle" :class="{ 'is-test': testMode }">
     <div class="mode-text">
       <span class="mode-label">Test mode</span>
@@ -53,7 +53,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 defineProps<{
   testMode: boolean | undefined // unknown until the first read of the state
   dryRun: boolean | undefined
-  dryRunEditable?: boolean // the pass switch (Dashboard); read only elsewhere
+  dryRunEditable?: boolean // a new pass's choice (Home); read only elsewhere
   disabled?: boolean
 }>()
 

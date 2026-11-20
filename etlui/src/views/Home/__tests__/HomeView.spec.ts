@@ -21,7 +21,7 @@ vi.mock('@/services/config', () => ({
   configService: {
     get: vi.fn().mockResolvedValue({
       dhis_url: 'https://dhis2.example', has_dhis_token: true, dhis_token_expires_at: null, parent_ou: 'OU_PARENT',
-      ou_level: 5, disease_code: 'MAL', log_level: 'INFO', gee_variables: ''
+      ou_level: 5, disease_code: 'MAL', log_level: 'INFO', gee_variables: ['v1', 'v2', 'v3']
     })
   }
 }))
@@ -125,9 +125,62 @@ describe('HomeView', () => {
     await startButton(wrapper).trigger('click')
     await flushPromises()
     expect(setCycle).toHaveBeenCalledWith('202609')
-    expect(startPass).toHaveBeenCalledWith(false)
+    expect(startPass).toHaveBeenCalledWith(false, ['v1', 'v2', 'v3'], true)
     expect(resumePass).not.toHaveBeenCalled()
     expect(push).toHaveBeenCalledWith({ name: 'Dashboard' })
+  })
+
+  it('a new pass imports the GEE variables left checked; a paused one keeps its own', async () => {
+    getCycles.mockResolvedValue([{ cycle: '202610', target: true, passes: [
+      { ...pass('pppp1111', '202610', 'paused'), gee_variables: 'v1,v3' }, pass('oooo0000', '202610', 'paused')] }])
+    startPass.mockResolvedValue(undefined)
+    const wrapper = await mountPage()
+    await closeCycleDialog(wrapper)
+
+    // The paused pass is chosen first: its own variables, no checkbox
+    expect(wrapper.find('[data-test="gee-choice"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('GEE_VARIABLESv1, v3')
+    await wrapper.find('[role="radio"][value="oooo0000"]').trigger('click') // started by a launch: all of them
+    expect(wrapper.text()).toContain('GEE_VARIABLESall available variables')
+
+    await wrapper.find('[role="radio"][value="new"]').trigger('click')
+    await flushPromises()
+    const boxes = wrapper.findAll('[data-test="gee-choice"] [role="checkbox"]')
+    expect(boxes.map(b => b.attributes('aria-checked'))).toEqual(['true', 'true', 'true']) // all by default
+    await boxes[1].trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('GEE_VARIABLESv1, v3')
+    await boxes[0].trigger('click')
+    await boxes[2].trigger('click')
+    await flushPromises()
+    expect(startButton(wrapper).attributes('disabled')).toBeDefined() // none left
+    await boxes[2].trigger('click')
+    await flushPromises()
+
+    await startButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(startPass).toHaveBeenCalledWith(false, ['v3'], true)
+  })
+
+  it('a new pass fixes the DRYRUN chosen here; a paused pass shows the configuration it started with', async () => {
+    getCycles.mockResolvedValue([{ cycle: '202610', target: true, passes: [{ ...pass('pppp1111', '202610', 'paused'),
+      gee_variables: null, parent_ou: 'OU_FIXED', log_level: 'DEBUG', dry_run: false, dhis_url: 'https://old.dhis2' }] }])
+    startPass.mockResolvedValue(undefined)
+    const wrapper = await mountPage()
+    await closeCycleDialog(wrapper)
+
+    // Resume: its own values, not today's Admin Config or login; no DRYRUN switch
+    for (const value of ['OU_FIXED', 'DEBUG', 'https://old.dhis2', 'No dry run: jobs write to DHIS2']) expect(wrapper.text()).toContain(value)
+    expect(wrapper.find('[data-test="dry-run-btn"]').exists()).toBe(false)
+
+    await wrapper.find('[role="radio"][value="new"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('OU_PARENT') // a new pass fixes today's values
+    await wrapper.findAll('[data-test="dry-run-btn"]').find(b => b.text() === 'NO')!.trigger('click')
+    await flushPromises()
+    await startButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(startPass).toHaveBeenCalledWith(false, ['v1', 'v2', 'v3'], false)
   })
 
   it('starts a new pass beside a paused one after the confirm, then goes to the forecast page', async () => {
@@ -148,7 +201,7 @@ describe('HomeView', () => {
     await wrapper.find('[data-test="impact-dialog"] [role="checkbox"]').trigger('click') // the impact is read
     await wrapper.findAll('button').find(b => b.text() === 'Confirm')!.trigger('click')
     await flushPromises()
-    expect(startPass).toHaveBeenLastCalledWith(true)
+    expect(startPass).toHaveBeenLastCalledWith(true, ['v1', 'v2', 'v3'], true)
     expect(resumePass).not.toHaveBeenCalled()
     expect(push).toHaveBeenCalledWith({ name: 'Dashboard' })
   })
@@ -200,7 +253,7 @@ describe('HomeView', () => {
     expect(wrapper.find('[data-test="pass-choice"] [role="radio"][value="new"]').attributes('data-state')).toBe('checked') // kept on the page
     await startButton(wrapper).trigger('click')
     await flushPromises()
-    expect(startPass).toHaveBeenCalledWith(false)
+    expect(startPass).toHaveBeenCalledWith(false, ['v1', 'v2', 'v3'], true)
     expect(resumePass).not.toHaveBeenCalled()
   })
 

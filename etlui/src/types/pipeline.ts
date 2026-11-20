@@ -44,6 +44,12 @@ export interface Pass {
   state: PassState
   started_at: string
   started_by: string | null // DHIS2 username, 'worker' or 'system'
+  // Fixed when it started (etlhub pass-config.md); all null for a pass from before 2026-11-20.
+  gee_variables: string | null // comma-separated; null: every variable
+  parent_ou: string | null
+  log_level: string | null
+  dry_run: boolean | null
+  dhis_url: string | null
 }
 
 export interface Checkpoints {

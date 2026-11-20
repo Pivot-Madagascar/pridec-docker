@@ -29,7 +29,9 @@
     </div>
 
     <!-- The mode first: it decides which passes exist (a pass lives in one mode). -->
-    <ModeToggle :test-mode="state?.test_mode" :dry-run="dryRun" :disabled="busy" @change="changeMode" />
+    <!-- DRYRUN: chosen here for a new pass, fixed for it; a paused pass shows its own. -->
+    <ModeToggle :test-mode="state?.test_mode" :dry-run="passDryRun" :dry-run-editable="choice === 'new'" :disabled="busy"
+      @change="changeMode" @dry-run="value => (dryRunChoice = value)" />
 
     <div v-if="chosen" class="flex items-center gap-2 text-sm font-medium text-foreground">
       Cycle
@@ -39,6 +41,18 @@
     <p v-if="!state" class="text-sm text-muted-foreground">Loading the pipeline state…</p>
     <form v-else class="space-y-6" @submit.prevent="start">
       <ReusePassChoice />
+
+      <!-- A new pass chooses the GEE variables its Import GEE imports, fixed for the pass; a resumed one keeps its own. -->
+      <fieldset v-if="choice === 'new'" class="space-y-2 text-sm text-foreground" data-test="gee-choice">
+        <legend class="mb-2 font-semibold">GEE variables of this pass</legend>
+        <div class="grid gap-1 sm:grid-cols-2">
+          <Label v-for="name in available" :key="name" class="font-mono text-xs font-normal">
+            <Checkbox :model-value="geeChosen.includes(name)" @update:model-value="toggleGee(name, $event === true)" />
+            {{ name }}
+          </Label>
+        </div>
+        <p v-if="!geeChosen.length" class="text-xs text-destructive">Choose at least one variable.</p>
+      </fieldset>
 
       <div>
         <h2 class="mb-2 text-sm font-semibold text-foreground">Parameters of this pass</h2>
@@ -50,13 +64,13 @@
           </template>
         </dl>
         <p class="mt-2 text-xs text-muted-foreground">
-          Values now. PARENT_OU, GEE_VARIABLES and LOG_LEVEL are edited in Admin Config and apply to the launches after the change;
-          DRYRUN: the Dry run switch of the Forecast page (by default on in test mode, else the root .env).
+          Fixed for the whole pass when it starts: a later change in Admin Config, of DRYRUN or of the DHIS2 login applies
+          to the next pass only (a launch from a session on another DHIS2 is refused). A resumed pass keeps its own values.
         </p>
       </div>
 
       <div class="flex justify-end">
-        <Button type="submit" size="lg" :disabled="busy">Start</Button>
+        <Button type="submit" size="lg" :disabled="busy || (choice === 'new' && !geeChosen.length)">Start</Button>
       </div>
     </form>
     <!-- Closing it any way keeps the month shown: it stays editable at the top of the page. -->
@@ -67,7 +81,7 @@
             <DialogTitle>Choose the mode, then the cycle</DialogTitle>
             <DialogDescription>Test or production first, then the month of the pass. Both stay editable at the top of the page.</DialogDescription>
           </DialogHeader>
-          <ModeToggle :test-mode="state?.test_mode" :dry-run="dryRun" :disabled="busy" @change="changeMode" />
+          <ModeToggle :test-mode="state?.test_mode" :dry-run="passDryRun" :disabled="busy" @change="changeMode" />
           <div class="flex items-center gap-2 text-sm font-medium">
             Cycle
             <CyclePicker v-model="month" />
@@ -95,13 +109,14 @@ import { usePipeline } from '@/composables/usePipeline'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useConfigStore } from '@/stores/config'
 
 const router = useRouter()
 const [DefinePassChoice, ReusePassChoice] = createReusableTemplate()
-const { state, busy, pending, dryRun, refresh, setCycle, setMode, resume, startPass, confirm, cancel } = usePipeline(() => {}) // no Recent Activity on this page
+const { state, busy, pending, refresh, setCycle, setMode, resume, startPass, confirm, cancel } = usePipeline(() => {}) // no Recent Activity on this page
 const { cycles, loadCycles } = useJournal()
 const configStore = useConfigStore()
 
@@ -127,22 +142,41 @@ const askCycle = computed(() => !chosen.value && state.value != null && state.va
 watch(paused, list => { choice.value = list[0]?.id ?? 'new' })
 
 const passLabel = computed(() => (choice.value === 'new' ? 'new pass' : `resume ${choice.value}`))
+
+// Every variable of pridec_gee (GET /api/config), all chosen by default.
+const available = computed(() => configStore.config?.gee_variables ?? [])
+const geeChosen = ref<string[]>([])
+watch(available, list => { geeChosen.value = [...list] }, { immediate: true })
+const toggleGee = (name: string, on: boolean) => {
+  geeChosen.value = on ? [...geeChosen.value, name] : geeChosen.value.filter(v => v !== name)
+}
+// The paused pass to resume: its configuration, fixed when it started (null for a pass from before 2026-11-20).
+const resumed = computed(() => paused.value.find(p => p.id === choice.value) ?? null)
+// What the pass imports: the choice of a new pass, or the one a paused pass keeps (null: all).
+const geeShown = computed(() => {
+  if (!resumed.value) return geeChosen.value.length === available.value.length ? 'all available variables' : geeChosen.value.join(', ')
+  return resumed.value.gee_variables?.split(',').join(', ') ?? 'all available variables'
+})
+// DRYRUN of a new pass: the user's choice, else etlhub's default (true in test mode, else DRYRUN of .env).
+const dryRunChoice = ref<boolean | null>(null)
+const passDryRun = computed(() => (resumed.value ? resumed.value.dry_run : dryRunChoice.value) ?? state.value?.dry_run)
 const parameters = computed(() => {
   const config = configStore.config
   return [
     ['Cycle', monthName(cycle.value)],
     ['Pass', passLabel.value],
     ['Mode', state.value?.test_mode ? 'test (kept apart from production)' : 'production'],
-    ['DHIS2 writes', dryRun.value ? 'Dry run: nothing is written (switch on the Forecast page)' : 'No dry run: jobs write to DHIS2'],
-    ['DHIS2', config?.dhis_url ?? '-'],
-    ['PARENT_OU', config?.parent_ou ?? '-'],
-    ['GEE_VARIABLES', config?.gee_variables || 'all available variables'],
-    ['LOG_LEVEL', config?.log_level ?? '-'],
+    ['DHIS2 writes', passDryRun.value ? 'Dry run: nothing is written' : 'No dry run: jobs write to DHIS2'],
+    ['DHIS2', resumed.value?.dhis_url ?? config?.dhis_url ?? '-'],
+    ['PARENT_OU', resumed.value?.parent_ou ?? config?.parent_ou ?? '-'],
+    ['GEE_VARIABLES', geeShown.value || '-'],
+    ['LOG_LEVEL', resumed.value?.log_level ?? config?.log_level ?? '-'],
     ['OU_LEVEL, DISEASE_CODE', 'set by each forecast run, opened on the forecast page']
   ]
 })
 
 const changeMode = async (testMode: boolean) => {
+  dryRunChoice.value = null // the default follows the mode
   await setMode(testMode)
   await loadCycles() // leaving test mode pauses the active test pass
 }
@@ -153,7 +187,7 @@ async function start(): Promise<void> {
   const ok =
     choice.value !== 'new'
       ? await resume(choice.value)
-      : (cycle.value === state.value?.cycle || (await setCycle(cycle.value))) && (await startPass())
+      : (cycle.value === state.value?.cycle || (await setCycle(cycle.value))) && (await startPass(geeChosen.value, passDryRun.value))
   if (ok) await router.push({ name: 'Dashboard' })
 }
 

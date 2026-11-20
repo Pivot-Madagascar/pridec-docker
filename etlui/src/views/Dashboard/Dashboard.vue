@@ -57,7 +57,8 @@
       </div>
 
       <!-- Before step 1: the mode applies to the whole cycle. -->
-      <ModeToggle :test-mode="state?.test_mode" :dry-run="dryRun" dry-run-editable :disabled="busy" @change="setMode" @dry-run="setDryRun" />
+      <!-- DRYRUN is the pass's, fixed when it started on Home: read only here. -->
+      <ModeToggle :test-mode="state?.test_mode" :dry-run="dryRun" :disabled="busy" @change="setMode" />
 
       <div v-if="state?.lock" class="lock-banner" role="status">
         <span>Running: <strong>{{ state.lock.task }}</strong><template v-if="state.lock.job_id"> ({{ state.lock.job_id }})</template> since {{ state.lock.acquired_at }}. One job at a time, both modes.</span>
@@ -68,6 +69,10 @@
           <div class="action-grid">
             <ActionCard v-for="card in cards('data_import')" :key="card.key" :action="card" @action-click="launchItem" />
           </div>
+          <!-- Chosen on Home when the pass started, fixed for it: what Import GEE imports. -->
+          <p v-if="state?.pass" class="gee-note" data-test="pass-gee">
+            Import GEE: {{ state.pass.gee_variables?.split(',').join(', ') ?? 'all available variables' }}
+          </p>
           <div class="imports-approval" data-test="imports-approval">
             <span class="approval-text">
               Imports approval: <strong :class="`status-${approveImports?.status ?? 'pending'}`">{{ approveImports?.status ?? 'pending' }}</strong>
@@ -231,7 +236,7 @@ const accordionItems = [
 
 const { activityLog, addActivity } = useActivityLog()
 const {
-  state, serverFiles, defaults, busy, pending, dryRun, setDryRun, refresh, confirm, cancel,
+  state, serverFiles, defaults, busy, pending, dryRun, refresh, confirm, cancel,
   launch, openRun, abandonRun, decide, decideImports, skipAlerts, setMode, upload, remove, useDefault,
   pause, abandonPass
 } = usePipeline(addActivity)
@@ -388,6 +393,12 @@ onMounted(refresh)
 
 .pass-actions {
   @apply mt-3 flex flex-col gap-2;
+}
+
+.gee-note {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
 }
 
 .paused-note {

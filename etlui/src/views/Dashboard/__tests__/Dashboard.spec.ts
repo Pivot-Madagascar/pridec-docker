@@ -236,6 +236,18 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
+  it('shows the GEE variables the pass chose for Import GEE', async () => {
+    const wrapper = await mountPage()
+    expect(wrapper.find('[data-test="pass-gee"]').text()).toBe('Import GEE: all available variables') // started by a launch
+    wrapper.unmount()
+
+    getCheckpoints.mockResolvedValue(state({ pass: { id: '3f9c1a2b', cycle: '202610', state: 'active', started_at: 't',
+      started_by: 'jdoe', gee_variables: 'v1,v3' } }))
+    const chosen = await mountPage()
+    expect(chosen.find('[data-test="pass-gee"]').text()).toBe('Import GEE: v1, v3')
+    chosen.unmount()
+  })
+
   it('sends a paused cycle to the Journal, without the pass buttons', async () => {
     getCheckpoints.mockResolvedValue(state({ pass: { id: '3f9c1a2b', cycle: '202610', state: 'paused', started_at: 't', started_by: 'jdoe' } }))
     const wrapper = await mountPage()
@@ -260,21 +272,17 @@ describe('Dashboard', () => {
 
     await gee.trigger('click')
     await flushPromises()
-    expect(launchJob).toHaveBeenCalledWith('import_gee', false, true) // the pass switch: etlhub's default dry_run
+    expect(launchJob).toHaveBeenCalledWith('import_gee', false)
     wrapper.unmount()
   })
 
-  it('sends the Dry run switch of the pass with the next launches', async () => {
-    launchJob.mockResolvedValue({ jobId: null, requestId: 'r' })
+  it('shows the DRYRUN fixed by the pass, read only', async () => {
+    getCheckpoints.mockResolvedValue(state({ pass: { id: '3f9c1a2b', cycle: '202610', state: 'active', started_at: 't',
+      started_by: 'jdoe', dry_run: false } }))
     const wrapper = await mountPage()
 
-    await wrapper.findAll('[data-test="dry-run-btn"]').find(b => b.text() === 'NO')!.trigger('click')
-    await flushPromises()
-    expect(wrapper.find('[data-test="dry-run-hint"]').text()).toContain('the jobs write to DHIS2')
-
-    await wrapper.findAll('[data-test="action-card"]').find(c => c.text().includes('Import GEE'))!.trigger('click')
-    await flushPromises()
-    expect(launchJob).toHaveBeenCalledWith('import_gee', false, false)
+    expect(wrapper.find('[data-test="dry-run-hint"]').text()).toContain('the jobs write to DHIS2') // not .env's default
+    expect(wrapper.find('[data-test="dry-run-btn"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -295,7 +303,7 @@ describe('Dashboard', () => {
     await dialog.find('[role="checkbox"]').trigger('click')
     await confirmButton.trigger('click')
     await flushPromises()
-    expect(launchJob).toHaveBeenLastCalledWith('import_gee', true, true)
+    expect(launchJob).toHaveBeenLastCalledWith('import_gee', true)
     wrapper.unmount()
   })
 
@@ -444,7 +452,7 @@ describe('Dashboard', () => {
     expect(launchButtons).toHaveLength(1) // only what etlhub marks launchable
     await launchButtons[0].trigger('click')
     await flushPromises()
-    expect(launchJob).toHaveBeenCalledWith('fetch_disease', false, true)
+    expect(launchJob).toHaveBeenCalledWith('fetch_disease', false)
     wrapper.unmount()
   })
 
