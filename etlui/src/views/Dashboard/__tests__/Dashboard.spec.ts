@@ -14,6 +14,8 @@ const abandonPass = vi.fn()
 const apiGet = vi.fn()
 const applyDefaultFile = vi.fn()
 const getImportAvailability = vi.fn()
+const push = vi.fn()
+vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 vi.mock('@/services/pipeline', () => ({
   getCheckpoints: (...args: unknown[]) => getCheckpoints(...args),
   launchJob: (...args: unknown[]) => launchJob(...args),
@@ -184,6 +186,7 @@ describe('Dashboard', () => {
   })
 
   it('while a pass is active, pauses or abandons it from the left panel, under Recent Activity', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] }) // the 2 s screen before Home; flushPromises keeps its real setImmediate
     pausePass.mockResolvedValue({})
     abandonPass.mockResolvedValue({})
     const wrapper = await mountPage()
@@ -199,14 +202,37 @@ describe('Dashboard', () => {
 
     await wrapper.findAll('button').find(b => b.text() === 'Pause the cycle')!.trigger('click')
     await flushPromises()
+    expect(pausePass).not.toHaveBeenCalled() // a confirmation first
+    await wrapper.findAll('button').find(b => b.text() === 'Pause')!.trigger('click')
+    await flushPromises()
     expect(pausePass).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-test="leaving-screen"]').text()).toContain('Cycle paused. Back to Home')
+    expect(push).not.toHaveBeenCalled() // not before the 2 s
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(push).toHaveBeenLastCalledWith({ name: 'Home' })
 
+    push.mockClear()
     await wrapper.findAll('button').find(b => b.text() === 'Abandon the cycle')!.trigger('click')
     await flushPromises()
     expect(abandonPass).not.toHaveBeenCalled() // a confirmation first
     await wrapper.findAll('button').find(b => b.text() === 'Abandon')!.trigger('click')
     await flushPromises()
     expect(abandonPass).toHaveBeenCalledWith('3f9c1a2b')
+    expect(wrapper.find('[data-test="leaving-screen"]').text()).toContain('Cycle abandoned.')
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(push).toHaveBeenLastCalledWith({ name: 'Home' })
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
+  it('stays on the page when the pause fails', async () => {
+    pausePass.mockRejectedValue(new Error('boom'))
+    const wrapper = await mountPage()
+    await wrapper.findAll('button').find(b => b.text() === 'Pause the cycle')!.trigger('click')
+    await wrapper.findAll('button').find(b => b.text() === 'Pause')!.trigger('click')
+    await flushPromises()
+    expect(push).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-test="leaving-screen"]').exists()).toBe(false)
     wrapper.unmount()
   })
 

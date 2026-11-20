@@ -6,7 +6,7 @@
         <RecentActivity :activityLog="activityLog" class="shadow-lg" />
         <!-- Under Recent Activity: stop the cycle for now (resumed from the Journal), or for good. -->
         <div v-if="active" class="pass-actions">
-          <Button variant="outline" :disabled="busy || state?.lock != null" @click="pause">Pause the cycle</Button>
+          <Button variant="outline" :disabled="busy || state?.lock != null" @click="pendingPause = true">Pause the cycle</Button>
           <Button variant="destructive" :disabled="busy || state?.lock != null" @click="pendingAbandon = true">
             Abandon the cycle
           </Button>
@@ -153,6 +153,16 @@
     </ConfirmDialog>
 
     <ConfirmDialog
+      :open="pendingPause"
+      title="Pause this cycle?"
+      confirm-label="Pause"
+      @confirm="confirmPause"
+      @cancel="pendingPause = false"
+    >
+      The cycle {{ state?.cycle }} (pass {{ state?.pass?.id }}) stops for now. It can be resumed later from Home or the Journal.
+    </ConfirmDialog>
+
+    <ConfirmDialog
       :open="pendingAbandon"
       title="Abandon this cycle?"
       confirm-label="Abandon"
@@ -173,6 +183,9 @@
       Nothing is published. Its steps go back to "To do", including those already done; the input files are kept.
       The cycle goes on, and this run can be opened again later, from the start. The journal records the abandon.
     </ConfirmDialog>
+
+    <!-- After a pause or an abandon: a short screen before Home (leaveForHome). -->
+    <LoadingScreen v-if="leaving" data-test="leaving-screen">{{ leaving }} Back to Home…</LoadingScreen>
   </SideLayout>
 </template>
 
@@ -182,6 +195,9 @@ import { pointTo } from '@/utils/attention'
 import type { RunFocus } from '@/views/Dashboard/components/runs'
 import SideLayout from '@/components/SideLayout.vue'
 import { computed, nextTick, ref, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import LoadingScreen from '@/components/LoadingScreen.vue'
+import { skipNextRouteLoading } from '@/router/loading'
 
 import Accordion from '@/views/Dashboard/components/Accordion.vue'
 import ActionCard from '@/views/Dashboard/components/ActionCard.vue'
@@ -259,6 +275,7 @@ const showReportModal = ref(false)
 const reportRun = ref<{ source: string; disease: string } | null>(null)
 const validating = ref(false) // opened by "Read and approve": Approve / Reject under the report
 const pendingDelete = ref<InputName | null>(null)
+const pendingPause = ref(false)
 const pendingAbandon = ref(false)
 const pendingRunAbandon = ref(false)
 
@@ -294,9 +311,25 @@ const confirmDelete = async () => {
   if (name) await remove(name)
 }
 
+// Once the pass is paused or abandoned, nothing is left to do here: back to Home, to start or resume a pass.
+const router = useRouter()
+const LEAVE_MS = 2000
+const leaving = ref<string | null>(null)
+const leaveForHome = async (message: string) => {
+  leaving.value = message
+  await new Promise(resolve => setTimeout(resolve, LEAVE_MS))
+  skipNextRouteLoading() // its own 2 s screen replaces the 1 s between pages
+  await router.push({ name: 'Home' })
+}
+
+const confirmPause = async () => {
+  pendingPause.value = false
+  if (await pause()) await leaveForHome('Cycle paused.')
+}
+
 const confirmAbandon = async () => {
   pendingAbandon.value = false
-  if (state.value?.pass) await abandonPass(state.value.pass.id)
+  if (state.value?.pass && (await abandonPass(state.value.pass.id))) await leaveForHome('Cycle abandoned.')
 }
 
 const confirmRunAbandon = async () => {

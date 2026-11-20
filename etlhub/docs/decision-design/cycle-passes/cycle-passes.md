@@ -374,7 +374,7 @@ target: `_settle()`, run by every request, pauses the active pass once its month
 `?pass_id=` (was `?cycle=`), so does the run report. `PUT /pipeline/mode` lost `confirm`: nothing is discarded any more.
 
 **etlui.** (Since 2026-10-26 the month picker is on Home, `/`, with "New pass" / "Resume paused pass" and the pass's parameters; the Dashboard moved to `/forecast` and only shows the cycle.) Dashboard: the pass and its starter on the Cycle line, the month picker disabled while a pass is active,
-"Pause the cycle" and "Abandon the cycle" (confirm dialog) after System Update. Journal (`?pass=<id>`): months with
+"Pause the cycle" and "Abandon the cycle" (each with a confirm dialog, then back to Home `/` on success) after System Update. Journal (`?pass=<id>`): months with
 their passes, Resume and Abandon on a paused pass, Resume disabled with the reason while another pass of its mode is
 active; the mode filter is gone (a pass lives in one mode).
 

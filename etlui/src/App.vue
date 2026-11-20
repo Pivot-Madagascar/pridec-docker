@@ -46,6 +46,7 @@
     <main class="main-content">
       <router-view />
     </main>
+    <LoadingScreen v-if="routeLoading">Loading…</LoadingScreen>
   </div>
 </template>
 
@@ -125,6 +126,8 @@ import Drawer from '@/components/Drawer.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import { Toaster } from 'vue3-hot-toast'
 import { Button } from '@/components/ui/button'
+import LoadingScreen from '@/components/LoadingScreen.vue'
+import { routeLoading } from '@/router/loading'
 
 const toasts = ref<HTMLElement>()
 onMounted(() => toasts.value?.showPopover?.()) // without the Popover API the div simply stays in the page

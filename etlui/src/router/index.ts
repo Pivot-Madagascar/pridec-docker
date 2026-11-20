@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { waitBetweenRoutes } from '@/router/loading'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -70,5 +71,7 @@ router.beforeEach((to, _from, next) => {
     next()
   }
 })
+
+router.beforeResolve(waitBetweenRoutes) // 1 s loading screen between two pages (App.vue)
 
 export default router
