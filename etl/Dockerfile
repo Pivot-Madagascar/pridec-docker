@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y git
 COPY requirements.txt .
 
 #for prod
-RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt 
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt --retries 10 --timeout 120 -r requirements.txt
 # RUN pip install --upgrade pip && pip install  -r requirements.txt
 
 WORKDIR /app
