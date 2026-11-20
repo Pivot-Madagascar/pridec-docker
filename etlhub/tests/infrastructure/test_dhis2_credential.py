@@ -62,11 +62,13 @@ def test_editable_keys_come_from_redis_only(monkeypatch):
     monkeypatch.setenv("PARENT_OU", "ou_env")
     monkeypatch.setenv("DRYRUN", "false")
     monkeypatch.setenv("PIVOT_URL", "https://pivot.test")
+    monkeypatch.setenv("GEE_PROJECT", "gee-env")
 
     assert config.get_ou_level() == "5"
     assert config.get_parent_ou() is None  # absent from Redis: the default, not .env
     assert config.get_dry_run() is True
-    assert script_config._get("PIVOT_URL") == "https://pivot.test"  # not editable: the environment
+    assert script_config._get("PIVOT_URL") is None  # editable since 2026-11-20: Redis only
+    assert script_config._get("GEE_PROJECT") == "gee-env"  # not editable: the environment
 
 
 def test_redis_down_fails_the_job_instead_of_using_env(monkeypatch):

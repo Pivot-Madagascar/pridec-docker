@@ -20,7 +20,8 @@ const form = ref({
   parent_ou: '',
   ou_level: '' as number | string | null,
   disease_code: '',
-  log_level: ''
+  log_level: '',
+  pivot_url: ''
 })
 const showSuccess = ref(false)
 
@@ -32,7 +33,8 @@ const fillForm = () => {
     parent_ou: config.parent_ou || '',
     ou_level: config.ou_level ?? '',
     disease_code: config.disease_code || '',
-    log_level: config.log_level || ''
+    log_level: config.log_level || '',
+    pivot_url: config.pivot_url || ''
   }
 }
 
@@ -47,7 +49,8 @@ const handleSave = async () => {
     parent_ou: form.value.parent_ou || null,
     ou_level: form.value.ou_level ? Number(form.value.ou_level) : null,
     disease_code: form.value.disease_code || null,
-    log_level: (form.value.log_level || null) as ConfigUpdate['log_level']
+    log_level: (form.value.log_level || null) as ConfigUpdate['log_level'],
+    pivot_url: form.value.pivot_url || null
   }
   await configStore.updateConfig(payload)
   flashSuccess()
@@ -139,6 +142,19 @@ const handleReload = async () => {
             <SelectItem v-for="level in LOG_LEVELS" :key="level" :value="level">{{ level }}</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <div class="form-group">
+        <Label for="pivot_url">Pivot URL</Label>
+        <Input id="pivot_url" v-model="form.pivot_url" type="url" placeholder="https://… (the Pivot DHIS2 the imports read from)" />
+      </div>
+
+      <!-- PIVOT_TOKEN stays in etlhub's .env: only whether it is set comes to the browser. -->
+      <div class="form-group">
+        <Label>Pivot Token</Label>
+        <p class="token-status" data-test="pivot-token">
+          {{ configStore.config?.has_pivot_token ? 'Set in etlhub (.env)' : 'Missing: set PIVOT_TOKEN in etlhub\'s .env' }}
+        </p>
       </div>
 
       <!-- Read only, from pridec_gee: each pass chooses its own on Home when it starts. -->

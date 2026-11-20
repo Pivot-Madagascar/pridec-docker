@@ -74,7 +74,19 @@ def test_the_scripts_read_the_active_pass_s_gee_variables_never_env_nor_redis(re
     assert config.get_gee_variables() == ["b_2", "c_3"]
 
 
-@pytest.mark.parametrize("payload", [{"log_level": "LOUD"}, {"ou_level": 0}])
+def test_pivot_url_comes_from_the_config_and_the_token_never_leaves_the_environment(redis, client, monkeypatch):
+    from etlhub.application.use_cases import fetch_pivot
+    monkeypatch.setenv("PIVOT_URL", "https://from-env.test")  # ignored under etlhub: Redis only
+    monkeypatch.setattr(fetch_pivot, "PIVOT_TOKEN", "pivot_secret")
+
+    body = client.put("/api/config/", json={"pivot_url": "https://pivot.test/"}).json()
+
+    assert (body["pivot_url"], body["has_pivot_token"]) == ("https://pivot.test/", True)
+    assert "pivot_secret" not in str(body) and "PIVOT_TOKEN" not in redis
+    assert fetch_pivot.pivot_url() == "https://pivot.test"  # what the import jobs use
+
+
+@pytest.mark.parametrize("payload", [{"log_level": "LOUD"}, {"ou_level": 0}, {"pivot_url": "pivot.test"}])
 def test_invalid_values_are_refused(redis, client, payload):
     assert client.put("/api/config/", json=payload).status_code == 422
 

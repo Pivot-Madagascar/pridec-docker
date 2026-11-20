@@ -25,7 +25,7 @@ def fetched(tmp_path, monkeypatch):
 
     monkeypatch.setattr(module, "fetch_pivot_com_etlhub", com)
     monkeypatch.setattr(module, "fetch_pivot_csb_etlhub", csb)
-    monkeypatch.setattr(module, "PIVOT_URL", "http://pivot")
+    monkeypatch.setattr(module, "pivot_url", lambda: "http://pivot")
     monkeypatch.setattr(module, "PIVOT_TOKEN", "t")
     monkeypatch.setattr(module, "get_parent_ou", lambda: "PASS_OU")
     monkeypatch.setattr(module, "setup_logging", lambda: None)
