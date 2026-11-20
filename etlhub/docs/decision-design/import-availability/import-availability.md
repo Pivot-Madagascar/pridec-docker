@@ -71,7 +71,7 @@ sequenceDiagram
 ```
 
 The script reads DHIS2 with **the session's DHIS2 token** (`etlhub/script_config.py`, as every ETL script under etlhub),
-and `PARENT_OU` / `GEE_VARIABLES` from the editable config (Redis). It writes nothing to DHIS2.
+and `PARENT_OU` from the editable config (Redis), `GEE_VARIABLES` from the active pass (since 2026-11-20, `pass-config/`). It writes nothing to DHIS2.
 
 ## 3. What is checked
 
@@ -79,7 +79,7 @@ Same periods and orgUnits as the import scripts (copied in the script, marked `p
 
 | Import | dataElements | Periods | orgUnits |
 |---|---|---|---|
-| `import_gee` | `GEE_VARIABLES` (all by default) | the last 3 full months (`calc_date_range(start_months_ago=3)`) | level 6 under `PARENT_OU` |
+| `import_gee` | `GEE_VARIABLES` of the active pass (all by default) | the last 3 full months (`calc_date_range(start_months_ago=3)`) | level 6 under `PARENT_OU` |
 | `import_pivot_com` | `pridec_historic_COMMalaria`, `_COMRespinf`, `_COMDiarrhea` | `create_period_range(today − 8 months)` | level 6 under `PARENT_OU` |
 | `import_pivot_csb` | `pridec_historic_CSBMalaria`, `_CSBRespinf`, `_CSBDiarrhea` | same | the 21 CSB of the import script |
 

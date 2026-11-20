@@ -68,3 +68,4 @@ A change to `_SCHEMA` (table, column, index) ships in the same commit with:
 |---|---|---|
 | 1 | 2026-10-22, 2026-10-27 | month-keyed store → passes; `uploads/` → pass folders (numbered on 2026-11-04) |
 | 2 | 2026-11-18 | `FOREIGN KEY pass_id → passes(id)` on `checkpoints`, `forecast_runs`, `pipeline_events`, `availability_checks` (tables rebuilt; `forecast_runs.external_data` dropped); `PRAGMA foreign_keys = ON` in the store's transactions. See `../foreign-keys/foreign-keys.md` |
+| 3 | 2026-11-20 | `passes` gets the configuration a pass fixes when it starts: `gee_variables`, `parent_ou`, `log_level`, `dry_run`, `dhis_url` (nullable, `ALTER TABLE ADD COLUMN`; existing passes keep NULL). Moves no file. See `../pass-config/pass-config.md` |

@@ -77,7 +77,7 @@ Taken on 2026-10-21.
 | P9 | How is a pass started? | **The Dashboard month picker is kept.** It starts a pass, only when no pass is active. **Several passes can be paused at once**, on different months or the same month. |
 | P10 | Pause with a running job or an open forecast run | **Refused while a job runs** (one job at a time). **An open forecast run stays open** in the paused pass and is continued on resume. |
 | P11 | Who may abandon, and can the month be redone after? | **Every logged-in user**, with confirmation. **The month can be redone** in a new pass. |
-| P12 | Automatic pause | **On calendar month change**, only for the pass that **follows the calendar**; a pass started by hand on another month (202504 via the picker) stays active. **On leaving test mode**, the active test pass is paused, its state kept in Redis. **Superseded 2026-11-19**: the mode is per user, nothing is paused when one switches (`mode-isolation/` § 5c). |
+| P12 | Automatic pause | **On calendar month change**, only for the pass that **follows the calendar**; a pass started by hand on another month (202504 via the picker) stays active. **On leaving test mode**, the active test pass is paused, its state kept in Redis. **Superseded 2026-11-19**: the mode is per user, nothing is paused when one switches (`mode-isolation/` § 5c). **Superseded 2026-11-20**: a month change pauses nothing either; a pass stays active until the user stops it (`pass-config/`). |
 | P13 | Who is attached to a pass, a launch, a run? | **Each one to the logged-in user who triggered it**, visible in the Journal. A pass is started by one user; its launches, runs, decisions, pauses, resumes and abandon can each be done by a different user (2026-10-22). |
 
 ## 5. The model: passes and their states
