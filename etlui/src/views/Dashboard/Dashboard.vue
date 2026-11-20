@@ -135,6 +135,7 @@
       :can-approve="!busy && state?.lock == null && !!approveImports?.launchable"
       :can-reject="!busy && state?.lock == null && approveImports?.status === 'success'"
       @close="fetched.close"
+      @refresh="fetched.refresh"
       @approve="elements => decideImportsFromApproval('approve', elements)"
       @reject="decideImportsFromApproval('reject')"
     />
@@ -275,7 +276,7 @@ async function goToPosition() {
   pointTo(`[data-section="${SECTIONS[name]}"] [data-item="${item.item}"]`, blink) // approve_imports: its Review and approve button
 }
 const availability = useImportAvailability() // "Details" of Data Import: is the imported data in DHIS2?
-const fetched = useFetchedImports() // "Review and approve": the Pivot elements fetched, to post line by line
+const fetched = useFetchedImports(state) // "Review and approve": the Pivot elements fetched (Pinia), to post line by line
 
 const {
   current: previewCurrent,

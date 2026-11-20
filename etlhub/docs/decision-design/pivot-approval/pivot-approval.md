@@ -15,7 +15,9 @@ check each data element and ask on the terminal before posting a flagged one. et
    mode's `input/temp_fetch` (`test/input/temp_fetch` in test). COM uses the pass's `PARENT_OU`; both read `PIVOT_URL`
    from the editable config (`/api/config`, Redis), `PIVOT_TOKEN` from etlhub's environment. Nothing goes to DHIS2.
 2. `GET /pipeline/imports/fetched`: per import, the elements fetched (rows, flagged, message). etlui's
-   `ImportApprovalDialog` shows one selectable row each; flagged rows start unchecked.
+   `ImportApprovalDialog` shows one selectable row each; flagged rows start unchecked. etlui keeps the answer in
+   Pinia (`stores/fetchedImports.ts`) and asks again only when a Pivot import finishes, the pass or mode changes, or
+   on Refresh.
 3. `POST /pipeline/imports/approve` `{decision: "approve", elements: [...]}`: the item `approve_imports` runs as a
    synchronous job (`AnalyticsService.approve_imports`, as `post_forecast`): lock, pass's DRYRUN, journal `launched` with
    `params: {elements}`, then `post_dataElements` per element; success unlocks `build_analytics`.

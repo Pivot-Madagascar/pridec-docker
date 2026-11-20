@@ -10,6 +10,9 @@
     data-test="approval-dialog"
     @close="emit('close')"
   >
+    <template #actions>
+      <Button variant="outline" size="sm" :disabled="loading" data-test="approval-refresh" @click="emit('refresh')">Refresh</Button>
+    </template>
     <template v-if="imports">
       <p class="approval-meta">
         One line per data element fetched from Pivot in this pass. The checked lines are posted to DHIS2 with the pass's
@@ -81,6 +84,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
+  refresh: []
   approve: [elements: string[]]
   reject: []
 }>()
