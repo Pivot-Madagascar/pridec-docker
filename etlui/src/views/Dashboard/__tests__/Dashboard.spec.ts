@@ -14,6 +14,7 @@ const abandonPass = vi.fn()
 const apiGet = vi.fn()
 const applyDefaultFile = vi.fn()
 const getImportAvailability = vi.fn()
+const getFetchedImports = vi.fn()
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 vi.mock('@/services/pipeline', () => ({
@@ -27,7 +28,8 @@ vi.mock('@/services/pipeline', () => ({
   abandonRun: (...args: unknown[]) => abandonRun(...args),
   pausePass: (...args: unknown[]) => pausePass(...args),
   abandonPass: (...args: unknown[]) => abandonPass(...args),
-  getImportAvailability: (...args: unknown[]) => getImportAvailability(...args)
+  getImportAvailability: (...args: unknown[]) => getImportAvailability(...args),
+  getFetchedImports: (...args: unknown[]) => getFetchedImports(...args)
 }))
 vi.mock('@/services/inputs', () => ({
   getInputFiles: vi.fn().mockResolvedValue({}),
@@ -353,28 +355,42 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
-  it('shows the imports approval as a decision, not a job card, made under the Details report', async () => {
+  it('shows the imports approval as a decision, not a job card, made line by line on the fetched Pivot data', async () => {
     getCheckpoints.mockResolvedValue(state({ steps: [
       { step: 'data_import', done: false, accessible: true, items: [item('import_gee', 'success', true), item('approve_imports', 'pending', true), item('build_analytics')] },
       { step: 'forecast', done: false, accessible: false, items: [] },
       { step: 'system_update', done: false, accessible: false, items: [] }
     ] }))
     decideImports.mockResolvedValue(undefined)
-    getImportAvailability.mockResolvedValue({ dhis_url: 'http://dhis2.test', last_analytics: null, imports: [] })
+    const el = (data_element: string, flagged: boolean) =>
+      ({ data_element, rows: 279, flagged, text: flagged ? null : 'numNA: 0', error: flagged ? '1 orgUnits exceed case threshold' : null })
+    getFetchedImports.mockResolvedValue([
+      { task: 'import_pivot_com', elements: [el('pridec_historic_COMMalaria', false), el('pridec_historic_COMRespinf', true)] },
+      { task: 'import_pivot_csb', elements: [] }
+    ])
     const wrapper = await mountPage()
 
     expect(wrapper.findAll('[data-test="action-card"]').map(c => c.text()).some(t => t.includes('approve_imports'))).toBe(false)
-    expect(wrapper.find('[data-test="imports-approval"]').findAll('button').map(b => b.text())).toEqual(['Details']) // moved under the report
-    await wrapper.find('[data-test="imports-approval"] button').trigger('click')
+    const buttons = wrapper.find('[data-test="imports-approval"]').findAll('button')
+    expect(buttons.map(b => b.text())).toEqual(['Details', 'Review and approve']) // Details: read only
+    await buttons[1].trigger('click')
     await flushPromises()
-    expect(wrapper.find('[data-test="availability-dialog"]').exists()).toBe(true)
-    const footer = wrapper.find('[data-test="availability-dialog"] [data-test="preview-footer"]')
+
+    const dialog = wrapper.find('[data-test="approval-dialog"]')
+    const row = (name: string) => dialog.find(`tr[data-element="${name}"]`)
+    expect(row('pridec_historic_COMRespinf').text()).toContain('Flagged')
+    expect(row('pridec_historic_COMRespinf').text()).toContain('1 orgUnits exceed case threshold') // the check's message
+    expect(dialog.find('[data-test="approval-empty"]').text()).toContain('Nothing fetched') // CSB
+    const footer = dialog.find('[data-test="preview-footer"]')
     expect(footer.findAll('button').map(b => [b.text(), b.attributes('disabled') !== undefined])).toEqual([
-      ['Reject', true], ['Approve imports', false]]) // nothing approved yet: nothing to reject
-    await footer.findAll('button')[1].trigger('click')
+      ['Reject', true], ['Approve and post 1', false]]) // flagged unchecked; nothing approved yet: nothing to reject
+
+    await row('pridec_historic_COMRespinf').trigger('click') // a whole line selects
+    await row('pridec_historic_COMMalaria').trigger('click') // and unselects
+    await dialog.find('[data-test="approve-imports"]').trigger('click')
     await flushPromises()
-    expect(decideImports).toHaveBeenCalledWith('approve')
-    expect(wrapper.find('[data-test="availability-dialog"]').exists()).toBe(false) // closed before the decision
+    expect(decideImports).toHaveBeenCalledWith('approve', ['pridec_historic_COMRespinf'], false)
+    expect(wrapper.find('[data-test="approval-dialog"]').exists()).toBe(false) // closed before the decision
     wrapper.unmount()
   })
 

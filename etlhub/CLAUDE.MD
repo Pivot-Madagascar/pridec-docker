@@ -20,7 +20,7 @@ Siblings in the repo:
 
 ## Rules
 
-- **Never call real endpoints against a real DHIS2 or the host.** `/import_*`, `/build_analytics`, `/post_forecast`, `/update_key` write to DHIS2. `/forecast/` runs `docker run`. `POST /pipeline/runs` empties `input/` and `output/`. They only need a session, which a logged-in user has. Manual runs need `DRYRUN=true`. Tests use `app.dependency_overrides`, never a real Celery or Redis.
+- **Never call real endpoints against a real DHIS2 or the host.** `/import_gee`, `/build_analytics`, `/post_forecast`, `/update_key` and `POST /pipeline/imports/approve` (approve) write to DHIS2 (`/import_pivot_*` only fetch from Pivot into `input/temp_fetch` since 2026-11-20; the approval posts the elements chosen: `docs/decision-design/pivot-approval/pivot-approval.md`). `/forecast/` runs `docker run`. `POST /pipeline/runs` empties `input/` and `output/`. They only need a session, which a logged-in user has. Manual runs need `DRYRUN=true`. Tests use `app.dependency_overrides`, never a real Celery or Redis.
 - **Never print or copy secrets.** `.env`, `.env.debug` and `.gee-private-key.json` exist locally. Mention variable names only.
 - **The `etlui` contracts are frozen.** `ETLResponse` = `{status, message, job_id, webhook_url}`. `JobStatus` = `{status, job_id, started, completed, logs, message}`. `job_id` = `<task_type>_<uuid4 hex[:8]>`. WebSocket messages: `etl_log_history`, `job_status_update`, `etl_log_entry`, `etl_log_complete`, close code `4004`. Any change must be mirrored in `etlui/src/composables/useWebSocketLogger.ts` and `useEtlPipeline.ts` in the same change.
 - **Respect the architecture below** (hexagonal). Do not mix the layers, even to shorten a diff: ponytail never removes a port or a layer.
@@ -84,7 +84,7 @@ Python 3.12 (use `test-venv`; the system `python3` is 3.11). Run from the repo r
 - Worker: `python -m etlhub.run_celery`
 - Schema migrations (by hand, API and workers stopped): `python -m etlhub.migrate --check`, then `python -m etlhub.migrate`
 - API: `cd etlhub && python -m run_server`
-- Tests: `cd etlhub && ../test-venv/bin/python -m pytest tests -m "not integration"` (345 tests; bare `pytest` works too since `pytest.ini` is read)
+- Tests: `cd etlhub && ../test-venv/bin/python -m pytest tests -m "not integration"` (351 tests; bare `pytest` works too since `pytest.ini` is read)
 - One file: `cd etlhub && ../test-venv/bin/python -m pytest tests/api/test_ingest_router.py`
 - Linter / formatter: none configured. Do not invent one.
 
@@ -112,6 +112,6 @@ Python 3.12 (use `test-venv`; the system `python3` is 3.11). Run from the repo r
 - `etlhub/docs/DEVELOPMENT.md` — measured test, architecture and clean-code state; proposed rules for new code
 - `etlhub/docs/known-issues.md` — security findings, layering violations, dead code, doc errors
 - `etlhub/docs/testing-QA/` — manual test logs: incidents (cause, fix) and testers' notes
-- `etlhub/docs/decision-design/<feature>/` — design and decision docs per feature, implemented or under discussion (`pipeline-checkpoints/`, `pipeline-config/`, `default-input-files/`, `cycle-journal/`, `cycle-passes/`, `import-availability/`, `db-migrations/`, `mode-isolation/`, `pass-config/`)
+- `etlhub/docs/decision-design/<feature>/` — design and decision docs per feature, implemented or under discussion (`pipeline-checkpoints/`, `pipeline-config/`, `default-input-files/`, `cycle-journal/`, `cycle-passes/`, `import-availability/`, `db-migrations/`, `mode-isolation/`, `pass-config/`, `pivot-approval/`)
 - `.claude/skills/etlhub/SKILL.md` — how etlhub is built: architecture, job lifecycle, endpoint and config tables, forecast pipeline
 - `.claude/skills/etlhub-practices/SKILL.md` — how to change it well: templates, missing best practices as small migrations, checklists

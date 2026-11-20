@@ -76,9 +76,10 @@
           <div class="imports-approval" data-test="imports-approval">
             <span class="approval-text">
               Imports approval: <strong :class="`status-${approveImports?.status ?? 'pending'}`">{{ approveImports?.status ?? 'pending' }}</strong>
-              · check the case counts first: COM &lt; 100, CSB under the limit, then approve or reject under the Details
+              · choose the Pivot data elements to post to DHIS2, flagged ones after checking them; Details: what DHIS2 has
             </span>
-            <Button variant="outline" data-item="approve_imports" @click="availability.show()">Details</Button>
+            <Button variant="outline" @click="availability.show()">Details</Button>
+            <Button data-item="approve_imports" @click="fetched.show()">Review and approve</Button>
           </div>
         </template>
 
@@ -123,13 +124,20 @@
       :report="availability.report.value"
       @close="availability.close"
       @refresh="availability.load(true)"
-    >
-      <!-- The imports decision, under the report it is made on: closes it, then sends the decision (as decideFromReport). -->
-      <template #footer>
-        <Button variant="outline" :disabled="busy || state?.lock != null || availability.loading.value || approveImports?.status !== 'success'" @click="decideImportsFromDetails('reject')">Reject</Button>
-        <Button :disabled="busy || state?.lock != null || availability.loading.value || !approveImports?.launchable" @click="decideImportsFromDetails('approve')">Approve imports</Button>
-      </template>
-    </ImportAvailabilityDialog>
+    />
+
+    <!-- The imports decision, line by line: closes the dialog, then sends it (as decideFromReport). -->
+    <ImportApprovalDialog
+      :open="fetched.open.value"
+      :loading="fetched.loading.value"
+      :error="fetched.error.value"
+      :imports="fetched.imports.value"
+      :can-approve="!busy && state?.lock == null && !!approveImports?.launchable"
+      :can-reject="!busy && state?.lock == null && approveImports?.status === 'success'"
+      @close="fetched.close"
+      @approve="elements => decideImportsFromApproval('approve', elements)"
+      @reject="decideImportsFromApproval('reject')"
+    />
 
     <ImpactDialog :pending="pending" :busy="busy" @confirm="confirm" @cancel="cancel" />
 
@@ -214,12 +222,14 @@ import ForecastReportModal from '@/views/Dashboard/components/ForecastReportModa
 import ForecastRuns from '@/views/Dashboard/components/ForecastRuns.vue'
 import ImpactDialog from '@/views/Dashboard/components/ImpactDialog.vue'
 import ImportAvailabilityDialog from '@/views/Dashboard/components/ImportAvailabilityDialog.vue'
+import ImportApprovalDialog from '@/views/Dashboard/components/ImportApprovalDialog.vue'
 import ModeToggle from '@/views/Dashboard/components/ModeToggle.vue'
 import PreviewDialog from '@/views/Dashboard/components/PreviewDialog.vue'
 import RecentActivity from '@/views/Dashboard/components/RecentActivity.vue'
 
 import { useActivityLog } from '@/composables/useActivityLog'
 import { useImportAvailability } from '@/composables/useImportAvailability'
+import { useFetchedImports } from '@/composables/useFetchedImports'
 import { useInputPreview } from '@/composables/useInputPreview'
 import { usePipeline } from '@/composables/usePipeline'
 import { jobOf, labelOf, position, positionItem, step, toCard } from '@/config/pipeline'
@@ -262,9 +272,10 @@ async function goToPosition() {
     return
   }
   await nextTick()
-  pointTo(`[data-section="${SECTIONS[name]}"] [data-item="${item.item}"]`, blink) // approve_imports: its Details button
+  pointTo(`[data-section="${SECTIONS[name]}"] [data-item="${item.item}"]`, blink) // approve_imports: its Review and approve button
 }
 const availability = useImportAvailability() // "Details" of Data Import: is the imported data in DHIS2?
+const fetched = useFetchedImports() // "Review and approve": the Pivot elements fetched, to post line by line
 
 const {
   current: previewCurrent,
@@ -305,9 +316,9 @@ const decideFromReport = async (decision: 'approve' | 'reject') => {
   await decide(decision)
 }
 
-const decideImportsFromDetails = async (decision: 'approve' | 'reject') => {
-  availability.close()
-  await decideImports(decision)
+const decideImportsFromApproval = async (decision: 'approve' | 'reject', elements: string[] = []) => {
+  fetched.close()
+  await decideImports(decision, elements)
 }
 
 const confirmDelete = async () => {

@@ -118,6 +118,18 @@ export interface ElementAvailability {
   analytics_up_to_date: boolean | null // analytics == raw; null if a query failed
   error: string | null
 }
+// GET /pipeline/imports/fetched: what a Pivot import fetched in this pass, one data element per line, to approve.
+export interface FetchedElement {
+  data_element: string // pridec_historic_COMMalaria...
+  rows: number // values fetched (to post)
+  flagged: boolean // the value check failed: empty, missing or negative values, or above the case threshold
+  text: string | null // the check's summary
+  error: string | null // why it is flagged
+}
+export interface FetchedImport {
+  task: string // import_pivot_com, import_pivot_csb
+  elements: FetchedElement[] // only the elements fetched
+}
 export interface ImportAvailability {
   task: string // import_gee, import_pivot_com, import_pivot_csb
   periods: string[]

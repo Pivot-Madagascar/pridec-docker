@@ -855,9 +855,13 @@ class CheckpointStore:
                             (job_id,)).fetchone()
 
     @contextmanager
-    def run(self, task: str, job_id: str, confirm: bool = False, dry_run: bool | None = None) -> Iterator[bool]:
-        """For synchronous work: start, then success or error when the block ends. Yields the job's DRYRUN."""
-        dry_run = self.start(task, job_id, confirm, dry_run=dry_run)
+    def run(self, task: str, job_id: str, confirm: bool = False, dry_run: bool | None = None,
+            params: dict | None = None) -> Iterator[bool]:
+        """For synchronous work: start, then success or error when the block ends. Yields the job's DRYRUN.
+        params: kept in the launched event (approve_imports: the elements posted). Through `carry_over`, which carries
+        nothing here: a launch that starts a pass cannot reach approve_imports (its imports are not done yet)."""
+        dry_run = self.start(task, job_id, confirm, carry_over={task: params} if params is not None else None,
+                             dry_run=dry_run)
         try:
             yield dry_run
         except BaseException:

@@ -15,8 +15,7 @@ from etlhub.domain.interfaces.event_publisher import EventPublisher
 from etlhub.domain.interfaces.job_repository import JobRepository
 from etlhub.application.use_cases.validation_use_cases import validate_input_files
 from etl.scripts.import_gee import import_gee
-from etl.scripts.import_pivot_COM import import_pivot_com
-from etl.scripts.import_pivot_CSB import import_pivot_csb
+from etlhub.application.use_cases.fetch_pivot import import_pivot_com, import_pivot_csb, post_pivot_imports
 from etl.scripts.fetch_pridec_climate import fetch_climate
 from etl.scripts.fetch_pridec_disease import fetch_disease
 from etl.scripts.fetch_pridec_geojson import fetch_geojson
@@ -38,7 +37,7 @@ ETL_JOBS = {
     "validate_inputs": (validate_input_files, "validate inputs"),
 }
 # Run synchronously by the API (AnalyticsService).
-SYNC_JOBS = {"post_forecast": post_forecast, "update_key": update_key}
+SYNC_JOBS = {"post_forecast": post_forecast, "update_key": update_key, "approve_imports": post_pivot_imports}
 
 
 class _JobLogger(io.StringIO):

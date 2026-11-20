@@ -101,7 +101,7 @@ class OpenGate:
         pass
 
     @contextmanager
-    def run(self, task, job_id, confirm=False, dry_run=None):
+    def run(self, task, job_id, confirm=False, dry_run=None, params=None):
         yield self.start(task, job_id, confirm, dry_run=dry_run)
 
     @contextmanager

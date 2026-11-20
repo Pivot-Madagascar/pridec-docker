@@ -32,6 +32,18 @@ describe('pipeline service', () => {
     expect(get).toHaveBeenLastCalledWith('/import_availability', { params: { refresh: true } })
   })
 
+  it('reads the fetched Pivot data and sends the chosen elements in the approve body, confirm in the query', async () => {
+    get.mockResolvedValue({ data: { imports: [{ task: 'import_pivot_com', elements: [] }] } })
+    expect(await pipeline.getFetchedImports()).toEqual([{ task: 'import_pivot_com', elements: [] }])
+    expect(get).toHaveBeenCalledWith('/pipeline/imports/fetched')
+
+    await pipeline.decideImports('approve', ['pridec_historic_CSBMalaria'], true)
+    expect(post).toHaveBeenLastCalledWith('/pipeline/imports/approve',
+      { decision: 'approve', elements: ['pridec_historic_CSBMalaria'] }, CONFIRM)
+    await pipeline.decideImports('reject')
+    expect(post).toHaveBeenLastCalledWith('/pipeline/imports/approve', { decision: 'reject' }, undefined)
+  })
+
   it('reads the state from GET /pipeline/checkpoints', async () => {
     get.mockResolvedValue({ data: { cycle: '202610' } })
 

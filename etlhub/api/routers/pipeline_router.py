@@ -5,11 +5,14 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from etlhub.api.routers import BLOCKED, error_doc
+from etlhub.application.use_cases import fetch_pivot
+from etlhub.application.use_cases.analytics_service import AnalyticsService
+from etlhub.application.use_cases.check_import_availability import COM_ELEMENTS, CSB_ELEMENTS
 from etlhub.application.use_cases.ingestion_service import chosen_gee_variables, current_import_params
 from etlhub.application.use_cases.journal_service import JournalService
 from etlhub.api.auth.dhis2_auth import SESSION_COOKIE
-from etlhub.core.dependencies import (get_auth_store, get_job_repository, get_journal_service, get_pipeline_gate,
-                                      get_task_launcher)
+from etlhub.core.dependencies import (get_analytics_service, get_auth_store, get_job_repository, get_journal_service,
+                                      get_pipeline_gate, get_task_launcher)
 from etlhub.core.job_context import current_test_mode
 from etlhub.domain.interfaces.auth_store import AuthStore
 from etlhub.domain.exceptions import ConfirmationRequiredError
@@ -33,6 +36,11 @@ class RunRequest(BaseModel):
 
 class Decision(BaseModel):
     decision: Literal["approve", "reject"]
+
+
+class ImportsDecision(Decision):
+    elements: list[Literal[*COM_ELEMENTS, *CSB_ELEMENTS]] | None = Field(
+        None, description="approve: the fetched data elements to post (GET /pipeline/imports/fetched); [] posts nothing")
 
 
 class Mode(BaseModel):
@@ -143,18 +151,46 @@ def skip_alerts(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, st
     return {"skipped": f"{gate.skip_alerts()}:calc_orgunit_alerts"}
 
 
+@router.get(
+    "/imports/fetched",
+    summary="The Pivot data fetched in this pass, to approve element by element",
+    description=(
+        "Per Pivot import (import_pivot_com, import_pivot_csb), the data elements its last fetch wrote in this mode's "
+        "input/temp_fetch: rows fetched and the value check (flagged: empty, missing or negative values, or above "
+        "100 cases per fokontany (COM) / 500 per CSB, with its message). Only the elements fetched are listed. Read only."
+    ),
+    responses={200: {"content": {"application/json": {"example": {"imports": [{"task": "import_pivot_com", "elements": [
+        {"data_element": "pridec_historic_COMMalaria", "rows": 279, "flagged": False,
+         "text": "numNA: 0 | minimum value: 0 | maximum value: 36 | negative values: 0 | number of values: 279",
+         "error": None}]}]}}}}},
+)
+def fetched_imports() -> dict:
+    return {"imports": fetch_pivot.fetched_imports()}
+
+
 @router.post(
     "/imports/approve",
-    summary="Approve or reject the imports (step data_import)",
+    summary="Approve the Pivot data elements to post, or reject the imports (step data_import)",
     description=(
-        "After import_pivot_com and import_pivot_csb, check the case counts (COM < 100, CSB < limit). "
-        "approve: approve_imports becomes success and unlocks build_analytics. reject: back to pending."
+        "approve, with `elements` (required, may be empty): the approve_imports job posts those fetched elements to "
+        "DHIS2, synchronously, with the pass's DRYRUN (journal: launched with params {elements}); on success "
+        "approve_imports is success and unlocks build_analytics. An element not fetched in this pass gets 409. "
+        "Again after a success needs confirm=true. reject: approve_imports back to pending, nothing posted."
     ),
-    responses=BLOCKED,
+    responses={200: {"content": {"application/json": {"example": {"decision": "approve",
+                                                                  "job_id": "approve_imports_1a2b3c4d"}}}},
+               422: error_doc("approve without `elements`, or an unknown element", {"detail": "..."}),
+               500: error_doc("A post failed", {"message": "approve_imports failed: ..."}), **BLOCKED},
 )
-def decide_imports(body: Decision, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, str]:
-    gate.decide_imports(body.decision)
-    return {"decision": body.decision}
+# def, not async: the post runs in FastAPI's threadpool (as POST /post_forecast).
+def decide_imports(body: ImportsDecision, confirm: bool = CONFIRM, gate: PipelineGate = Depends(get_pipeline_gate),
+                   service: AnalyticsService = Depends(get_analytics_service)) -> dict[str, str]:
+    if body.decision == "reject":
+        gate.decide_imports("reject")
+        return {"decision": "reject"}
+    if body.elements is None:
+        raise HTTPException(status_code=422, detail="approve needs `elements`: the data elements to post (may be empty)")
+    return {"decision": "approve", "job_id": service.approve_imports(body.elements, confirm).job_id}
 
 
 @router.put(

@@ -1,4 +1,5 @@
 """The pipeline gate seen from the API and from the Celery tasks (real gate, temporary db)."""
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -84,17 +85,84 @@ def test_approve_through_the_api(client, checkpoint_store):
     assert client.post("/pipeline/runs/current/approve", json={"decision": "maybe"}).status_code == 422
 
 
-def test_imports_approval_through_the_api(client, checkpoint_store):
+@pytest.fixture
+def fetched(tmp_path, monkeypatch, checkpoint_store, job_store):
+    """Both Pivot imports done; COMMalaria (flagged) and CSBMalaria fetched; the posts recorded instead of sent."""
+    from etlhub.application.use_cases import fetch_pivot
     for task in ("import_pivot_com", "import_pivot_csb"):
         checkpoint_store.start(task, task)
         checkpoint_store.finish(task, "success")
+    out = tmp_path / "temp_fetch"
+    out.mkdir()
+    for name, flags in (("pridec_historic_COMMalaria", {"text": None, "flagged": True, "error": "too many"}),
+                        ("pridec_historic_CSBMalaria", {"text": "numNA: 0", "flagged": False, "error": None})):
+        (out / f"{name}_fetched.json").write_text(json.dumps({"dataValues": [{"dataElement": name, "value": 5}]}))
+        (out / f"{name}_flags.json").write_text(json.dumps(flags))
+    posts = []
+    monkeypatch.setattr(fetch_pivot, "fetch_dir", lambda: out)
+    monkeypatch.setattr(fetch_pivot, "setup_logging", lambda: None)
+    monkeypatch.setattr(fetch_pivot, "get_dhis_url", lambda: "https://dhis2.test")
+    monkeypatch.setattr(fetch_pivot, "get_dhis_token", lambda: "t")
+    monkeypatch.setattr(fetch_pivot, "post_dataElements", lambda **kw: posts.append(kw) or SimpleNamespace(
+        json=lambda: {"status": "OK", "response": {"status": "SUCCESS", "importCount": {"imported": 1}}}))
+    return posts
 
-    response = client.post("/pipeline/imports/approve", json={"decision": "approve"})
 
-    assert response.json() == {"decision": "approve"}
-    items = client.get("/pipeline/checkpoints").json()["steps"][0]["items"]
-    assert next(i for i in items if i["item"] == "approve_imports")["status"] == "success"
+def _approve_imports(client):
+    return next(i for i in client.get("/pipeline/checkpoints").json()["steps"][0]["items"] if i["item"] == "approve_imports")
+
+
+def test_imports_lists_the_fetched_elements_with_their_check(client, fetched):
+    imports = client.get("/pipeline/imports/fetched").json()["imports"]
+
+    assert [i["task"] for i in imports] == ["import_pivot_com", "import_pivot_csb"]
+    assert imports[0]["elements"] == [{"data_element": "pridec_historic_COMMalaria", "rows": 1, "flagged": True,
+                                       "text": None, "error": "too many"}]  # only what was fetched
+
+
+def test_imports_approval_posts_only_the_chosen_elements_with_the_pass_dry_run(client, checkpoint_store, fetched):
+    response = client.post("/pipeline/imports/approve",
+                           json={"decision": "approve", "elements": ["pridec_historic_CSBMalaria"]})
+
+    assert response.json()["job_id"].startswith("approve_imports_")
+    assert [(p["payload"]["dataValues"][0]["dataElement"], p["dryRun"]) for p in fetched] == [
+        ("pridec_historic_CSBMalaria", True)]
+    assert _approve_imports(client)["status"] == "success"
+    launched = [e for e in checkpoint_store.journal(checkpoint_store.progress()["pass"]["id"])
+                if e["event"] == "launched" and e["item"] == "approve_imports"]
+    assert launched[0]["detail"]["params"] == {"elements": ["pridec_historic_CSBMalaria"]}
+    assert client.post("/pipeline/imports/approve", json={"decision": "approve", "elements": []}).status_code == 409  # confirm
+
+
+def test_imports_approval_refuses_what_cannot_be_posted(client, fetched):
+    def approve(**body):
+        return client.post("/pipeline/imports/approve", json={"decision": "approve", **body})
+
+    assert approve().status_code == 422  # elements required
+    assert approve(elements=["../../etc/passwd"]).status_code == 422
     assert client.post("/pipeline/imports/approve", json={"decision": "maybe"}).status_code == 422
+    assert approve(elements=["pridec_historic_COMRespinf"]).status_code == 409  # not fetched
+    assert (fetched, _approve_imports(client)["status"]) == ([], "pending")
+
+
+def test_imports_approval_with_no_element_posts_nothing_and_reject_undoes_it(client, fetched):
+    assert client.post("/pipeline/imports/approve", json={"decision": "approve", "elements": []}).status_code == 200
+    assert (fetched, _approve_imports(client)["status"]) == ([], "success")
+
+    assert client.post("/pipeline/imports/approve", json={"decision": "reject"}).json() == {"decision": "reject"}
+    assert _approve_imports(client)["status"] == "pending"
+
+
+def test_a_dhis2_import_error_fails_the_approval(client, fetched, monkeypatch):
+    from etlhub.application.use_cases import fetch_pivot
+    monkeypatch.setattr(fetch_pivot, "post_dataElements", lambda **kw: SimpleNamespace(
+        json=lambda: {"status": "ERROR", "message": "conflicts"}))
+
+    response = client.post("/pipeline/imports/approve",
+                           json={"decision": "approve", "elements": ["pridec_historic_CSBMalaria"]})
+
+    assert response.status_code == 500 and "DHIS2 refused pridec_historic_CSBMalaria" in response.json()["message"]
+    assert _approve_imports(client)["status"] == "error"
 
 
 def test_relaunch_of_a_success_returns_the_impact_then_accepts_confirm(client, checkpoint_store, queue):

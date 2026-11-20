@@ -83,12 +83,13 @@ Worth knowing:
 ## 7. Data pipeline
 
 The workflow follows the reference documentation (`pivot_forecast.sh`, 3 phases); `etlui` does not automate it: one step per click, and the pipeline gate enforces the order (see Concurrency below and `docs/decision-design/pipeline-checkpoints/pipeline-checkpoints.md`).
-① imports → `approve_imports` (decision, `POST /pipeline/imports/approve`) → `build_analytics`; ② 9 runs (`config/<disease>` + `external_data/<level>` uploads, `fetch_*` → `validate_inputs` → `forecast` → `calc_orgunit_alerts` (CSB, still 501: no script) → `approve` → `post_forecast`); ③ `build_analytics` → `update_key`. `calc_csb_alerts` is no longer exposed (its script stays in `etl/scripts/`).
+① imports → `approve_imports` (decision per Pivot data element, `POST /pipeline/imports/approve`: its sync job posts the chosen elements to DHIS2) → `build_analytics`; ② 9 runs (`config/<disease>` + `external_data/<level>` uploads, `fetch_*` → `validate_inputs` → `forecast` → `calc_orgunit_alerts` (CSB, still 501: no script) → `approve` → `post_forecast`); ③ `build_analytics` → `update_key`. `calc_csb_alerts` is no longer exposed (its script stays in `etl/scripts/`).
 
 | Step | Reads | Writes | Depends on |
 |---|---|---|---|
 | `import_gee` | GEE (last 3 months) | DHIS2 `dataValueSets` | — |
-| `import_pivot_com`, `import_pivot_csb` | Pivot (8 months) | DHIS2 `dataValueSets` | — |
+| `import_pivot_com`, `import_pivot_csb` | Pivot (8 months; COM under the pass's `PARENT_OU`) | `input/temp_fetch/<dataElement>_{fetched,flags}.json`, **nothing to DHIS2** (since 2026-11-20, `fetch_pivot.py`) | — |
+| `approve_imports` | `input/temp_fetch/<element>_fetched.json` of the elements chosen | DHIS2 `dataValueSets` (pass's DRYRUN) | import_pivot_com, import_pivot_csb |
 | `build_analytics` | — | DHIS2 `resourceTables/analytics` (does not wait for completion; ignores `DRYRUN`) | the imports |
 | `fetch_climate` | DHIS2 `analytics` | `input/climate_data.json` | import_gee, build_analytics |
 | `fetch_disease` | DHIS2 `analytics` (`DISEASE_CODE`) | `input/disease_data.json` | import_pivot_*, build_analytics |

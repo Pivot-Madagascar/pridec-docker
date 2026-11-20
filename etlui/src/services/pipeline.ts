@@ -1,5 +1,7 @@
 import api, { withConfirm } from '@/services/api'
-import type { Checkpoints, Disease, ForecastRun, ImportAvailabilityReport, JournalCycle, JournalEvent, Source } from '@/types/pipeline'
+import type {
+  Checkpoints, Disease, FetchedImport, ForecastRun, ImportAvailabilityReport, JournalCycle, JournalEvent, Source
+} from '@/types/pipeline'
 
 // GET /pipeline/checkpoints: the whole state of the current cycle, in the current mode.
 export async function getCheckpoints(): Promise<Checkpoints> {
@@ -50,9 +52,17 @@ export async function skipAlerts(): Promise<void> {
   await api.post('/pipeline/runs/current/skip_alerts')
 }
 
-// POST /pipeline/imports/approve: approve unlocks build_analytics (step 1), reject sends the approval back to pending.
-export async function decideImports(decision: 'approve' | 'reject'): Promise<void> {
-  await api.post('/pipeline/imports/approve', { decision })
+// GET /pipeline/imports/fetched: per Pivot import, the data elements fetched in this pass with their value check.
+export async function getFetchedImports(): Promise<FetchedImport[]> {
+  const response = await api.get<{ imports: FetchedImport[] }>('/pipeline/imports/fetched')
+  return response.data.imports
+}
+
+// POST /pipeline/imports/approve: approve posts the chosen elements to DHIS2 (synchronous, the pass's DRYRUN; [] posts
+// nothing) and unlocks build_analytics (step 1); reject sends the approval back to pending. Again after a success: 409
+// confirmation_required, resent with confirm=true.
+export async function decideImports(decision: 'approve' | 'reject', elements: string[] = [], confirm = false): Promise<void> {
+  await api.post('/pipeline/imports/approve', decision === 'approve' ? { decision, elements } : { decision }, withConfirm(confirm))
 }
 
 // PUT /pipeline/mode: TEST_MODE, the test passes kept apart (DRYRUN stays the .env's); leaving it pauses the active test pass.

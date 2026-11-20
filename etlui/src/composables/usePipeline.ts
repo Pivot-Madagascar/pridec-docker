@@ -111,7 +111,8 @@ export function usePipeline(addActivity: AddActivity) {
     abandonRun: () => act('Abandon run', () => pipeline.abandonRun()),
     decide: (decision: 'approve' | 'reject') => act(decision === 'approve' ? 'Approve forecast' : 'Reject forecast', () => pipeline.decideRun(decision)),
     skipAlerts: () => act('Skip alert thresholds', () => pipeline.skipAlerts()),
-    decideImports: (decision: 'approve' | 'reject') => act(decision === 'approve' ? 'Approve imports' : 'Reject imports', () => pipeline.decideImports(decision)),
+    decideImports: (decision: 'approve' | 'reject', elements: string[] = []) =>
+      act(decision === 'approve' ? 'Approve imports' : 'Reject imports', c => pipeline.decideImports(decision, elements, c)),
     setMode: (testMode: boolean) => act(testMode ? 'Switch to test mode' : 'Switch to production',
       (_c, choice) => pipeline.setMode(testMode, choice as pipeline.PassAction | undefined)),
     setCycle: (cycle: string | null) => act(`Cycle ${cycle ?? 'of the current month'}`, () => pipeline.setCycle(cycle)),
