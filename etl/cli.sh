@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-COMMAND="$1"
+TASK="$1"
 shift || true  
 
 # Function to print usage/help
@@ -22,6 +22,7 @@ print_usage() {
     echo "  post_forecast        - Post forecast to PRIDE-C instance."
     echo "  build_analytics      - Build the analytics table on PRIDE-C instance. This can take 10-15 minutes."
     echo "  calc_CSB_alerts      - Calculate the number of CSB on alert for this month and post to PRIDE-C instance."
+    echo "  calc_orgUnit_alerts  - Calculate the number of orgUnits on alert and save as output/alerts.json. More generalizable version of calc_CSB_alerts."
     echo "  update_key           - Update the datastore key used to trigger PRIDE-C cache reset every month." 
     echo "                         Run at the end of all updates."
     echo ""
@@ -36,39 +37,39 @@ print_usage() {
     echo "  Individual environmental variables can be specified via --env."
 }
 
-# Show help if no command or -h/--help
-if [ -z "$COMMAND" ] || [ "$COMMAND" = "-h" ] || [ "$COMMAND" = "--help" ]; then
+# Show help if no task or -h/--help
+if [ -z "$TASK" ] || [ "$TASK" = "-h" ] || [ "$TASK" = "--help" ]; then
     print_usage
     exit 0
 fi
 
-case "$COMMAND" in
+case "$TASK" in
 import_gee)
-    python scripts/import_gee.py "$@"
+    PYTHONPATH=/app python -m scripts.import_gee "$@"
     ;;
 
 import_pivot_com)
-    python scripts/import_pivot_COM.py "$@"
+    PYTHONPATH=/app python -m scripts.import_pivot_COM "$@"
     ;;
 
 import_pivot_csb)
-    python scripts/import_pivot_CSB.py "$@"
+    PYTHONPATH=/app python -m scripts.import_pivot_CSB "$@"
     ;;
 
 fetch_climate)
-    python scripts/fetch_pridec_climate.py "$@"
+    PYTHONPATH=/app python -m scripts.fetch_pridec_climate "$@"
     ;;
 
 fetch_disease)
-    python scripts/fetch_pridec_disease.py "$@"
+    PYTHONPATH=/app python -m scripts.fetch_pridec_disease "$@"
     ;;
 
 fetch_geojson)
-    python scripts/fetch_pridec_geojson.py "$@"
+    PYTHONPATH=/app python -m scripts.fetch_pridec_geojson "$@"
     ;;
 
 build_analytics)
-    python scripts/build_analytics.py "$@"
+    PYTHONPATH=/app python -m scripts.build_analytics "$@"
     ;;
 
 validate_inputs)
@@ -76,19 +77,23 @@ validate_inputs)
     ;;
 
 post_forecast)
-    python scripts/post_forecast.py "$@"
+    PYTHONPATH=/app python -m scripts.post_forecast "$@"
     ;;
 
 calc_CSB_alerts)
-    python scripts/calc_CSB_alerts.py "$@"
+    PYTHONPATH=/app python -m scripts.calc_CSB_alerts "$@"
+    ;;
+
+calc_orgUnit_alerts)
+    python scripts/calc_orgUnit_alerts.py "$@"
     ;;
 
 update_key)
-    python scripts/update_pridec_key.py "$@"
+    PYTHONPATH=/app python -m scripts.update_pridec_key "$@"
     ;;
 
 *)
-    echo "Unknown command: $COMMAND"
+    echo "Unknown etl task: $TASK"
     echo ""
     print_usage
     exit 1

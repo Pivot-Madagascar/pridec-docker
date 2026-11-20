@@ -9,7 +9,7 @@ name: pridec
 services:
 
   etl:
-    image: mvevans89/pridec_etl:0.1.0
+    image: mvevans89/pridec_etl:1.0.0
     network_mode: "host"
     env_file:
     - path: ${HOST_PWD:-.}/.env
@@ -35,7 +35,7 @@ services:
        read_only: true
 
   forecast:
-    image: mvevans89/pridec_forecast:0.1.0
+    image: mvevans89/pridec_forecast:1.0.0
     network_mode: "host"
     env_file:
     - path: ${HOST_PWD:-.}/.env
@@ -43,15 +43,15 @@ services:
     cap_add:
       - SYS_NICE  
     volumes:
-     - type: bind
-       source: ${HOST_PWD:-.}/input
-       target: /app/input
-       bind:
+      - type: bind
+        source: ${HOST_PWD:-.}/input
+        target: /app/input
+        bind:
           create_host_path: true
-       read_only: false
-     - type: bind
-       source: ${HOST_PWD:-.}/output
-       target: /app/output
-       bind:
+        read_only: false
+      - type: bind
+        source: ${HOST_PWD:-.}/output
+        target: /app/output
+        bind:
           create_host_path: true
-       read_only: false
+        read_only: false

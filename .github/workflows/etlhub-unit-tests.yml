@@ -1,0 +1,89 @@
+name: ETLHub Unit Tests
+run-name: ETLHub Unit Tests — ${{ github.ref_name }}
+
+on:
+  push:
+    paths:
+      - 'etlhub/**'
+      - '.github/workflows/etlhub-unit-tests.yml'
+  pull_request:
+    paths:
+      - 'etlhub/**'
+      - '.github/workflows/etlhub-unit-tests.yml'
+
+concurrency:
+  group: etlhub-unit-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: Unit tests (etlhub)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+
+    defaults:
+      run:
+        working-directory: etlhub
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('etlhub/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+          pip install pytest-cov
+
+      - name: Run unit tests
+        run: |
+          pytest tests -v -m "not integration" \
+            --junitxml=test-results/junit.xml \
+            --cov=. \
+            --cov-report=xml:test-results/coverage.xml \
+            --cov-report=term
+
+      - name: Debug test artifacts
+        if: always()
+        run: |
+          echo "=== Checking test results directory ==="
+          ls -la test-results/ || echo "test-results directory does not exist"
+          echo "=== Checking for test files ==="
+          find tests -name "*.py" -type f || echo "No test files found"
+          echo "=== Current directory contents ==="
+          ls -la
+
+      - name: Publish test report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: ETLHub Unit Tests Report
+          path: etlhub/test-results/junit.xml
+          reporter: java-junit
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: etlhub-test-results
+          path: |
+            etlhub/test-results/junit.xml
+            etlhub/test-results/coverage.xml
+          retention-days: 14
+          if-no-files-found: ignore

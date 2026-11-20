@@ -1,0 +1,117 @@
+name: ETLHub Integration Tests
+run-name: ETLHub Integration Tests — ${{ github.ref_name }}
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+concurrency:
+  group: etlhub-integration-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-secrets:
+    name: Check DHIS2 secrets & connectivity
+    runs-on: ubuntu-latest
+    environment: init_test
+    outputs:
+      has_secrets: ${{ steps.check.outputs.has_secrets }}
+      dhis2_reachable: ${{ steps.ping.outputs.reachable }}
+    steps:
+      - name: Check secrets
+        id: check
+        env:
+          DHIS_URL: ${{ secrets.DHIS2_URL }}
+          DHIS_TOKEN: ${{ secrets.DHIS2_TOKEN }}
+        run: |
+          if [ -n "$DHIS_URL" ] && [ -n "$DHIS_TOKEN" ]; then
+            echo "has_secrets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_secrets=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ping DHIS2_URL
+        id: ping
+        if: steps.check.outputs.has_secrets == 'true'
+        env:
+          DHIS_URL: ${{ secrets.DHIS2_URL }}
+        run: |
+          # Never log the token here, only testing host reachability.
+          if curl --silent --show-error --fail --max-time 10 \
+              --output /dev/null --write-out "HTTP %{http_code}\n" \
+              "$DHIS_URL/api/system/info"; then
+            echo "reachable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::DHIS_URL ($DHIS_URL) is not reachable from the GitHub Actions runner."
+            echo "reachable=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  integration-tests:
+    name: Integration tests (DHIS2 auth)
+    runs-on: ubuntu-latest
+    environment: init_test
+    needs: check-secrets
+    permissions:
+      contents: read
+      checks: write
+    if: |
+      needs.check-secrets.outputs.has_secrets == 'true' &&
+      needs.check-secrets.outputs.dhis2_reachable == 'true'
+
+    defaults:
+      run:
+        working-directory: etlhub
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-integration-${{ hashFiles('etlhub/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+          pip install pytest-cov
+
+      - name: Run integration tests
+        env:
+          DHIS_URL: ${{ secrets.DHIS2_URL }}
+          DHIS_TOKEN: ${{ secrets.DHIS2_TOKEN }}
+        run: |
+          pytest tests -v -m "integration" \
+            --junitxml=test-results/junit-integration.xml \
+            --cov=. \
+            --cov-report=xml:test-results/coverage-integration.xml
+
+      - name: Publish integration test report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: ETLHub Integration Tests Report
+          path: etlhub/test-results/junit-integration.xml
+          reporter: java-junit
+
+      - name: Upload integration test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: etlhub-integration-test-results
+          path: |
+            etlhub/test-results/junit-integration.xml
+            etlhub/test-results/coverage-integration.xml
+          retention-days: 14
+          if-no-files-found: ignore

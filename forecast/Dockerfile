@@ -1,4 +1,4 @@
-FROM mvevans89/geolight:0.1.0
+FROM mvevans89/geolight:1.0.0
 
 WORKDIR /app
 
