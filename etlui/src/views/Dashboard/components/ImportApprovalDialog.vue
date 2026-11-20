@@ -26,31 +26,47 @@
             <TableRow>
               <TableHead><span class="sr-only">Post</span></TableHead>
               <TableHead>Data element</TableHead>
-              <TableHead>Values</TableHead>
+              <TableHead class="num">Values</TableHead>
+              <TableHead class="num">Min</TableHead>
+              <TableHead class="num">Max</TableHead>
+              <TableHead class="num">Missing</TableHead>
+              <TableHead class="num">Negative</TableHead>
               <TableHead>Check</TableHead>
-              <TableHead>Message</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow
-              v-for="el in imp.elements"
-              :key="el.data_element"
-              :data-element="el.data_element"
-              :data-state="selected.has(el.data_element) ? 'selected' : undefined"
-              class="cursor-pointer"
-              @click="toggle(el.data_element)"
-            >
-              <TableCell @click.stop>
-                <Checkbox :model-value="selected.has(el.data_element)" :aria-label="`Post ${el.data_element}`" @update:model-value="toggle(el.data_element)" />
-              </TableCell>
-              <TableCell class="approval-code">{{ el.data_element }}</TableCell>
-              <TableCell>{{ el.rows }}</TableCell>
-              <TableCell>
-                <span v-if="el.flagged" class="is-flagged">Flagged</span>
-                <span v-else class="is-ok">OK</span>
-              </TableCell>
-              <TableCell class="approval-message" :class="{ 'is-flagged': el.flagged }">{{ el.error ?? el.text ?? '' }}</TableCell>
-            </TableRow>
+            <template v-for="el in imp.elements" :key="el.data_element">
+              <TableRow
+                :data-element="el.data_element"
+                :data-state="selected.has(el.data_element) ? 'selected' : undefined"
+                class="cursor-pointer"
+                @click="toggle(el.data_element)"
+              >
+                <TableCell @click.stop>
+                  <Checkbox :model-value="selected.has(el.data_element)" :aria-label="`Post ${el.data_element}`" @update:model-value="toggle(el.data_element)" />
+                </TableCell>
+                <TableCell class="approval-code">{{ el.data_element }}</TableCell>
+                <TableCell class="num">{{ el.rows }}</TableCell>
+                <template v-if="stats(el.text)">
+                  <TableCell class="num" data-test="stat-min">{{ stats(el.text)!.min }}</TableCell>
+                  <TableCell class="num" data-test="stat-max">{{ stats(el.text)!.max }}</TableCell>
+                  <TableCell class="num" :class="{ 'is-flagged': stats(el.text)!.missing !== '0' }" data-test="stat-missing">{{ stats(el.text)!.missing }}</TableCell>
+                  <TableCell class="num" :class="{ 'is-flagged': stats(el.text)!.negative !== '0' }" data-test="stat-negative">{{ stats(el.text)!.negative }}</TableCell>
+                </template>
+                <!-- Another wording of the check (or no summary): its text as it is. -->
+                <TableCell v-else colspan="4" class="approval-message">{{ el.text ?? '' }}</TableCell>
+                <TableCell>
+                  <span v-if="el.flagged" class="is-flagged">Flagged</span>
+                  <span v-else class="is-ok">OK</span>
+                </TableCell>
+              </TableRow>
+              <TableRow v-if="el.flagged" class="cursor-pointer" data-test="approval-problems" @click="toggle(el.data_element)">
+                <TableCell />
+                <TableCell colspan="7" class="approval-message is-flagged">
+                  <span v-for="problem in checkProblems(el.error)" :key="problem" class="block">↳ {{ problem }}</span>
+                </TableCell>
+              </TableRow>
+            </template>
           </TableBody>
         </Table>
       </section>
@@ -71,6 +87,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { labelOf } from '@/config/pipeline'
 import type { FetchedImport } from '@/types/pipeline'
+import { checkProblems, parseCheckStats as stats } from '@/utils/checkSummary'
 import PreviewDialog from './PreviewDialog.vue'
 
 const props = defineProps<{
@@ -131,6 +148,11 @@ const chosen = () => (props.imports ?? []).flatMap(i => i.elements.map(e => e.da
 
 .approval-code {
   font-family: ui-monospace, monospace;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .approval-message {

@@ -362,8 +362,11 @@ describe('Dashboard', () => {
       { step: 'system_update', done: false, accessible: false, items: [] }
     ] }))
     decideImports.mockResolvedValue(undefined)
-    const el = (data_element: string, flagged: boolean) =>
-      ({ data_element, rows: 279, flagged, text: flagged ? null : 'numNA: 0', error: flagged ? '1 orgUnits exceed case threshold' : null })
+    const text = (max: number) => `numNA: 0 | minimum value: 0 | maximum value: ${max} | negative values: 0 | number of values: 279`
+    const el = (data_element: string, flagged: boolean) => ({
+      data_element, rows: 279, flagged, text: text(flagged ? 164 : 35),
+      error: flagged ? `Potential errors in data to be imported: 1 orgUnits exceed case threshold of 100. ${text(164)}` : null
+    })
     getFetchedImports.mockResolvedValue([
       { task: 'import_pivot_com', elements: [el('pridec_historic_COMMalaria', false), el('pridec_historic_COMRespinf', true)] },
       { task: 'import_pivot_csb', elements: [] }
@@ -379,7 +382,10 @@ describe('Dashboard', () => {
     const dialog = wrapper.find('[data-test="approval-dialog"]')
     const row = (name: string) => dialog.find(`tr[data-element="${name}"]`)
     expect(row('pridec_historic_COMRespinf').text()).toContain('Flagged')
-    expect(row('pridec_historic_COMRespinf').text()).toContain('1 orgUnits exceed case threshold') // the check's message
+    expect(row('pridec_historic_COMRespinf').find('[data-test="stat-max"]').text()).toBe('164') // the check, one column each
+    expect(row('pridec_historic_COMRespinf').text()).not.toContain('numNA')
+    expect(dialog.findAll('[data-test="approval-problems"]').map(r => r.text())).toEqual(
+      ['↳ 1 orgUnits exceed case threshold of 100']) // the flagged line's problem only, the summary not repeated
     expect(dialog.find('[data-test="approval-empty"]').text()).toContain('Nothing fetched') // CSB
     const footer = dialog.find('[data-test="preview-footer"]')
     expect(footer.findAll('button').map(b => [b.text(), b.attributes('disabled') !== undefined])).toEqual([
