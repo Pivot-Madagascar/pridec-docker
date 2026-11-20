@@ -23,10 +23,15 @@ class AnalyticsService:
     def _run(self, task_type: str, message: str, webhook_url: str | None, confirm: bool,
              dry_run: bool | None) -> ETLResponse:
         job_id = f"{task_type}_{uuid.uuid4().hex[:8]}"
-        if task_type == "update_key" and (self._gate.default_dry_run() if dry_run is None else dry_run):
+        fixed = (self._gate.pass_config() or {}).get("dry_run")  # the pass's, fixed when it started (pass-config.md)
+        if dry_run is None:
+            dry_run = self._gate.default_dry_run() if fixed is None else fixed
+        if task_type == "update_key" and dry_run:
             # Before the gate: a refusal writes nothing.
-            raise PipelineBlockedError("update_key cannot run in dry run: pivot_dhis_tools ignores its dryRun and "
-                                       "writes the PRIDE-C key to DHIS2 anyway. Launch it with dry_run=false.")
+            raise PipelineBlockedError(
+                "update_key cannot run in dry run: pivot_dhis_tools ignores its dryRun and writes the PRIDE-C key to "
+                "DHIS2 anyway. " + ("This pass runs in dry run, fixed when it started: only a pass started without dry "
+                                    "run can update the key." if fixed else "Launch it with dry_run=false."))
         with self._gate.run(task_type, job_id, confirm, dry_run) as dry_run:  # PipelineBlockedError propagates as is
             RUNNING_INLINE.add(job_id)
             try:

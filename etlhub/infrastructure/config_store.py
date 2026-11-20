@@ -11,7 +11,8 @@ CONFIG_KEY = "app:config:dynamic"
 # The runtime config of the ETL scripts under etlhub (etlhub/script_config.py reads them here, never from .env).
 # .env holds their defaults: load_env() copies them at each API start and on "Reload from .env".
 # Never a secret: Redis is persisted on disk (AOF).
-EDITABLE_KEYS = ("PARENT_OU", "OU_LEVEL", "DISEASE_CODE", "DRYRUN", "LOG_LEVEL", "GEE_VARIABLES")
+# GEE_VARIABLES is not one since 2026-11-20: each pass chooses its own (script_config._get, pass-config.md).
+EDITABLE_KEYS = ("PARENT_OU", "OU_LEVEL", "DISEASE_CODE", "DRYRUN", "LOG_LEVEL")
 
 class ConfigStore:
     def get_all(self) -> dict:

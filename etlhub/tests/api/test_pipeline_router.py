@@ -412,6 +412,35 @@ def test_a_new_pass_starts_at_once_and_after_a_pause_with_confirm(client, checkp
 
 
 
+def test_a_new_pass_keeps_the_gee_variables_chosen_on_home(client, checkpoint_store, monkeypatch):
+    import sys
+    monkeypatch.setattr(sys.modules["pridec_gee"], "AVAILABLE_VARIABLES", ["a_1", "b_2", "c_3"])  # a MagicMock here
+
+    for chosen, message in (([], "Choose at least one GEE variable"), (["a_1", "nope"], "Unknown GEE variables: nope")):
+        refused = client.post("/pipeline/passes", json={"gee_variables": chosen})
+        assert (refused.status_code, refused.json()["message"]) == (400, message)
+    assert client.get("/pipeline/checkpoints").json()["pass"] is None  # nothing started
+
+    started = client.post("/pipeline/passes", json={"gee_variables": ["c_3", "a_1"]}).json()
+    assert started["gee_variables"] == "a_1,c_3"  # pridec_gee's order: equal choices, equal import parameters
+    assert (started["dry_run"], started["dhis_url"]) == (True, "https://dhis2.test")  # the rest fixed too
+    assert checkpoint_store.pass_config()["gee_variables"] == "a_1,c_3"
+    client.post("/pipeline/passes/current/pause")
+    every = client.post("/pipeline/passes", params={"confirm": "true"}, json={"dry_run": False}).json()  # all of them
+    assert (every["gee_variables"], every["dry_run"]) == ("a_1,b_2,c_3", False)
+
+
+def test_the_import_parameters_of_a_new_pass_carry_its_gee_variables():
+    from etlhub.application.use_cases.ingestion_service import current_import_params
+    plan = lambda: {"dhis_url": "u", "imports": [{"task": "import_gee", "elements": ["a_1", "b_2"]},
+                                                 {"task": "import_pivot_com", "elements": ["x"]}]}
+
+    params = current_import_params(plan, gee_variables=["b_2"])
+
+    assert (params["import_gee"]["elements"], params["import_pivot_com"]["elements"]) == (["b_2"], ["x"])
+    assert current_import_params(plan)["import_gee"]["elements"] == ["a_1", "b_2"]  # a launch: the active pass's
+
+
 def test_the_csv_keeps_the_event_job_id_and_adds_the_request():
     import csv
     from types import SimpleNamespace
@@ -462,6 +491,22 @@ def test_a_dhis2_job_takes_the_dryrun_of_its_launch_and_journals_it(client, chec
     assert [e["detail"]["dry_run"] for e in events if e["event"] == "launched"] == [False]
 
 
+def test_a_job_gets_the_configuration_of_its_pass_with_its_launch(client, checkpoint_store, monkeypatch, job_store):
+    monkeypatch.setattr(tasks, "JobStore", lambda: job_store)
+    queued = []
+    monkeypatch.setattr(tasks.task_etl, "apply_async", lambda args, kwargs, task_id: queued.append(kwargs))
+    checkpoint_store.start_pass(gee_variables="v1", dry_run=True)
+
+    launched = client.post("/import_gee")
+    checkpoint_store.finish(launched.json()["job_id"], "success")
+    refused = client.post("/import_gee", params={"dry_run": False, "confirm": True})
+
+    assert queued[0]["pass_config"] == {"gee_variables": "v1", "parent_ou": "ou_parent", "log_level": "INFO",
+                                        "dry_run": True, "dhis_url": "https://dhis2.test"}
+    assert (refused.status_code, len(queued)) == (409, 1)
+    assert "DRYRUN=true, fixed when it started" in refused.json()["message"]
+
+
 def test_only_the_jobs_writing_to_dhis2_offer_dry_run(app):
     from etlhub.domain.pipeline import DHIS2_WRITES
     paths = app.openapi()["paths"]
@@ -482,3 +527,9 @@ def test_update_key_is_refused_in_dry_run_and_nothing_is_written(app, client, ch
         assert refused.status_code == 409
         assert "dry run" in refused.json()["message"]
     assert ran == [] and checkpoint_store.progress()["lock"] is None
+
+    checkpoint_store.start_pass(dry_run=True)  # a pass fixed in dry run never updates the key
+    checkpoint_store.mode["dry_run"] = False  # .env changed since: the pass keeps its own
+    refused = client.post("/update_key")
+    assert (refused.status_code, ran) == (409, [])
+    assert "This pass runs in dry run, fixed when it started" in refused.json()["message"]

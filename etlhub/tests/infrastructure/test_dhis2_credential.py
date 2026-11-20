@@ -101,3 +101,34 @@ def test_forecast_env_file_never_contains_dhis2_credentials(tmp_path, monkeypatc
 
     assert "DHIS_" not in content
     assert "OTHER=1" in content and "PARENT_OU=ou1" in content
+
+
+def test_a_job_reads_the_configuration_of_its_own_pass_and_its_dhis2(monkeypatch):
+    from etlhub.core.job_context import job_pass_config
+    monkeypatch.setattr(auth_store, "get_credential", lambda: CREDENTIAL)
+    token = job_pass_config.set({"gee_variables": "v1,v2", "parent_ou": "ou_fixed", "log_level": "DEBUG",
+                                 "dry_run": True, "dhis_url": CREDENTIAL["url"]})
+    try:
+        assert (config.get_gee_variables(), config.get_parent_ou(), config.get_log_level()) == (
+            ["v1", "v2"], "ou_fixed", "DEBUG")  # never the active pass, Redis or .env
+        assert config.get_dhis_token() == "d2pat_login"
+        monkeypatch.setattr(auth_store, "get_credential", lambda: {**CREDENTIAL, "url": "https://other.dhis2/"})
+        with pytest.raises(script_config.DHIS2SessionError, match="pass runs on https://dhis2.test/"):
+            config.get_dhis_token()  # someone logged in to another DHIS2 since the launch
+    finally:
+        job_pass_config.reset(token)
+
+
+def test_the_forecast_gets_the_parent_ou_and_log_level_of_its_pass(tmp_path, monkeypatch):
+    from etlhub.core.job_context import job_pass_config
+    (tmp_path / ".env").write_text("PARENT_OU=ou_env\nLOG_LEVEL=INFO\n")
+    monkeypatch.setattr(forecast_runner.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(ConfigStore, "get_all", lambda self: {"PARENT_OU": "ou_redis", "LOG_LEVEL": "INFO"})
+    token = job_pass_config.set({"parent_ou": "ou_fixed", "log_level": "DEBUG", "gee_variables": None})
+    try:
+        content = open(forecast_runner._build_dynamic_env_file(str(tmp_path), "job1")).read()
+    finally:
+        job_pass_config.reset(token)
+
+    assert "PARENT_OU=ou_fixed" in content and "LOG_LEVEL=DEBUG" in content
+    assert "ou_redis" not in content and "ou_env" not in content

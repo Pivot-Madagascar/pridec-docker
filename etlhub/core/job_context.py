@@ -5,6 +5,12 @@ from pathlib import Path
 # scripts read through script_config._get("DRYRUN"). None outside a job: they read DRYRUN from Redis (.env).
 job_dry_run: ContextVar[bool | None] = ContextVar("job_dry_run", default=None)
 
+# The fixed configuration of the job's pass (CheckpointStore.pass_config, PASS_CONFIG), handed to a Celery job with its
+# launch: what script_config._get reads for PASS_KEYS. None outside a Celery job (the store's active pass then).
+job_pass_config: ContextVar[dict | None] = ContextVar("job_pass_config", default=None)
+# Script config key -> PASS_CONFIG column (pass-config.md). DRYRUN goes through job_dry_run, the DHIS2 URL through the login.
+PASS_KEYS = {"GEE_VARIABLES": "gee_variables", "PARENT_OU": "parent_ou", "LOG_LEVEL": "log_level"}
+
 # Test mode of the request or job being served: the user's choice, kept in their session (get_current_user sets it),
 # handed to a Celery job with its launch. None outside them.
 pipeline_test_mode: ContextVar[bool | None] = ContextVar("pipeline_test_mode", default=None)

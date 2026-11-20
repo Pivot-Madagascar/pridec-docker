@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from etlhub.api.routers import BLOCKED, error_doc
-from etlhub.application.use_cases.ingestion_service import current_import_params
+from etlhub.application.use_cases.ingestion_service import chosen_gee_variables, current_import_params
 from etlhub.application.use_cases.journal_service import JournalService
 from etlhub.api.auth.dhis2_auth import SESSION_COOKIE
 from etlhub.core.dependencies import (get_auth_store, get_job_repository, get_journal_service, get_pipeline_gate,
@@ -39,6 +39,13 @@ class Mode(BaseModel):
     test_mode: bool
     # What becomes of the active pass of the mode left (a pass lives in one mode); asked with a 409 when missing.
     pass_action: Literal["pause", "abandon"] | None = None
+
+
+class PassStart(BaseModel):
+    # Fixed for the pass (pass-config.md). The variables import_gee imports (GET /api/config gee_variables lists them;
+    # absent: all); DRYRUN of all its jobs (absent: true in test mode, else DRYRUN of .env).
+    gee_variables: list[str] | None = None
+    dry_run: bool | None = None
 
 
 class Cycle(BaseModel):
@@ -200,14 +207,24 @@ def set_cycle(body: Cycle, gate: PipelineGate = Depends(get_pipeline_gate)) -> d
         "input/<cycle>/<pass>/ and output/<cycle>/<pass>/. The config and external_data of the month's previous pass "
         "(paused or complete) are carried over, and so are the imports done in the month with the same parameters. "
         "A month whose last pass is complete or paused needs confirm=true (409 confirmation_required, impact "
-        "complete_pass or paused_pass; a paused pass stays paused). Refused while a job runs or a pass is active."
+        "complete_pass or paused_pass; a paused pass stays paused). Refused while a job runs or a pass is active. "
+        "Its configuration is fixed now, for all its jobs, and journaled with pass_started: body `gee_variables` (the "
+        "GEE variables its import_gee imports; absent: all of them; empty or unknown: 400), body `dry_run` (absent: true "
+        "in test mode, else DRYRUN of .env), PARENT_OU and LOG_LEVEL of the editable config, the DHIS2 URL of the last "
+        "login. A launch asking another DRYRUN, or from a session on another DHIS2, is refused (409)."
     ),
     responses={201: {"content": {"application/json": {"example": {
         "id": "3f9c1a2b", "cycle": "202610", "state": "active", "started_at": "2026-10-27T09:00:00.000000",
-        "started_by": "jdoe"}}}}, **BLOCKED},
+        "started_by": "jdoe", "gee_variables": "pridec_climate_temperatureMean,pridec_climate_precipitation",
+        "parent_ou": "ou_parent", "log_level": "INFO", "dry_run": True, "dhis_url": "https://dhis2.example.org"}}}},
+        400: error_doc("No GEE variable, or an unknown one", {"message": "Unknown GEE variables: pridec_climate_x"}),
+        **BLOCKED},
 )
-def start_pass(confirm: bool = CONFIRM, gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
-    return gate.start_pass(confirm, current_import_params())
+def start_pass(body: PassStart | None = None, confirm: bool = CONFIRM,
+               gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
+    body = body or PassStart()
+    chosen = chosen_gee_variables(body.gee_variables)
+    return gate.start_pass(confirm, current_import_params(gee_variables=chosen), ",".join(chosen), body.dry_run)
 
 
 @router.post(

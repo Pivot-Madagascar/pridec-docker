@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from etlhub.api.routers import error_doc
+from etlhub.application.use_cases.ingestion_service import available_gee_variables
 from etlhub.core.dependencies import get_auth_store, get_config_store
 
 logger = logging.getLogger(__name__)
@@ -21,9 +22,6 @@ class ConfigUpdate(BaseModel):
     ou_level: int | None = Field(None, ge=1, le=10)
     disease_code: str | None = Field(None)
     log_level: LogLevel | None = Field(None)
-    # Comma-separated GEE variable names; "" = all available variables. Spaces only, never \n: the value also goes
-    # to the forecast container's env file.
-    gee_variables: str | None = Field(None, pattern=r"^([A-Za-z0-9_]+( *, *[A-Za-z0-9_]+)*)?$")
 
 class ConfigResponse(BaseModel):
     # Read-only, from the DHIS2 login. The token itself is never returned.
@@ -34,15 +32,17 @@ class ConfigResponse(BaseModel):
     ou_level: int | None = None
     disease_code: str | None = None
     log_level: str | None = None
-    gee_variables: str | None = None
+    # Read only: every GEE variable of pridec_gee. Each pass chooses its own when it starts (POST /pipeline/passes).
+    gee_variables: list[str] = []
 
 @router.get(
     "/",
     response_model=ConfigResponse,
     summary="Current dynamic configuration",
     description=(
-        "PARENT_OU, OU_LEVEL, DISEASE_CODE, LOG_LEVEL and GEE_VARIABLES from Redis, plus the DHIS2 URL and token expiry of the last login. "
-        "The token itself is never returned (has_dhis_token only)."
+        "PARENT_OU, OU_LEVEL, DISEASE_CODE and LOG_LEVEL from Redis, plus the DHIS2 URL and token expiry of the last login. "
+        "The token itself is never returned (has_dhis_token only). gee_variables: every GEE variable of pridec_gee, "
+        "read only (a pass chooses its own when it starts)."
     ),
 )
 async def get_config():
@@ -56,7 +56,7 @@ async def get_config():
         ou_level=int(data["OU_LEVEL"]) if data.get("OU_LEVEL") else None,
         disease_code=data.get("DISEASE_CODE"),
         log_level=data.get("LOG_LEVEL"),
-        gee_variables=data.get("GEE_VARIABLES"),
+        gee_variables=available_gee_variables(),
     )
 
 @router.put(

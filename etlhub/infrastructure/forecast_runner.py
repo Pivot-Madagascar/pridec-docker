@@ -9,6 +9,7 @@ from datetime import datetime
 from etlhub.core.config import get_settings
 from etlhub.core.job_context import current_test_mode, work_dir
 from etlhub.infrastructure.job_store import JobStore
+from etlhub.core.job_context import PASS_KEYS, job_pass_config
 from etlhub.infrastructure.config_store import ConfigStore
 from etlhub.infrastructure import etl_events
 
@@ -37,6 +38,8 @@ def _build_dynamic_env_file(host_pwd: str, job_id: str) -> str:
     # The R pipeline does not call DHIS2: never hand it the DHIS2 URL or token.
     excluded = {"DHIS_URL", "DHIS_TOKEN"}
     overrides = {k: v for k, v in ConfigStore().get_all().items() if k not in excluded}
+    fixed = job_pass_config.get() or {}  # PARENT_OU, LOG_LEVEL fixed when the pass started (pass-config.md)
+    overrides.update({k: fixed[c] for k, c in PASS_KEYS.items() if k != "GEE_VARIABLES" and fixed.get(c) is not None})
 
     # Filter lines from the original .env that will be overridden or excluded
     override_keys = set(overrides.keys()) | excluded

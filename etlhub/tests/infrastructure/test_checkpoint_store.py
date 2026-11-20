@@ -1,10 +1,12 @@
 import itertools
+import re
 import shutil
 import sqlite3
 from contextlib import closing
 
 import pytest
 
+from etlhub.infrastructure.checkpoint_store import PASS_CONFIG
 from etlhub.domain.exceptions import ConfirmationRequiredError, PipelineBlockedError
 from etlhub.domain.pipeline import COUPLES, PIPELINE, run_items
 
@@ -461,24 +463,23 @@ def test_a_complete_pass_is_frozen_and_its_month_is_redone_in_a_new_pass_with_co
     assert second["current_step"] == "data_import"  # from zero
     assert checkpoint_store.progress(first["pass"]["id"])["current_step"] is None  # untouched
     started = checkpoint_store.journal(second["pass"]["id"])[0]
-    assert (started["event"], started["detail"]) == ("pass_started", {"cause": "redo"})
+    assert (started["event"], started["detail"]) == ("pass_started", {"cause": "redo", "parent_ou": "ou_parent", "log_level": "INFO", "dry_run": True, "dhis_url": "https://dhis2.test"})
     assert checkpoint_store.journal(first["pass"]["id"])[-1]["event"] == "cycle_closed"  # nothing after it
 
 
-def test_a_month_change_pauses_the_calendar_pass_with_its_run_open(checkpoint_store, month):
+def test_a_month_change_leaves_the_active_pass_active_on_its_month(checkpoint_store, month):
     _import(checkpoint_store)
     checkpoint_store.open_run("COM/Malaria")
     old = checkpoint_store.progress()["pass"]
     month("202611")
 
-    state = checkpoint_store.progress()  # the first request of the month
-    assert (state["cycle"], state["pass"], state["run"]) == ("202611", None, None)
-    paused = checkpoint_store.progress(old["id"])
-    assert (paused["pass"]["state"], paused["run"]["couple"]) == ("paused", "COM/Malaria")  # kept, to resume
-    last = checkpoint_store.journal(old["id"])[-1]
-    assert (last["event"], last["actor"], last["detail"]) == ("paused", "system", {"cause": "month_change"})
+    state = checkpoint_store.progress()  # the first request of the month: nothing changes (2026-11-20, pass-config.md)
+    assert (state["cycle"], state["pass"]["id"], state["pass"]["state"], state["run"]["couple"]) == (
+        "202610", old["id"], "active", "COM/Malaria")
+    assert all(e["event"] != "paused" for e in checkpoint_store.journal(old["id"]))
 
-    _pass(checkpoint_store, "import_gee")  # 202611 starts its own pass
+    checkpoint_store.pause()  # only the user stops it; 202611 then starts its own pass
+    _pass(checkpoint_store, "import_gee")
     assert checkpoint_store.progress()["pass"]["cycle"] == "202611"
 
 
@@ -851,21 +852,22 @@ def test_a_stored_check_holds_in_its_cycle_until_its_import_is_launched_or_30_da
     _pass(checkpoint_store, "import_gee")  # a new pass of the same cycle, launched after the check
     assert set(checkpoint_store.reusable_availability(asked)) == {"import_pivot_com"}
 
+    checkpoint_store.pause()
     month("202611")
     assert checkpoint_store.reusable_availability(asked) == {}  # another cycle
 
 
-def test_each_launch_keeps_the_dryrun_it_was_launched_with_and_an_import_its_parameters(checkpoint_store, month):
+def test_every_launch_takes_the_dryrun_fixed_by_its_pass_and_an_import_its_parameters(checkpoint_store, month):
     _pass(checkpoint_store, "import_gee")
-    checkpoint_store.mode["dry_run"] = False  # .env changed, API restarted: the next jobs write to DHIS2
+    checkpoint_store.mode["dry_run"] = False  # .env changed, API restarted: the pass keeps the DRYRUN it started with
     _pass(checkpoint_store, "import_pivot_com")
 
     checkpoint_store.start("import_pivot_csb", "csb_1", carry_over={"import_pivot_csb": {"task": "import_pivot_csb"}})
 
     launched = [e for e in _journal(checkpoint_store) if e["event"] == "launched"]
     assert [(e["item"], e["detail"]) for e in launched] == [
-        ("import_gee", {"dry_run": True}), ("import_pivot_com", {"dry_run": False}),
-        ("import_pivot_csb", {"dry_run": False, "params": {"task": "import_pivot_csb"}})]  # an import's parameters
+        ("import_gee", {"dry_run": True}), ("import_pivot_com", {"dry_run": True}),
+        ("import_pivot_csb", {"dry_run": True, "params": {"task": "import_pivot_csb"}})]  # an import's parameters
 
 
 def test_a_refusal_writes_no_event(checkpoint_store, month):
@@ -1041,7 +1043,7 @@ def test_a_store_keyed_by_month_is_split_into_passes_at_each_cycle_closed(checkp
 
     (line,) = checkpoint_store.migrate()
 
-    assert line.startswith(f"{tmp_path / 'etlhub.db'}: version 0 -> 2, backup ")
+    assert line.startswith(f"{tmp_path / 'etlhub.db'}: version 0 -> 3, backup ")
     (backup,) = tmp_path.glob("etlhub.db.v0-*.bak")
     assert "cycle" in {r[1] for r in sqlite3.connect(backup).execute("PRAGMA table_info(checkpoints)")}
     (cycle,) = [c for c in checkpoint_store.cycles() if c["cycle"] == "202504"]
@@ -1070,7 +1072,7 @@ def test_a_db_behind_this_code_is_refused_until_migrated_by_hand(checkpoint_stor
     for read in (checkpoint_store.progress, checkpoint_store.check_schema):
         with pytest.raises(SchemaVersionError, match="version 0.*python -m etlhub.migrate"):
             read()
-    assert checkpoint_store.migrate(check=True) == [f"{tmp_path / 'etlhub.db'}: version 0 -> 2"]
+    assert checkpoint_store.migrate(check=True) == [f"{tmp_path / 'etlhub.db'}: version 0 -> 3"]
     assert not list(tmp_path.glob("*.bak"))  # check changes nothing
 
     checkpoint_store.migrate()
@@ -1082,11 +1084,11 @@ def test_a_db_newer_than_this_code_is_refused_even_by_migrate(checkpoint_store, 
     from etlhub.infrastructure.checkpoint_store import SchemaVersionError
     checkpoint_store.progress()  # a new db: created at SCHEMA_VERSION
     with closing(sqlite3.connect(tmp_path / "etlhub.db")) as db:
-        assert db.execute("PRAGMA user_version").fetchone() == (2,)
-        db.execute("PRAGMA user_version = 3")  # left by a newer etlhub
+        assert db.execute("PRAGMA user_version").fetchone() == (3,)
+        db.execute("PRAGMA user_version = 4")  # left by a newer etlhub
 
     for call in (checkpoint_store.progress, checkpoint_store.migrate):
-        with pytest.raises(SchemaVersionError, match="version 3, newer than this code"):
+        with pytest.raises(SchemaVersionError, match="version 4, newer than this code"):
             call()
 
 
@@ -1098,7 +1100,7 @@ def test_the_test_mode_db_in_redis_is_migrated_with_its_own_backup(checkpoint_st
 
     (line,) = checkpoint_store.migrate()
 
-    assert line.startswith("the test-mode db (Redis pipeline:dry_run:db): version 0 -> 2")
+    assert line.startswith("the test-mode db (Redis pipeline:dry_run:db): version 0 -> 3")
     (backup,) = tmp_path.glob("test_mode.db.v0-*.bak")
     assert "cycle" in {r[1] for r in sqlite3.connect(backup).execute("PRAGMA table_info(checkpoints)")}
     assert [c["cycle"] for c in checkpoint_store.cycles() if c["passes"]] == ["202504"]
@@ -1109,11 +1111,17 @@ def test_the_test_mode_db_in_redis_is_migrated_with_its_own_backup(checkpoint_st
 _FK_TABLES = ("checkpoints", "forecast_runs", "pipeline_events", "availability_checks")
 
 
+def _v2_schema():
+    """Today's _SCHEMA without the PASS_CONFIG columns of passes (migration 3)."""
+    from etlhub.infrastructure.checkpoint_store import _SCHEMA
+    return re.sub(r",\n    -- Its configuration.*?dhis_url +TEXT", "", _SCHEMA, count=1, flags=re.S)
+
+
 def _v1_db(path, orphan=False):
     """A db at schema version 1: today's tables without their FOREIGN KEY, external_data still in forecast_runs."""
     from etlhub.infrastructure.checkpoint_store import _SCHEMA
     with closing(sqlite3.connect(path)) as db:
-        db.executescript(_SCHEMA.replace(" REFERENCES passes(id)", "") + """
+        db.executescript(_v2_schema().replace(" REFERENCES passes(id)", "") + """
             ALTER TABLE forecast_runs ADD COLUMN external_data TEXT DEFAULT 'none';
             PRAGMA user_version = 1;
             INSERT INTO passes VALUES ('p1', '202611', 'active', '2026-11-01T08:00:00', 'alice');
@@ -1136,7 +1144,7 @@ def test_migration_2_adds_the_foreign_keys_and_keeps_every_row(checkpoint_store,
 
     (line,) = checkpoint_store.migrate()
 
-    assert line.startswith(f"{db_path}: version 1 -> 2, backup ")
+    assert line.startswith(f"{db_path}: version 1 -> 3, backup ")
     (backup,) = tmp_path.glob("etlhub.db.v1-*.bak")
     with closing(sqlite3.connect(backup)) as db:
         assert db.execute("PRAGMA foreign_key_list(checkpoints)").fetchall() == []
@@ -1189,13 +1197,15 @@ def test_a_launch_without_choice_is_dry_run_in_test_mode_and_follows_env_in_prod
 def test_a_launch_journals_the_dryrun_it_chose_or_the_default(checkpoint_store):
     checkpoint_store.mode["dry_run"] = True  # .env
 
-    assert checkpoint_store.start("import_gee", "chose", dry_run=False) is False
+    assert checkpoint_store.start("import_gee", "chose", dry_run=False) is False  # it starts the pass: fixed
     checkpoint_store.finish("chose", "success")
-    assert checkpoint_store.start("import_pivot_com", "default") is True
+    with pytest.raises(PipelineBlockedError, match="runs with DRYRUN=false, fixed when it started"):
+        checkpoint_store.start("import_pivot_com", "other", dry_run=True)
+    assert checkpoint_store.start("import_pivot_com", "default") is False  # no choice: the pass's
 
     launched = {e["job_id"]: e["detail"]["dry_run"] for e in checkpoint_store.journal(checkpoint_store.progress()["pass"]["id"])
                 if e["event"] == "launched"}
-    assert launched == {"chose": False, "default": True}
+    assert launched == {"chose": False, "default": False}
 
 
 # --- carry-over of Data Import to a new pass of the cycle (cycle-passes.md § 11) ---------------
@@ -1278,6 +1288,7 @@ def test_a_carried_item_is_relaunched_only_with_confirmation_and_carries_on_to_t
 
 def test_the_first_pass_of_a_cycle_has_nothing_to_carry(checkpoint_store, month):
     _imports_approved(checkpoint_store)
+    checkpoint_store.pause()
     month("202611")
 
     _launch_import(checkpoint_store, "import_gee", state=None)
@@ -1292,3 +1303,54 @@ def test_release_lock_of_a_given_job_leaves_the_lock_of_another_one(checkpoint_s
     assert checkpoint_store.release_lock("asked_about") is None
     assert checkpoint_store.progress()["lock"]["job_id"] == "newer"
     assert checkpoint_store.release_lock("newer") == "newer"
+
+
+# --- migration 3 and the configuration fixed by a pass (pass-config.md) -----------------------------------------
+
+def test_migration_3_adds_the_pass_configuration_and_leaves_existing_passes_unfixed(checkpoint_store, tmp_path):
+    _v1_db(tmp_path / "etlhub.db")
+
+    checkpoint_store.migrate()
+
+    with closing(sqlite3.connect(tmp_path / "etlhub.db")) as db:
+        assert db.execute("PRAGMA user_version").fetchone() == (3,)
+        assert db.execute("SELECT id, gee_variables, parent_ou, log_level, dry_run, dhis_url FROM passes").fetchall() == [
+            ("p1", None, None, None, None, None)]
+    assert checkpoint_store.pass_config() == dict.fromkeys(PASS_CONFIG)  # p1: Redis / .env, as before
+    assert checkpoint_store.start("import_pivot_com", "j", dry_run=False) is False  # its launches choose, as before
+
+
+def test_a_pass_fixes_its_configuration_when_it_starts(checkpoint_store):
+    p = checkpoint_store.start_pass(gee_variables="v1,v3", dry_run=False)
+    fixed = {"gee_variables": "v1,v3", "parent_ou": "ou_parent", "log_level": "INFO", "dry_run": False,
+             "dhis_url": "https://dhis2.test"}
+
+    assert {c: p[c] for c in PASS_CONFIG} == fixed
+    checkpoint_store.live.update(parent_ou="ou_edited", log_level="DEBUG")  # Admin Config, after the start
+    checkpoint_store.mode["dry_run"] = True  # .env
+    assert checkpoint_store.pass_config() == fixed
+    assert {c: checkpoint_store.progress()["pass"][c] for c in PASS_CONFIG} == fixed
+    (started,) = [e for e in checkpoint_store.journal(p["id"]) if e["event"] == "pass_started"]
+    assert started["detail"] == fixed
+    checkpoint_store.pause()
+    assert checkpoint_store.pass_config() is None  # no active pass
+    checkpoint_store.resume(p["id"])
+    assert checkpoint_store.pass_config() == fixed  # resumed as it was
+    assert checkpoint_store.start("import_gee", "j1") is False  # its DRYRUN, not .env's
+
+
+def test_a_launch_from_a_session_on_another_dhis2_is_refused_and_writes_nothing(checkpoint_store):
+    p = checkpoint_store.start_pass()
+    checkpoint_store.live["dhis_url"] = "https://other.dhis2"  # someone logged in elsewhere
+
+    with pytest.raises(PipelineBlockedError, match="runs on the DHIS2 https://dhis2.test, fixed when it started"):
+        checkpoint_store.start("import_gee", "j1")
+    assert checkpoint_store.held_lock() is None
+    assert [e["event"] for e in checkpoint_store.journal(p["id"])] == ["pass_started"]
+
+
+def test_a_pass_started_by_a_launch_fixes_the_configuration_of_that_moment(checkpoint_store):
+    checkpoint_store.start("import_gee", "j1", dry_run=False)
+
+    assert checkpoint_store.pass_config() == {"gee_variables": None, "parent_ou": "ou_parent", "log_level": "INFO",
+                                              "dry_run": False, "dhis_url": "https://dhis2.test"}  # GEE: all of them

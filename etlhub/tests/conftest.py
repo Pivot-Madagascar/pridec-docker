@@ -54,9 +54,11 @@ def checkpoint_store(tmp_path, monkeypatch):
     store = module.CheckpointStore(
         tmp_path / "etlhub.db", data_dir=tmp_path, apply_context=lambda ctx: store.contexts.append(ctx),
         test_mode=lambda: mode["test_mode"],
-        dry_run=lambda: mode["dry_run"], blob=FakeBlob(),
+        dry_run=lambda: mode["dry_run"], blob=FakeBlob(), live_config=lambda: dict(store.live),
     )
     store.contexts = []  # run contexts the jobs received (instead of Redis)
+    # PARENT_OU, LOG_LEVEL (Redis) and the DHIS2 URL of the last login, as a new pass fixes them (pass-config.md)
+    store.live = {"parent_ou": "ou_parent", "log_level": "INFO", "dhis_url": "https://dhis2.test"}
     store.mode = mode
     use_instance(monkeypatch, module.get_checkpoint_store, module, "CheckpointStore", store)
     yield store
@@ -91,6 +93,9 @@ class OpenGate:
 
     def default_dry_run(self):
         return True
+
+    def pass_config(self):
+        return None
 
     def finish(self, job_id, status):
         pass

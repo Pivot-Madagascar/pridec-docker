@@ -33,7 +33,13 @@ _PASSES = """CREATE TABLE IF NOT EXISTS passes (
     cycle      TEXT NOT NULL,
     state      TEXT NOT NULL,  -- active | paused | complete | abandoned
     started_at TEXT NOT NULL,
-    started_by TEXT
+    started_by TEXT,
+    -- Its configuration, fixed when it started (pass-config.md); all NULL for a pass from before 2026-11-20.
+    gee_variables TEXT,  -- chosen on Home, comma-separated; NULL: every variable of pridec_gee
+    parent_ou     TEXT,
+    log_level     TEXT,
+    dry_run       INTEGER,
+    dhis_url      TEXT
 )"""
 _SCHEMA = _PASSES + """;
 CREATE UNIQUE INDEX IF NOT EXISTS one_active_pass ON passes(state) WHERE state = 'active';
@@ -100,7 +106,9 @@ CREATE INDEX IF NOT EXISTS ix_availability_checks ON availability_checks(cycle, 
 # Databases created before 2026-10-12 also have an external_data column (DEFAULT 'none'): unused, inserts skip it.
 _RUN_COLUMNS = ("pass_id", "couple", "state", "disease_code", "ou_level", "alert_name", "opened_at")
 _EVENT_COLUMNS = ("cycle", "pass_id", "at", "step", "item", "event", "job_id", "actor", "request_id", "detail")
-_PASS_COLUMNS = ("id", "cycle", "state", "started_at", "started_by")
+# The configuration of a pass, fixed when it starts: what its jobs read (script_config._get), never Redis or .env.
+PASS_CONFIG = ("gee_variables", "parent_ou", "log_level", "dry_run", "dhis_url")
+_PASS_COLUMNS = ("id", "cycle", "state", "started_at", "started_by", *PASS_CONFIG)
 _AVAILABILITY_DAYS = 30  # a stored check older than this is checked again (decision 2026-10-26)
 # Pass folders (etlhub/docs/decision-design/pass-folders/pass-folders.md): input/<cycle>/<pass>/ and output/<cycle>/<pass>/.
 # They keep the uploads (item -> file name) and the reports of closed runs for good, and a copy of the working files
@@ -241,6 +249,15 @@ def dry_run_enabled() -> bool:
     return get_dry_run()
 
 
+def live_pass_config() -> dict:
+    """What a new pass fixes besides its GEE variables and DRYRUN: PARENT_OU and LOG_LEVEL of the editable config
+    (Redis, never through script_config: it reads the active pass) and the DHIS2 URL of the last login."""
+    from etlhub.infrastructure.auth_store import get_credential
+    config = ConfigStore().get_all()
+    return {"parent_ou": config.get("PARENT_OU"), "log_level": config.get("LOG_LEVEL"),
+            "dhis_url": (get_credential() or {}).get("url")}
+
+
 class RedisBlob:
     """The test-mode checkpoint db: an in-memory SQLite, serialized into one Redis key.
 
@@ -270,7 +287,7 @@ class CheckpointStore:
                  apply_context: Callable[[dict], None] = apply_to_config_store,
                  test_mode: Callable[[], bool] = current_test_mode,
                  dry_run: Callable[[], bool] = dry_run_enabled,
-                 blob: RedisBlob | None = None):
+                 blob: RedisBlob | None = None, live_config: Callable[[], dict] = live_pass_config):
         """In test mode everything is kept in Redis (`blob`) and test/input, test/output; never in the SQLite file,
         except the single job lock of both modes. test_mode: the mode of the request or job served (the user's).
 
@@ -283,6 +300,7 @@ class CheckpointStore:
         self._data_dir = Path(data_dir or settings.data_dir)
         self._uploads_root = self._data_dir / "uploads"  # before the pass folders (2026-10-27): read by the migrations only
         self._apply_context = apply_context
+        self._live_config = live_config
 
     @property
     def _input_dir(self) -> Path:
@@ -364,9 +382,13 @@ class CheckpointStore:
 
     @staticmethod
     def _passes(conn: sqlite3.Connection, where: str = "1", params: tuple = ()) -> list[dict]:
-        """Passes, oldest first."""
-        return [dict(zip(_PASS_COLUMNS, r)) for r in conn.execute(
-            f"SELECT {', '.join(_PASS_COLUMNS)} FROM passes WHERE {where} ORDER BY started_at", params)]
+        """Passes, oldest first. SELECT *: migration 1 reads passes from before PASS_CONFIG (migration 3)."""
+        cursor = conn.execute(f"SELECT * FROM passes WHERE {where} ORDER BY started_at", params)
+        passes = [dict(zip([c[0] for c in cursor.description], r)) for r in cursor]
+        for p in passes:
+            if p.get("dry_run") is not None:
+                p["dry_run"] = bool(p["dry_run"])
+        return passes
 
     def _get_pass(self, conn: sqlite3.Connection, pass_id: str | None) -> dict | None:
         return next(iter(self._passes(conn, "id = ?", (pass_id,))), None)
@@ -387,19 +409,14 @@ class CheckpointStore:
         detail = {"cause": cause, **({"reason": reason} if reason else {})}
         self._event(conn, p, "resumed" if state == "active" else state, detail=detail, actor=actor)
 
-    def _settle(self, conn: sqlite3.Connection) -> None:
-        """The calendar moved on: the active pass that followed it is paused (a pass on a chosen month stays active)."""
-        active = self._active(conn)
-        if active and active["cycle"] != self._target(conn):
-            self._set_state(conn, active, "paused", "month_change", actor="system")
-
-    def _current(self, conn: sqlite3.Connection, confirm: bool | None = None) -> dict:
+    def _current(self, conn: sqlite3.Connection, confirm: bool | None = None, config: dict | None = None) -> dict:
         """The active pass, which every write goes to. Raises PipelineBlockedError without one.
 
         A launch (confirm not None) starts a pass on the target month; after a complete or paused pass, only with
         confirm=true (ConfirmationRequiredError otherwise). A paused pass stays paused, to resume from the Journal.
+        config: the configuration of a new pass (_config), fixed for it and journaled with pass_started.
+        A pass stays active until the user pauses, abandons or completes it, the month changing or not (2026-11-20).
         """
-        self._settle(conn)
         active = self._active(conn)
         if active:
             return active
@@ -418,11 +435,13 @@ class CheckpointStore:
                 "(it stays paused, to resume from the Journal)" if paused else
                 f"Cycle {cycle} is complete: resend with confirm=true to start a new pass (the complete one is kept)",
                 {"cycle": cycle, "paused_pass" if paused else "complete_pass": last["id"]})
+        config = {c: (config or {}).get(c) for c in PASS_CONFIG}
         p = {"id": uuid.uuid4().hex[:8], "cycle": cycle, "state": "active", "started_at": _now_us(),
-             "started_by": _actor()}
+             "started_by": _actor(), **config}
         conn.execute(f"INSERT INTO passes ({', '.join(_PASS_COLUMNS)}) VALUES ({', '.join('?' * len(_PASS_COLUMNS))})",
                      tuple(p[c] for c in _PASS_COLUMNS))
-        self._event(conn, p, "pass_started", detail={"cause": "redo"} if redo else None)
+        detail = {**({"cause": "redo"} if redo else {}), **{k: v for k, v in config.items() if v is not None}}
+        self._event(conn, p, "pass_started", detail=detail or None)
         return {**p, "new": True}  # start() carries the previous passes' imports over to it
 
     @staticmethod
@@ -582,10 +601,19 @@ class CheckpointStore:
                 f"{len(orphans)} row(s) refer to a pass that does not exist (table, rowid): "
                 f"{[(t, rowid) for t, rowid, *_ in orphans[:10]]}; fix them, then run python -m etlhub.migrate again")
 
+    def _migration_3(self, conn: sqlite3.Connection, uploads: Path) -> None:
+        """The configuration of a pass, fixed when it starts (2026-11-20, pass-config.md): PASS_CONFIG columns.
+        Existing passes get NULL: they keep reading Redis / .env, as before. Migration 1 creates passes from today's
+        _PASSES on a db without it: the columns may be there already."""
+        present = {r[1] for r in conn.execute("PRAGMA table_info(passes)")}
+        for column in PASS_CONFIG:
+            if column not in present:
+                conn.execute(f"ALTER TABLE passes ADD COLUMN {column} {'INTEGER' if column == 'dry_run' else 'TEXT'}")
+
     # Schema migrations (docs/decision-design/db-migrations/db-migrations.md): MIGRATIONS[i] takes a db from version i
     # to i + 1, applied by hand only (migrate()). Never edit a released one: a change to _SCHEMA ships with a new
     # migration and its test on a db of the previous version.
-    MIGRATIONS = (_migration_1, _migration_2)
+    MIGRATIONS = (_migration_1, _migration_2, _migration_3)
 
     def _check_schema(self, conn: sqlite3.Connection, where: str) -> None:
         """A new db gets the schema at SCHEMA_VERSION; any other one must already be at it: nothing migrates here."""
@@ -683,6 +711,27 @@ class CheckpointStore:
         """DRYRUN of a launch that does not choose: true in test mode, else DRYRUN of .env (Redis)."""
         return True if self._test_mode() else self._dry_run()
 
+    def _config(self, gee_variables: str | None, dry_run: bool | None) -> dict:
+        """The configuration a new pass fixes (PASS_CONFIG), read now: outside a transaction, never through the store."""
+        return {"gee_variables": gee_variables, "dry_run": self.default_dry_run() if dry_run is None else dry_run,
+                **self._live_config()}
+
+    @staticmethod
+    def _check_config(p: dict, dry_run: bool | None, now: dict) -> bool:
+        """A launch in pass p follows its fixed configuration: its DRYRUN, on its DHIS2. Returns the job's DRYRUN.
+        dry_run: the launch's choice (None: none); now: _config() of this launch. A pass from before 2026-11-20
+        (nothing fixed) takes the launch's DRYRUN or the default, as then, without the DHIS2 check."""
+        if p.get("dry_run") is None:
+            return now["dry_run"]
+        dhis_url = now["dhis_url"]
+        if dry_run is not None and dry_run != p["dry_run"]:
+            raise PipelineBlockedError(f"Pass {p['id']} runs with DRYRUN={str(p['dry_run']).lower()}, fixed when it "
+                                       "started: start a new pass to change it")
+        if p.get("dhis_url") and dhis_url != p["dhis_url"]:
+            raise PipelineBlockedError(f"Pass {p['id']} runs on the DHIS2 {p['dhis_url']}, fixed when it started: "
+                                       f"log in to it to launch its jobs (session on {dhis_url or 'none'})")
+        return p["dry_run"]
+
     def start(self, task: str, job_id: str, confirm: bool = False, carry_over: dict[str, dict] | None = None,
               dry_run: bool | None = None) -> bool:
         """Takes the lock and marks the checkpoint running. A refusal writes nothing. Returns the job's DRYRUN.
@@ -690,15 +739,16 @@ class CheckpointStore:
         Raises PipelineBlockedError, or ConfirmationRequiredError for an item already in success without confirm.
         A run job resets its dependents in the run and gets the run context (DISEASE_CODE, OU_LEVEL).
         Without an active pass, a launch starts one (confirm=true after a complete pass).
-        The launched event keeps the job's DRYRUN (dry_run, else default_dry_run(); since 2026-11-17 a launch may choose
-        it): whether this job may write to DHIS2, and, for an
+        The launched event keeps the job's DRYRUN, the pass's (fixed when it started, since 2026-11-20; a launch asking
+        another one, or from a session on another DHIS2, is refused: _check_config): whether this job may write to DHIS2, and, for an
         import, its parameters (`carry_over[item]`). A launch that starts a pass carries over the imports done before
         in the cycle (`carry_over`: the current parameters of each import; None records and carries nothing).
         """
-        dry_run = self.default_dry_run() if dry_run is None else dry_run
+        config = self._config(None, dry_run)  # read before the transaction: fixed if this launch starts the pass
         with self._transaction() as conn:
             self._check_lock_free(conn)
-            p = self._current(conn, confirm)
+            p = self._current(conn, confirm, config)
+            dry_run = self._check_config(p, dry_run, config)
             rows = self._rows(conn, p["id"])
             run = self._open_run(conn, p["id"])
             couple = run["couple"] if run else None
@@ -891,7 +941,6 @@ class CheckpointStore:
         """
         with self._transaction() as conn:
             self._check_lock_free(conn)
-            self._settle(conn)
             month = pipeline.this_month()
             cycle = cycle or month
             if cycle > month:
@@ -904,21 +953,31 @@ class CheckpointStore:
 
     # --- passes --------------------------------------------------------------------------------
 
-    def start_pass(self, confirm: bool = False, carry_over: dict[str, dict] | None = None) -> dict:
+    def start_pass(self, confirm: bool = False, carry_over: dict[str, dict] | None = None,
+                   gee_variables: str | None = None, dry_run: bool | None = None) -> dict:
         """Starts a pass on the target month at once (Home, "New pass"): its folders, and what is carried over from
         the cycle (uploads, and imports with the same parameters `carry_over`). After a complete or paused pass, only
         with confirm=true. Refused while a job runs or a pass is active. pass-folders.md § 6.
+        Its configuration is fixed now (PASS_CONFIG): gee_variables (comma-separated; None: all), dry_run (None: the
+        default), PARENT_OU, LOG_LEVEL and the DHIS2 URL of the last login.
         """
+        config = self._config(gee_variables, dry_run)
         with self._transaction() as conn:
             self._check_lock_free(conn)
-            self._settle(conn)
             if active := self._active(conn):
                 raise PipelineBlockedError(f"Pass {active['id']} ({active['cycle']}) is active: pause or abandon it first")
-            p = self._current(conn, confirm)
+            p = self._current(conn, confirm, config)
             self._begin(conn, p)
             if carry_over:
-                self._carry_over(conn, p, carry_over, None, self.default_dry_run())
+                self._carry_over(conn, p, carry_over, None, p["dry_run"])
         return {c: p[c] for c in _PASS_COLUMNS}
+
+    def pass_config(self) -> dict | None:
+        """The fixed configuration (PASS_CONFIG) of the active pass of the mode served; None without one.
+        A launch hands it to its Celery job (tasks.py); script_config._get reads it here outside a Celery job."""
+        with self._transaction() as conn:
+            active = self._active(conn)
+        return {c: active[c] for c in PASS_CONFIG} if active else None
 
     def pause(self, cause: str = "manual", reason: str | None = None) -> dict:
         """Pauses the active pass: its checkpoints and open forecast run stay as they are, to resume from the Journal."""
@@ -933,7 +992,6 @@ class CheckpointStore:
         lives in one mode. None: no active pass, nothing to do. Without action: ConfirmationRequiredError, nothing done.
         Refused while a job runs, as pause and abandon are."""
         with self._transaction() as conn:
-            self._settle(conn)
             active = self._active(conn)
         if active is None:
             return None
@@ -953,7 +1011,6 @@ class CheckpointStore:
         """Makes a paused pass of the current mode active again; launches go to its month."""
         with self._transaction() as conn:
             self._check_lock_free(conn)
-            self._settle(conn)
             p = self._paused_or_active(conn, pass_id, "resumed", ("paused",))
             active = self._active(conn)
             if active:
@@ -970,7 +1027,6 @@ class CheckpointStore:
         reports of its closed runs (its checkpoints and journal stay readable)."""
         with self._transaction() as conn:
             self._check_lock_free(conn)
-            self._settle(conn)
             p = self._paused_or_active(conn, pass_id, "abandoned", ("active", "paused"))
             run = self._open_run(conn, p["id"])
             if run:
@@ -1124,7 +1180,6 @@ class CheckpointStore:
         cutoff = (datetime.now() - timedelta(days=_AVAILABILITY_DAYS)).isoformat(timespec="microseconds")
         found = {}
         with self._transaction() as conn:
-            self._settle(conn)  # as progress(): after a month change, the Dashboard shows the new month
             cycle = (self._shown(conn) or {"cycle": self._target(conn)})["cycle"]
             for task, task_params in params.items():
                 row = conn.execute(
@@ -1149,7 +1204,6 @@ class CheckpointStore:
         """
         cutoff = (datetime.now() - timedelta(days=_AVAILABILITY_DAYS)).isoformat(timespec="microseconds")
         with self._transaction() as conn:
-            self._settle(conn)
             p = self._shown(conn) or {"id": None, "cycle": self._target(conn)}
             for s in sections:
                 conn.execute(
@@ -1167,7 +1221,6 @@ class CheckpointStore:
         """State of a pass in the current mode (test or production): by default the active one, else the last one of
         the target month (`pass` null when that month has none yet: the first launch starts it)."""
         with self._transaction() as conn:
-            self._settle(conn)
             p = self._get_pass(conn, pass_id) if pass_id else self._shown(conn)
             rows = self._rows(conn, p["id"]) if p else {}
             run = self._open_run(conn, p["id"]) if p else None
