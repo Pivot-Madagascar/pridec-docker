@@ -24,12 +24,7 @@ export async function login(dhis2Url: string, username: string, password: string
 export const getDhis2Urls = (): Promise<string[]> =>
     api.get<string[]>('/auth/dhis2-urls').then(r => r.data, () => [])
 
+// Ends the etlhub session (it revokes the DHIS2 token). The auth store's logout() clears and redirects.
 export async function logout(): Promise<void> {
-    try {
-        await api.post('/auth/logout')
-    } catch (e: any) {
-        console.warn('Logout request failed; the session expires on its own:', e?.message)
-    }
-    useAuthStore().clear()
-    window.location.href = '/login'
+    await api.post('/auth/logout')
 }

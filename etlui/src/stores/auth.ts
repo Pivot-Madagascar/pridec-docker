@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+// services/auth imports this store too (login): harmless, each uses the other only inside its functions.
+import { logout as endSession } from '@/services/auth'
 
 export interface Dhis2User {
     id: string | null
@@ -30,6 +32,18 @@ export const useAuthStore = defineStore('auth', () => {
         localStorage.removeItem('token') // left by the old token login
     }
 
+    // Log out (side menu): ends the session, then forgets the user and goes to the login page, even if the request
+    // fails (the session then expires on its own).
+    async function logout() {
+        try {
+            await endSession()
+        } catch (e) {
+            console.warn('Logout request failed; the session expires on its own:', (e as Error)?.message)
+        }
+        clear()
+        window.location.href = '/login'
+    }
+
     const storedUser = localStorage.getItem('user')
     if (storedUser) {
         user.value = JSON.parse(storedUser)
@@ -40,5 +54,6 @@ export const useAuthStore = defineStore('auth', () => {
         isAuthenticated,
         setUser,
         clear,
+        logout,
     }
 })

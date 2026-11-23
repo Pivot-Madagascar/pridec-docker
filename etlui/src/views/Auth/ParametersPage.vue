@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
-import { logout } from '@/services/auth'
-import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
 const auth = useAuthStore()
@@ -15,7 +13,6 @@ const auth = useAuthStore()
       <p><strong>Email:</strong> {{ auth.user.email || 'N/A' }}</p>
       <p><strong>Username:</strong> {{ auth.user.username || 'N/A' }}</p>
       <p><strong>Display Name:</strong> {{ auth.user.displayName || 'N/A' }}</p>
-      <Button variant="destructive" class="mt-4" @click="logout">Logout</Button>
     </Card>
   </div>
 </template>

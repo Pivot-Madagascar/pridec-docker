@@ -29,7 +29,11 @@
             side="right"
             :items="navItems"
             :api-base-url="apiBaseUrl"
-          />
+          >
+            <template v-if="auth.isAuthenticated" #footer>
+              <Button variant="destructive" class="w-full" data-test="logout" @click="auth.logout()">Log out</Button>
+            </template>
+          </Drawer>
 
           <span class="app-badge">ETL Hub v1.0</span>
           <a
@@ -130,6 +134,9 @@ import { Toaster } from 'vue3-hot-toast'
 import { Button } from '@/components/ui/button'
 import LoadingScreen from '@/components/LoadingScreen.vue'
 import { routeLoading } from '@/router/loading'
+import { useAuthStore } from '@/stores/auth'
+
+const auth = useAuthStore()
 
 const toasts = ref<HTMLElement>()
 onMounted(() => toasts.value?.showPopover?.()) // without the Popover API the div simply stays in the page

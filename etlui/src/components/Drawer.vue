@@ -23,6 +23,10 @@
           API Docs
         </a>
       </nav>
+      <!-- Pinned to the bottom of the menu (App: Log out). -->
+      <div v-if="$slots.footer" class="mt-auto border-t px-4 py-4" data-test="drawer-footer">
+        <slot name="footer" :close="close" />
+      </div>
     </SheetContent>
   </Sheet>
 </template>
