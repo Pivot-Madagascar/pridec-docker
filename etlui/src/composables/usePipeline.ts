@@ -1,4 +1,4 @@
-import { computed, ref, getCurrentScope, onScopeDispose } from 'vue'
+import { ref, getCurrentScope, onScopeDispose } from 'vue'
 import * as pipeline from '@/services/pipeline'
 import { applyDefaultFile, deleteInputFile, getDefaultFiles, getInputFiles, uploadInputFile } from '@/services/inputs'
 import { useNotification } from '@/composables/useNotification'
@@ -44,9 +44,6 @@ export function usePipeline(addActivity: AddActivity) {
   const pending = ref<PendingConfirmation | null>(null)
   let timer: ReturnType<typeof setTimeout> | null = null
 
-  // DRYRUN of the pass shown, fixed when it started (chosen on Home); without one, etlhub's default (`state.dry_run`:
-  // true in test mode, else DRYRUN of .env). Never sent with a launch: etlhub applies the pass's own (pass-config.md).
-  const dryRun = computed<boolean | undefined>(() => state.value?.pass?.dry_run ?? state.value?.dry_run)
 
   const stop = () => {
     if (timer !== null) clearTimeout(timer)
@@ -104,7 +101,7 @@ export function usePipeline(addActivity: AddActivity) {
   if (getCurrentScope()) onScopeDispose(stop)
 
   return {
-    state, serverFiles, defaults, busy, pending, dryRun, refresh, stop, confirm,
+    state, serverFiles, defaults, busy, pending, refresh, stop, confirm,
     cancel: () => { pending.value = null },
     launch: (task: string, label: string) => act(label, c => pipeline.launchJob(task, c)),
     openRun: (source: Source, disease: Disease) => act(`Open run ${source}/${disease}`, c => pipeline.openRun(source, disease, c)),
@@ -116,8 +113,7 @@ export function usePipeline(addActivity: AddActivity) {
     setMode: (testMode: boolean) => act(testMode ? 'Switch to test mode' : 'Switch to production',
       (_c, choice) => pipeline.setMode(testMode, choice as pipeline.PassAction | undefined)),
     setCycle: (cycle: string | null) => act(`Cycle ${cycle ?? 'of the current month'}`, () => pipeline.setCycle(cycle)),
-    startPass: (geeVariables: string[], dryRun?: boolean) =>
-      act('Start a new pass', c => pipeline.startPass(c, geeVariables, dryRun)),
+    startPass: (geeVariables: string[]) => act('Start a new pass', c => pipeline.startPass(c, geeVariables)),
     pause: () => act('Pause the cycle', () => pipeline.pausePass()),
     resume: (passId: string) => act('Resume the cycle', () => pipeline.resumePass(passId)),
     abandonPass: (passId: string) => act('Abandon the cycle', () => pipeline.abandonPass(passId)),

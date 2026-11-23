@@ -159,20 +159,23 @@ def test_is_active_is_true_for_an_inline_job_of_this_process_and_unknown_when_th
     assert tasks.CeleryTaskLauncher().is_active("import_gee_1") is None
 
 
-@pytest.mark.parametrize("chosen", [True, False])
-def test_the_scripts_read_the_dryrun_of_their_launch_during_the_job_only(job_store, chosen):
+@pytest.mark.parametrize("test_mode", [True, False])
+def test_the_scripts_read_the_mode_of_their_job_as_dryrun(job_store, test_mode, monkeypatch):
     from etl.scripts.config import get_dry_run
     from etlhub.application.use_cases import etl_use_cases
-    from etlhub.core.job_context import job_dry_run
+    from etlhub.core.job_context import pipeline_test_mode
     from etlhub.infrastructure import etl_events
+    monkeypatch.setenv("DRYRUN", str(not test_mode).lower())  # .env: the CLI's only
     seen = []
 
-    etl_use_cases._execute_etl_job(lambda: seen.append(get_dry_run()),
-                                   etl_use_cases._JobLogger(job_store, "import_gee_1", etl_events), "import_gee",
-                                   dry_run=chosen)
+    token = pipeline_test_mode.set(test_mode)  # as _run_task does: the launcher's mode
+    try:
+        etl_use_cases._execute_etl_job(lambda: seen.append(get_dry_run()),
+                                       etl_use_cases._JobLogger(job_store, "import_gee_1", etl_events), "import_gee")
+    finally:
+        pipeline_test_mode.reset(token)
 
-    assert seen == [chosen]
-    assert job_dry_run.get() is None  # after the job: DRYRUN of Redis (.env) again
+    assert seen == [test_mode]  # DRYRUN = TEST MODE
 
 
 def test_a_job_is_queued_with_the_users_mode_and_served_in_it(monkeypatch, job_store, webhooks):

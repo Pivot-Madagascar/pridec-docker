@@ -58,7 +58,7 @@
 
       <!-- Before step 1: the mode applies to the whole cycle. -->
       <!-- DRYRUN is the pass's, fixed when it started on Home: read only here. -->
-      <ModeToggle :test-mode="state?.test_mode" :dry-run="dryRun" :disabled="busy" @change="setMode" />
+      <ModeToggle :test-mode="state?.test_mode" :dry-run="state?.dry_run" :disabled="busy" @change="setMode" />
 
       <div v-if="state?.lock" class="lock-banner" role="status">
         <span>Running: <strong>{{ state.lock.task }}</strong><template v-if="state.lock.job_id"> ({{ state.lock.job_id }})</template> since {{ state.lock.acquired_at }}. One job at a time, both modes.</span>
@@ -247,7 +247,7 @@ const accordionItems = [
 
 const { activityLog, addActivity } = useActivityLog()
 const {
-  state, serverFiles, defaults, busy, pending, dryRun, refresh, confirm, cancel,
+  state, serverFiles, defaults, busy, pending, refresh, confirm, cancel,
   launch, openRun, abandonRun, decide, decideImports, skipAlerts, setMode, upload, remove, useDefault,
   pause, abandonPass
 } = usePipeline(addActivity)

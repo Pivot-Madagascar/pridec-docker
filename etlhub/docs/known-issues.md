@@ -34,7 +34,7 @@ None between etlhub layers since 2026-10-23, guarded by `tests/test_architecture
 
 *Fixed (2026-10-23):* `application` and `infrastructure` → `api.etl_events` (moved to `infrastructure/etl_events.py` behind the `EventPublisher` port, injected into `run_etl_job` and `AnalyticsService`) · `api` → `infrastructure` without injection in `middleware.py`, `auth/dhis2_auth.py`, `auth/router.py`, `routers/config_router.py`, `etl_events.py` (they go through `core/dependencies.py`: `get_request_tracker_repo`, `get_auth_store`, `get_config_store`; ports `AuthStore`, `ConfigRepository`) · `etl/scripts/config.py` no longer imports etlhub (2026-10-22).
 
-Tolerated, not fixed (team decision pending, `CLAUDE.MD`): `application` → `etl.scripts` and pandas/geopandas (`validation_use_cases.py` reads the input files), `infrastructure/checkpoint_store.py` → `etl.scripts.config.get_dry_run`. Bypasses inside `infrastructure` (allowed by the rule): `tasks.py` builds `JobStore()` and calls `get_checkpoint_store()` directly.
+Tolerated, not fixed (team decision pending, `CLAUDE.MD`): `application` → `etl.scripts` and pandas/geopandas (`validation_use_cases.py` reads the input files) (`infrastructure/checkpoint_store.py` → `etl.scripts.config.get_dry_run`: gone since 2026-11-23, DRYRUN = TEST MODE). Bypasses inside `infrastructure` (allowed by the rule): `tasks.py` builds `JobStore()` and calls `get_checkpoint_store()` directly.
 
 ## 3. Behaviour worth knowing
 

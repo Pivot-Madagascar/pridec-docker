@@ -120,13 +120,13 @@ def test_imports_lists_the_fetched_elements_with_their_check(client, fetched):
                                        "text": None, "error": "too many"}]  # only what was fetched
 
 
-def test_imports_approval_posts_only_the_chosen_elements_with_the_pass_dry_run(client, checkpoint_store, fetched):
+def test_imports_approval_posts_only_the_chosen_elements_with_the_mode_s_dry_run(client, checkpoint_store, fetched):
     response = client.post("/pipeline/imports/approve",
                            json={"decision": "approve", "elements": ["pridec_historic_CSBMalaria"]})
 
     assert response.json()["job_id"].startswith("approve_imports_")
     assert [(p["payload"]["dataValues"][0]["dataElement"], p["dryRun"]) for p in fetched] == [
-        ("pridec_historic_CSBMalaria", True)]
+        ("pridec_historic_CSBMalaria", False)]  # production: DRYRUN = TEST MODE = false (post_dataElements mocked)
     assert _approve_imports(client)["status"] == "success"
     launched = [e for e in checkpoint_store.journal(checkpoint_store.progress()["pass"]["id"])
                 if e["event"] == "launched" and e["item"] == "approve_imports"]
@@ -491,11 +491,11 @@ def test_a_new_pass_keeps_the_gee_variables_chosen_on_home(client, checkpoint_st
 
     started = client.post("/pipeline/passes", json={"gee_variables": ["c_3", "a_1"]}).json()
     assert started["gee_variables"] == "a_1,c_3"  # pridec_gee's order: equal choices, equal import parameters
-    assert (started["dry_run"], started["dhis_url"]) == (True, "https://dhis2.test")  # the rest fixed too
+    assert (started["dry_run"], started["dhis_url"]) == (False, "https://dhis2.test")  # the rest fixed too
     assert checkpoint_store.pass_config()["gee_variables"] == "a_1,c_3"
     client.post("/pipeline/passes/current/pause")
-    every = client.post("/pipeline/passes", params={"confirm": "true"}, json={"dry_run": False}).json()  # all of them
-    assert (every["gee_variables"], every["dry_run"]) == ("a_1,b_2,c_3", False)
+    every = client.post("/pipeline/passes", params={"confirm": "true"}, json={"dry_run": True}).json()  # all of them
+    assert (every["gee_variables"], every["dry_run"]) == ("a_1,b_2,c_3", False)  # dry_run sent: ignored, the mode's
 
 
 def test_the_import_parameters_of_a_new_pass_carry_its_gee_variables():
@@ -546,15 +546,14 @@ def test_journal_shows_a_job_once_at_its_end_with_its_launch_request():
                                      ev("uploaded", None, "alice", "req-u")]
 
 
-def test_a_dhis2_job_takes_the_dryrun_of_its_launch_and_journals_it(client, checkpoint_store, monkeypatch, job_store):
+def test_a_dhis2_job_takes_the_mode_s_dryrun_whatever_the_launch_sends(client, checkpoint_store, monkeypatch, job_store):
     monkeypatch.setattr(tasks, "JobStore", lambda: job_store)
     queued = []
     monkeypatch.setattr(tasks.task_etl, "apply_async", lambda args, kwargs, task_id: queued.append(kwargs))
-    checkpoint_store.mode["dry_run"] = True  # .env
 
-    assert client.post("/import_gee", params={"dry_run": False}).status_code == 202
+    assert client.post("/import_gee", params={"dry_run": True}).status_code == 202  # ignored
 
-    assert queued[0]["dry_run"] is False
+    assert "dry_run" not in queued[0] and queued[0]["test_mode"] is False  # the job runs in the mode: DRYRUN = false
     events = checkpoint_store.journal(checkpoint_store.progress()["pass"]["id"])
     assert [e["detail"]["dry_run"] for e in events if e["event"] == "launched"] == [False]
 
@@ -563,41 +562,31 @@ def test_a_job_gets_the_configuration_of_its_pass_with_its_launch(client, checkp
     monkeypatch.setattr(tasks, "JobStore", lambda: job_store)
     queued = []
     monkeypatch.setattr(tasks.task_etl, "apply_async", lambda args, kwargs, task_id: queued.append(kwargs))
-    checkpoint_store.start_pass(gee_variables="v1", dry_run=True)
+    checkpoint_store.start_pass(gee_variables="v1")
 
-    launched = client.post("/import_gee")
-    checkpoint_store.finish(launched.json()["job_id"], "success")
-    refused = client.post("/import_gee", params={"dry_run": False, "confirm": True})
+    client.post("/import_gee")
 
     assert queued[0]["pass_config"] == {"gee_variables": "v1", "parent_ou": "ou_parent", "log_level": "INFO",
-                                        "dry_run": True, "dhis_url": "https://dhis2.test"}
-    assert (refused.status_code, len(queued)) == (409, 1)
-    assert "DRYRUN=true, fixed when it started" in refused.json()["message"]
+                                        "dry_run": False, "dhis_url": "https://dhis2.test"}
 
 
-def test_only_the_jobs_writing_to_dhis2_offer_dry_run(app):
-    from etlhub.domain.pipeline import DHIS2_WRITES
+def test_no_route_lets_a_launch_choose_its_dry_run(app):
     paths = app.openapi()["paths"]
-    offered = {path.strip("/") for path, ops in paths.items() for op in ops.values()
+    offered = {path for path, ops in paths.items() for op in ops.values()
                if any(p["name"] == "dry_run" for p in op.get("parameters", []))}
 
-    assert offered == set(DHIS2_WRITES)
+    assert offered == set()  # DRYRUN = TEST MODE
 
 
-def test_update_key_is_refused_in_dry_run_and_nothing_is_written(app, client, checkpoint_store, monkeypatch):
+def test_update_key_is_refused_in_test_mode_and_nothing_is_written(app, client, checkpoint_store, monkeypatch):
     from etlhub.application.use_cases import analytics_service
     ran = []
     monkeypatch.setattr(analytics_service, "run_etl_job", lambda *args, **kwargs: ran.append(kwargs))
-    checkpoint_store.mode["dry_run"] = True  # .env
+    checkpoint_store.progress()  # the production db and its shared lock exist, as after the API start
+    checkpoint_store.mode["test_mode"] = True
 
-    for params in ({}, {"dry_run": True}):
+    for params in ({}, {"dry_run": False}):  # a dry_run sent changes nothing
         refused = client.post("/update_key", params=params)
         assert refused.status_code == 409
-        assert "dry run" in refused.json()["message"]
+        assert "cannot run in test mode" in refused.json()["message"]
     assert ran == [] and checkpoint_store.progress()["lock"] is None
-
-    checkpoint_store.start_pass(dry_run=True)  # a pass fixed in dry run never updates the key
-    checkpoint_store.mode["dry_run"] = False  # .env changed since: the pass keeps its own
-    refused = client.post("/update_key")
-    assert (refused.status_code, ran) == (409, [])
-    assert "This pass runs in dry run, fixed when it started" in refused.json()["message"]

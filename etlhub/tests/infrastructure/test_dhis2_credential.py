@@ -60,23 +60,33 @@ def test_editable_keys_come_from_redis_only(monkeypatch):
     monkeypatch.setattr(redis_client, "get_redis", lambda: _Redis({"OU_LEVEL": " 5 "}))
     monkeypatch.setenv("OU_LEVEL", "6")
     monkeypatch.setenv("PARENT_OU", "ou_env")
-    monkeypatch.setenv("DRYRUN", "false")
+    monkeypatch.setenv("DRYRUN", "true")
     monkeypatch.setenv("PIVOT_URL", "https://pivot.test")
     monkeypatch.setenv("GEE_PROJECT", "gee-env")
 
     assert config.get_ou_level() == "5"
     assert config.get_parent_ou() is None  # absent from Redis: the default, not .env
-    assert config.get_dry_run() is True
+    assert config.get_dry_run() is False  # DRYRUN = TEST MODE (production here), never .env
     assert script_config._get("PIVOT_URL") is None  # editable since 2026-11-20: Redis only
     assert script_config._get("GEE_PROJECT") == "gee-env"  # not editable: the environment
 
 
 def test_redis_down_fails_the_job_instead_of_using_env(monkeypatch):
     monkeypatch.setattr(redis_client, "get_redis", lambda: _Redis(down=True))
-    monkeypatch.setenv("DRYRUN", "false")
+    monkeypatch.setenv("PARENT_OU", "ou_env")
 
     with pytest.raises(redis.RedisError):
-        config.get_dry_run()
+        config.get_parent_ou()
+
+
+def test_dryrun_is_the_test_mode_outside_a_job_too(monkeypatch):
+    from etlhub.core.job_context import pipeline_test_mode
+    monkeypatch.setenv("DRYRUN", "false")  # .env: the CLI's only
+    token = pipeline_test_mode.set(True)
+    try:
+        assert config.get_dry_run() is True
+    finally:
+        pipeline_test_mode.reset(token)
 
 
 def test_cli_reads_env_without_etlhub_or_redis(tmp_path):

@@ -1,6 +1,6 @@
 <template>
-  <!-- Before step 1: the user's mode (their session on the server; other users keep theirs). DRYRUN: chosen for a new
-       pass on Home (dryRunEditable), then fixed for the pass; etlhub's default is true in test mode, else DRYRUN of .env. -->
+  <!-- Before step 1: the user's mode (their session on the server; other users keep theirs). It also decides DHIS2
+       writes: DRYRUN = TEST MODE (etlhub, since 2026-11-23), shown read only from etlhub's `dry_run`. -->
   <section class="mode-toggle" :class="{ 'is-test': testMode }">
     <div class="mode-text">
       <span class="mode-label">Test mode</span>
@@ -10,25 +10,9 @@
         Your choice only: other users keep their mode.
       </span>
       <span v-if="dryRun !== undefined" class="mode-hint" data-test="dry-run-hint" :class="{ 'mode-warn': !dryRun }">
-        <template v-if="dryRun">DHIS2: dry run, the jobs write nothing.</template>
-        <template v-else>DHIS2: no dry run, the jobs write to DHIS2{{ testMode ? ', even in test mode' : '' }}.</template>
+        <template v-if="dryRun">DHIS2: dry run (test mode), the jobs write nothing.</template>
+        <template v-else>DHIS2: no dry run (production), the jobs write to DHIS2.</template>
       </span>
-      <div v-if="dryRunEditable" class="mt-1 flex items-center gap-3">
-        <span class="mode-label text-sm">Dry run</span>
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          aria-label="Dry run"
-          :model-value="dryRun === undefined ? undefined : dryRun ? 'yes' : 'no'"
-          :disabled="disabled"
-          @update:model-value="value => value && emit('dryRun', value === 'yes')"
-        >
-          <ToggleGroupItem v-for="choice in ['no', 'yes']" :key="choice" :value="choice" data-test="dry-run-btn"
-            class="px-3.5 font-bold data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
-            {{ choice.toUpperCase() }}
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </div>
     </div>
     <!-- Single choice, never empty: clicking the active item again changes nothing. -->
     <ToggleGroup
@@ -52,14 +36,12 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 
 defineProps<{
   testMode: boolean | undefined // unknown until the first read of the state
-  dryRun: boolean | undefined
-  dryRunEditable?: boolean // a new pass's choice (Home); read only elsewhere
+  dryRun: boolean | undefined // etlhub's: DRYRUN = TEST MODE
   disabled?: boolean
 }>()
 
 const emit = defineEmits<{
   change: [testMode: boolean]
-  dryRun: [dryRun: boolean]
 }>()
 </script>
 

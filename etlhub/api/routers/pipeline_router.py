@@ -51,9 +51,8 @@ class Mode(BaseModel):
 
 class PassStart(BaseModel):
     # Fixed for the pass (pass-config.md). The variables import_gee imports (GET /api/config gee_variables lists them;
-    # absent: all); DRYRUN of all its jobs (absent: true in test mode, else DRYRUN of .env).
+    # absent: all). No dry_run: the mode decides (DRYRUN = TEST MODE); a dry_run sent is ignored.
     gee_variables: list[str] | None = None
-    dry_run: bool | None = None
 
 
 class Cycle(BaseModel):
@@ -173,7 +172,7 @@ def fetched_imports() -> dict:
     summary="Approve the Pivot data elements to post, or reject the imports (step data_import)",
     description=(
         "approve, with `elements` (required, may be empty): the approve_imports job posts those fetched elements to "
-        "DHIS2, synchronously, with the pass's DRYRUN (journal: launched with params {elements}); on success "
+        "DHIS2, synchronously, with the mode's DRYRUN (journal: launched with params {elements}); on success "
         "approve_imports is success and unlocks build_analytics. An element not fetched in this pass gets 409. "
         "Again after a success needs confirm=true. reject: approve_imports back to pending, nothing posted."
     ),
@@ -203,9 +202,9 @@ def decide_imports(body: ImportsDecision, confirm: bool = CONFIRM, gate: Pipelin
         "is readable. A pass lives in one mode: while the mode left has an active pass, 409 confirmation_required "
         "with `impact` {pass_id, cycle, mode, to, actions: [pause, abandon]} until `pass_action` says which; that pass "
         "is then paused or abandoned (journal: cause mode_change, reason 'Mode changed manually by the user'), which "
-        "is refused while a job runs. The same mode again changes nothing. DHIS2 writes are not switched here: "
-        "the default DRYRUN of a launch is true in test mode, else DRYRUN of the root .env (dry_run in "
-        "GET /pipeline/checkpoints)."
+        "is refused while a job runs. The same mode again changes nothing. The mode also decides DHIS2 writes "
+        "(DRYRUN = TEST MODE): every job launched in test mode is a dry run, every job in production writes "
+        "(dry_run in GET /pipeline/checkpoints)."
     ),
     responses={200: {"content": {"application/json": {"example": {"test_mode": True}}}},
                401: error_doc("The session is gone", {"detail": "Not authenticated"}), **BLOCKED},
@@ -245,9 +244,9 @@ def set_cycle(body: Cycle, gate: PipelineGate = Depends(get_pipeline_gate)) -> d
         "A month whose last pass is complete or paused needs confirm=true (409 confirmation_required, impact "
         "complete_pass or paused_pass; a paused pass stays paused). Refused while a job runs or a pass is active. "
         "Its configuration is fixed now, for all its jobs, and journaled with pass_started: body `gee_variables` (the "
-        "GEE variables its import_gee imports; absent: all of them; empty or unknown: 400), body `dry_run` (absent: true "
-        "in test mode, else DRYRUN of .env), PARENT_OU and LOG_LEVEL of the editable config, the DHIS2 URL of the last "
-        "login. A launch asking another DRYRUN, or from a session on another DHIS2, is refused (409)."
+        "GEE variables its import_gee imports; absent: all of them; empty or unknown: 400), PARENT_OU and LOG_LEVEL of "
+        "the editable config, the DHIS2 URL of the last login. A launch from a session on another DHIS2 is refused "
+        "(409). DRYRUN is the mode's (DRYRUN = TEST MODE), never chosen: `dry_run` in the answer says it."
     ),
     responses={201: {"content": {"application/json": {"example": {
         "id": "3f9c1a2b", "cycle": "202610", "state": "active", "started_at": "2026-10-27T09:00:00.000000",
@@ -260,7 +259,7 @@ def start_pass(body: PassStart | None = None, confirm: bool = CONFIRM,
                gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
     body = body or PassStart()
     chosen = chosen_gee_variables(body.gee_variables)
-    return gate.start_pass(confirm, current_import_params(gee_variables=chosen), ",".join(chosen), body.dry_run)
+    return gate.start_pass(confirm, current_import_params(gee_variables=chosen), ",".join(chosen))
 
 
 @router.post(

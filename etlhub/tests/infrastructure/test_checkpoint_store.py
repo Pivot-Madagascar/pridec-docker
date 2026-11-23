@@ -463,7 +463,7 @@ def test_a_complete_pass_is_frozen_and_its_month_is_redone_in_a_new_pass_with_co
     assert second["current_step"] == "data_import"  # from zero
     assert checkpoint_store.progress(first["pass"]["id"])["current_step"] is None  # untouched
     started = checkpoint_store.journal(second["pass"]["id"])[0]
-    assert (started["event"], started["detail"]) == ("pass_started", {"cause": "redo", "parent_ou": "ou_parent", "log_level": "INFO", "dry_run": True, "dhis_url": "https://dhis2.test"})
+    assert (started["event"], started["detail"]) == ("pass_started", {"cause": "redo", "parent_ou": "ou_parent", "log_level": "INFO", "dry_run": False, "dhis_url": "https://dhis2.test"})
     assert checkpoint_store.journal(first["pass"]["id"])[-1]["event"] == "cycle_closed"  # nothing after it
 
 
@@ -810,7 +810,7 @@ def test_the_journal_keeps_every_attempt_and_what_a_relaunch_reset(checkpoint_st
     assert [e["event"] for e in journal if e["item"] == "ADJ/Malaria:fetch_disease"] == [
         "launched", "succeeded", "launched", "succeeded"]
     relaunch = [e for e in journal if e["item"] == "ADJ/Malaria:fetch_disease" and e["event"] == "launched"][-1]
-    assert relaunch["detail"] == {"confirm": True, "dry_run": True}
+    assert relaunch["detail"] == {"confirm": True, "dry_run": False}  # production: DRYRUN = TEST MODE
     reset = next(e for e in journal if e["event"] == "reset")
     assert (reset["job_id"], reset["detail"]) == (relaunch["job_id"], {"items": ["ADJ/Malaria:validate_inputs"], "cause": "relaunch"})
     assert ("decided", "approve_imports") in _events(checkpoint_store)
@@ -857,17 +857,16 @@ def test_a_stored_check_holds_in_its_cycle_until_its_import_is_launched_or_30_da
     assert checkpoint_store.reusable_availability(asked) == {}  # another cycle
 
 
-def test_every_launch_takes_the_dryrun_fixed_by_its_pass_and_an_import_its_parameters(checkpoint_store, month):
+def test_every_launch_journals_the_mode_s_dryrun_and_an_import_its_parameters(checkpoint_store, month):
     _pass(checkpoint_store, "import_gee")
-    checkpoint_store.mode["dry_run"] = False  # .env changed, API restarted: the pass keeps the DRYRUN it started with
     _pass(checkpoint_store, "import_pivot_com")
 
     checkpoint_store.start("import_pivot_csb", "csb_1", carry_over={"import_pivot_csb": {"task": "import_pivot_csb"}})
 
     launched = [e for e in _journal(checkpoint_store) if e["event"] == "launched"]
-    assert [(e["item"], e["detail"]) for e in launched] == [
-        ("import_gee", {"dry_run": True}), ("import_pivot_com", {"dry_run": True}),
-        ("import_pivot_csb", {"dry_run": True, "params": {"task": "import_pivot_csb"}})]  # an import's parameters
+    assert [(e["item"], e["detail"]) for e in launched] == [  # production: DRYRUN = TEST MODE = false
+        ("import_gee", {"dry_run": False}), ("import_pivot_com", {"dry_run": False}),
+        ("import_pivot_csb", {"dry_run": False, "params": {"task": "import_pivot_csb"}})]  # an import's parameters
 
 
 def test_a_refusal_writes_no_event(checkpoint_store, month):
@@ -1186,26 +1185,23 @@ def test_the_store_refuses_a_row_whose_pass_does_not_exist(checkpoint_store, tes
             conn.execute("INSERT INTO checkpoints VALUES ('nope', 'data_import', 'import_gee', NULL, 'success', 'x')")
 
 
-def test_a_launch_without_choice_is_dry_run_in_test_mode_and_follows_env_in_production(checkpoint_store):
-    checkpoint_store.mode["dry_run"] = False  # .env: the scripts write to DHIS2
-
+def test_dryrun_is_the_test_mode(checkpoint_store):
     assert (checkpoint_store.progress()["test_mode"], checkpoint_store.progress()["dry_run"]) == (False, False)
     checkpoint_store.mode["test_mode"] = True
     assert (checkpoint_store.progress()["test_mode"], checkpoint_store.progress()["dry_run"]) == (True, True)
 
 
-def test_a_launch_journals_the_dryrun_it_chose_or_the_default(checkpoint_store):
-    checkpoint_store.mode["dry_run"] = True  # .env
+def test_a_test_pass_that_stored_dry_run_false_still_never_writes(checkpoint_store):
+    checkpoint_store.mode["test_mode"] = True
+    p = checkpoint_store.start_pass()
+    with checkpoint_store._transaction() as conn:  # started on Home with Dry run NO, before DRYRUN = TEST MODE
+        conn.execute("UPDATE passes SET dry_run = 0 WHERE id = ?", (p["id"],))
 
-    assert checkpoint_store.start("import_gee", "chose", dry_run=False) is False  # it starts the pass: fixed
-    checkpoint_store.finish("chose", "success")
-    with pytest.raises(PipelineBlockedError, match="runs with DRYRUN=false, fixed when it started"):
-        checkpoint_store.start("import_pivot_com", "other", dry_run=True)
-    assert checkpoint_store.start("import_pivot_com", "default") is False  # no choice: the pass's
+    checkpoint_store.start("import_gee", "j1")
 
-    launched = {e["job_id"]: e["detail"]["dry_run"] for e in checkpoint_store.journal(checkpoint_store.progress()["pass"]["id"])
-                if e["event"] == "launched"}
-    assert launched == {"chose": False, "default": False}
+    assert checkpoint_store.progress()["pass"]["dry_run"] is True  # what etlui shows
+    launched = [e["detail"]["dry_run"] for e in checkpoint_store.journal(p["id"]) if e["event"] == "launched"]
+    assert launched == [True]  # the mode's, not the stored value
 
 
 # --- carry-over of Data Import to a new pass of the cycle (cycle-passes.md § 11) ---------------
@@ -1251,7 +1247,7 @@ def test_a_new_pass_carries_over_the_imports_and_their_approval_done_with_the_sa
     assert [(e["item"], e["job_id"], e["detail"]["from_pass"]) for e in carried] == [
         ("import_pivot_com", jobs["import_pivot_com"], old), ("import_pivot_csb", jobs["import_pivot_csb"], old),
         ("approve_imports", None, old)]
-    assert carried[0]["detail"]["dry_run"] is True and carried[0]["detail"]["status"] == "success"
+    assert carried[0]["detail"]["dry_run"] is False and carried[0]["detail"]["status"] == "success"
 
 
 def test_other_parameters_another_dryrun_or_an_unrecorded_launch_are_not_carried(checkpoint_store, month):
@@ -1266,9 +1262,11 @@ def test_other_parameters_another_dryrun_or_an_unrecorded_launch_are_not_carried
         "pending", "pending", "pending"]  # gee: PARENT_OU changed; com: no parameters; approve: com not carried
     checkpoint_store.finish(state["lock"]["job_id"], "success")
 
-    checkpoint_store.mode["dry_run"] = False
+    with checkpoint_store._transaction() as conn:  # a production import done in dry run before DRYRUN = TEST MODE
+        conn.execute("UPDATE pipeline_events SET detail = json_set(detail, '$.dry_run', json('true'))"
+                     " WHERE event = 'launched' AND item = 'import_pivot_csb'")
     _, state = _new_pass(checkpoint_store, "import_gee")
-    assert _status(state, "data_import", "import_pivot_csb") == "pending"  # launched with DRYRUN=true, now false
+    assert _status(state, "data_import", "import_pivot_csb") == "pending"  # it wrote nothing: not carried
 
 
 def test_a_carried_item_is_relaunched_only_with_confirmation_and_carries_on_to_the_next_pass(checkpoint_store, month):
@@ -1316,18 +1314,20 @@ def test_migration_3_adds_the_pass_configuration_and_leaves_existing_passes_unfi
         assert db.execute("PRAGMA user_version").fetchone() == (3,)
         assert db.execute("SELECT id, gee_variables, parent_ou, log_level, dry_run, dhis_url FROM passes").fetchall() == [
             ("p1", None, None, None, None, None)]
-    assert checkpoint_store.pass_config() == dict.fromkeys(PASS_CONFIG)  # p1: Redis / .env, as before
-    assert checkpoint_store.start("import_pivot_com", "j", dry_run=False) is False  # its launches choose, as before
+    assert checkpoint_store.pass_config() == {**dict.fromkeys(PASS_CONFIG), "dry_run": False}  # p1: Redis, as before;
+    # DRYRUN: the mode's (production), for passes from before too
+    checkpoint_store.start("import_pivot_com", "j")
+    last = _journal(checkpoint_store)[-1]
+    assert (last["event"], last["detail"]["dry_run"]) == ("launched", False)  # production: DRYRUN = TEST MODE
 
 
 def test_a_pass_fixes_its_configuration_when_it_starts(checkpoint_store):
-    p = checkpoint_store.start_pass(gee_variables="v1,v3", dry_run=False)
+    p = checkpoint_store.start_pass(gee_variables="v1,v3")
     fixed = {"gee_variables": "v1,v3", "parent_ou": "ou_parent", "log_level": "INFO", "dry_run": False,
              "dhis_url": "https://dhis2.test"}
 
     assert {c: p[c] for c in PASS_CONFIG} == fixed
     checkpoint_store.live.update(parent_ou="ou_edited", log_level="DEBUG")  # Admin Config, after the start
-    checkpoint_store.mode["dry_run"] = True  # .env
     assert checkpoint_store.pass_config() == fixed
     assert {c: checkpoint_store.progress()["pass"][c] for c in PASS_CONFIG} == fixed
     (started,) = [e for e in checkpoint_store.journal(p["id"]) if e["event"] == "pass_started"]
@@ -1336,7 +1336,9 @@ def test_a_pass_fixes_its_configuration_when_it_starts(checkpoint_store):
     assert checkpoint_store.pass_config() is None  # no active pass
     checkpoint_store.resume(p["id"])
     assert checkpoint_store.pass_config() == fixed  # resumed as it was
-    assert checkpoint_store.start("import_gee", "j1") is False  # its DRYRUN, not .env's
+    checkpoint_store.start("import_gee", "j1")
+    last = _journal(checkpoint_store)[-1]
+    assert (last["event"], last["detail"]["dry_run"]) == ("launched", False)  # production: DRYRUN = TEST MODE
 
 
 def test_a_launch_from_a_session_on_another_dhis2_is_refused_and_writes_nothing(checkpoint_store):
@@ -1350,7 +1352,7 @@ def test_a_launch_from_a_session_on_another_dhis2_is_refused_and_writes_nothing(
 
 
 def test_a_pass_started_by_a_launch_fixes_the_configuration_of_that_moment(checkpoint_store):
-    checkpoint_store.start("import_gee", "j1", dry_run=False)
+    checkpoint_store.start("import_gee", "j1")
 
     assert checkpoint_store.pass_config() == {"gee_variables": None, "parent_ou": "ou_parent", "log_level": "INFO",
                                               "dry_run": False, "dhis_url": "https://dhis2.test"}  # GEE: all of them

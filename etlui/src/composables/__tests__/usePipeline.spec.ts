@@ -130,14 +130,11 @@ describe('usePipeline', () => {
     expect(getCheckpoints).toHaveBeenCalledTimes(3)
   })
 
-  it('shows the DRYRUN fixed by the pass, else etlhub\'s default, and never sends it with a launch', async () => {
+  it('never sends DRYRUN with a launch: etlhub takes the mode\'s', async () => {
     launchJob.mockResolvedValue({ jobId: null, requestId: 'req-1' })
-    const { launch, refresh, dryRun, state } = usePipeline(addActivity)
+    const { launch, refresh } = usePipeline(addActivity)
     await refresh()
-    expect(dryRun.value).toBe(true) // no pass yet: etlhub's default
 
-    state.value = { ...STATE, pass: { id: 'p1', dry_run: false } } as typeof state.value
-    expect(dryRun.value).toBe(false) // fixed when the pass started
     await launch('import_gee', 'Import GEE')
     expect(launchJob).toHaveBeenLastCalledWith('import_gee', false)
   })

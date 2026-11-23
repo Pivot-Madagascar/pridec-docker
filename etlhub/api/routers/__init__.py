@@ -8,8 +8,6 @@ from etlhub.core.config import get_settings, split_csv
 
 CONFIRM_RELAUNCH = Query(False, description="Required to relaunch an item already in success (409 confirmation_required otherwise)")
 CONFIRM_OVERWRITE = Query(False, description="Required once a forecast of the cycle is in success: this job overwrites its input files (409 confirmation_required otherwise)")
-DRY_RUN = Query(None, description="DRYRUN of this job (it writes to DHIS2): true = nothing written. "
-                                  "Absent: true in test mode, else DRYRUN of .env. Journaled with the launch.")
 
 
 def _allowed_webhook(url: str) -> str:

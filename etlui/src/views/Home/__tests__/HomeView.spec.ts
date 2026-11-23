@@ -36,7 +36,7 @@ const pass = (id: string, cycle: string, state: string, mode = 'production') => 
   id, cycle, state, started_at: '2026-10-16T09:00:00.000000', started_by: 'jdoe', mode, events: 3, last_at: null
 })
 const checkpoints = (over: object = {}) => ({
-  cycle: '202610', pass: null, current_step: null, run: null, lock: null, test_mode: false, dry_run: true, steps: [], ...over
+  cycle: '202610', pass: null, current_step: null, run: null, lock: null, test_mode: false, dry_run: false, steps: [], ...over
 })
 
 let mounted: VueWrapper | null = null
@@ -103,7 +103,7 @@ describe('HomeView', () => {
     // The parameters of the pass
     expect(wrapper.text()).toContain('OU_PARENT')
     expect(wrapper.text()).toContain('https://dhis2.example')
-    expect(wrapper.text()).toContain('Dry run: nothing is written')
+    expect(wrapper.text()).toContain('No dry run: jobs write to DHIS2') // production: DRYRUN = TEST MODE = false
 
     await startButton(wrapper).trigger('click')
     await flushPromises()
@@ -125,7 +125,7 @@ describe('HomeView', () => {
     await startButton(wrapper).trigger('click')
     await flushPromises()
     expect(setCycle).toHaveBeenCalledWith('202609')
-    expect(startPass).toHaveBeenCalledWith(false, ['v1', 'v2', 'v3'], true)
+    expect(startPass).toHaveBeenCalledWith(false, ['v1', 'v2', 'v3'])
     expect(resumePass).not.toHaveBeenCalled()
     expect(push).toHaveBeenCalledWith({ name: 'Dashboard' })
   })
@@ -159,28 +159,28 @@ describe('HomeView', () => {
 
     await startButton(wrapper).trigger('click')
     await flushPromises()
-    expect(startPass).toHaveBeenCalledWith(false, ['v3'], true)
+    expect(startPass).toHaveBeenCalledWith(false, ['v3'])
   })
 
-  it('a new pass fixes the DRYRUN chosen here; a paused pass shows the configuration it started with', async () => {
-    getCycles.mockResolvedValue([{ cycle: '202610', target: true, passes: [{ ...pass('pppp1111', '202610', 'paused'),
+  it('DRYRUN follows the mode, never chosen; a paused pass shows the configuration it started with', async () => {
+    getCheckpoints.mockResolvedValue(checkpoints({ test_mode: true, dry_run: true })) // DRYRUN = TEST MODE, from etlhub
+    getCycles.mockResolvedValue([{ cycle: '202610', target: true, passes: [{ ...pass('pppp1111', '202610', 'paused', 'test'),
       gee_variables: null, parent_ou: 'OU_FIXED', log_level: 'DEBUG', dry_run: false, dhis_url: 'https://old.dhis2' }] }])
     startPass.mockResolvedValue(undefined)
     const wrapper = await mountPage()
     await closeCycleDialog(wrapper)
 
-    // Resume: its own values, not today's Admin Config or login; no DRYRUN switch
-    for (const value of ['OU_FIXED', 'DEBUG', 'https://old.dhis2', 'No dry run: jobs write to DHIS2']) expect(wrapper.text()).toContain(value)
+    // Resume: its own values, not today's Admin Config or login; DRYRUN: the mode's, whatever the pass stored
+    for (const value of ['OU_FIXED', 'DEBUG', 'https://old.dhis2', 'Dry run: nothing is written']) expect(wrapper.text()).toContain(value)
     expect(wrapper.find('[data-test="dry-run-btn"]').exists()).toBe(false)
 
     await wrapper.find('[role="radio"][value="new"]').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('OU_PARENT') // a new pass fixes today's values
-    await wrapper.findAll('[data-test="dry-run-btn"]').find(b => b.text() === 'NO')!.trigger('click')
-    await flushPromises()
+    expect(wrapper.find('[data-test="dry-run-btn"]').exists()).toBe(false) // no Dry run choice for a new pass either
     await startButton(wrapper).trigger('click')
     await flushPromises()
-    expect(startPass).toHaveBeenCalledWith(false, ['v1', 'v2', 'v3'], false)
+    expect(startPass).toHaveBeenCalledWith(false, ['v1', 'v2', 'v3']) // no dry_run sent
   })
 
   it('starts a new pass beside a paused one after the confirm, then goes to the forecast page', async () => {
@@ -201,7 +201,7 @@ describe('HomeView', () => {
     await wrapper.find('[data-test="impact-dialog"] [role="checkbox"]').trigger('click') // the impact is read
     await wrapper.findAll('button').find(b => b.text() === 'Confirm')!.trigger('click')
     await flushPromises()
-    expect(startPass).toHaveBeenLastCalledWith(true, ['v1', 'v2', 'v3'], true)
+    expect(startPass).toHaveBeenLastCalledWith(true, ['v1', 'v2', 'v3'])
     expect(resumePass).not.toHaveBeenCalled()
     expect(push).toHaveBeenCalledWith({ name: 'Dashboard' })
   })
@@ -253,7 +253,7 @@ describe('HomeView', () => {
     expect(wrapper.find('[data-test="pass-choice"] [role="radio"][value="new"]').attributes('data-state')).toBe('checked') // kept on the page
     await startButton(wrapper).trigger('click')
     await flushPromises()
-    expect(startPass).toHaveBeenCalledWith(false, ['v1', 'v2', 'v3'], true)
+    expect(startPass).toHaveBeenCalledWith(false, ['v1', 'v2', 'v3'])
     expect(resumePass).not.toHaveBeenCalled()
   })
 

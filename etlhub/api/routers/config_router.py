@@ -12,8 +12,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/config", tags=["Configuration"])
 
 # DHIS_URL and DHIS_TOKEN are not here: they come from the DHIS2 login only (auth_store).
-# DRYRUN is loaded from .env with the others but not editable here: its door is decided in
-# docs/decision-design/dry-run-merge/ (PUT /pipeline/mode or not).
+# No DRYRUN: the mode decides it (DRYRUN = TEST MODE, PUT /pipeline/mode).
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 class ConfigUpdate(BaseModel):

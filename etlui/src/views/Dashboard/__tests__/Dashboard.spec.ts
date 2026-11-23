@@ -144,7 +144,7 @@ describe('Dashboard', () => {
     const html = wrapper.html()
     // The step's accordion title: the breadcrumb above the toggle also says 'Data Import'
     expect(html.indexOf('mode-toggle')).toBeLessThan(html.lastIndexOf('Data Import'))
-    expect(wrapper.text()).toContain('DHIS2: dry run, the jobs write nothing.') // etlhub's default, from GET /pipeline/checkpoints
+    expect(wrapper.text()).toContain('DHIS2: dry run (test mode), the jobs write nothing.') // etlhub's dry_run, from GET /pipeline/checkpoints
 
     await wrapper.findAll('[data-test="mode-btn"]').find(b => b.text() === 'NO')!.trigger('click') // already active
     await flushPromises()
@@ -278,12 +278,12 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
-  it('shows the DRYRUN fixed by the pass, read only', async () => {
-    getCheckpoints.mockResolvedValue(state({ pass: { id: '3f9c1a2b', cycle: '202610', state: 'active', started_at: 't',
-      started_by: 'jdoe', dry_run: false } }))
+  it('shows etlhub\'s DRYRUN (DRYRUN = TEST MODE), read only', async () => {
+    getCheckpoints.mockResolvedValue(state({ dry_run: false, pass: { id: '3f9c1a2b', cycle: '202610', state: 'active',
+      started_at: 't', started_by: 'jdoe', dry_run: true } })) // production; a stored value never counts
     const wrapper = await mountPage()
 
-    expect(wrapper.find('[data-test="dry-run-hint"]').text()).toContain('the jobs write to DHIS2') // not .env's default
+    expect(wrapper.find('[data-test="dry-run-hint"]').text()).toContain('no dry run (production), the jobs write to DHIS2')
     expect(wrapper.find('[data-test="dry-run-btn"]').exists()).toBe(false)
     wrapper.unmount()
   })

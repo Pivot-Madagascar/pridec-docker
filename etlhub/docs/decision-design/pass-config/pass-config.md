@@ -2,6 +2,13 @@
 
 Status: implemented 2026-11-20. Schema version 3: run `python -m etlhub.migrate` by hand (API and workers stopped) before starting this code. Until then the API refuses to start (`SchemaVersionError`).
 
+> **Changed on 2026-11-23: DRYRUN = TEST MODE** (owner's rule). The DRYRUN rows below are superseded: a pass no longer
+> chooses its DRYRUN. Test mode ⇒ every job is a dry run, production ⇒ every job writes to DHIS2. Home has no Dry run
+> switch, `POST /pipeline/passes` and the launches take no `dry_run` (one sent is ignored), `.env`'s `DRYRUN` is the
+> CLI's only. The `dry_run` column is still written (the mode's, journaled with `pass_started`) but never read: a pass
+> started before, even in test mode with `dry_run = 0`, follows the mode (`CheckpointStore._passes`, `_check_config`).
+> The other fixed values (GEE variables, PARENT_OU, LOG_LEVEL, DHIS2 URL) are unchanged.
+
 ## Decision
 
 A pass fixes its whole configuration when it starts, and nothing changes it afterwards: not Admin Config, not `.env`, not another login, not the calendar.

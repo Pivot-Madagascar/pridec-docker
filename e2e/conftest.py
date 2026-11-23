@@ -50,10 +50,10 @@ class Stack:
     def item(self, name: str) -> dict:
         return next(i for step in self.state()["steps"] for i in step["items"] if i["item"] == name)
 
-    def launch(self, task: str, dry_run: bool | None = None, confirm: bool = False) -> str:
-        """Launches a job as etlui does and returns its job_id (202), or fails the test with etlhub's answer."""
-        params = {**({"dry_run": str(dry_run).lower()} if dry_run is not None else {}),
-                  **({"confirm": "true"} if confirm else {})}
+    def launch(self, task: str, confirm: bool = False) -> str:
+        """Launches a job as etlui does and returns its job_id (202), or fails the test with etlhub's answer.
+        No dry_run: etlhub takes the mode's (DRYRUN = TEST MODE)."""
+        params = {"confirm": "true"} if confirm else {}
         path, body = ("/forecast/", {"data": {}}) if task == "forecast" else (f"/{task}", {})
         status, answer = self.send("POST", path, params=params, **body)
         assert status == 202, f"{task}: {status} {answer}"
@@ -69,8 +69,8 @@ class Stack:
             time.sleep(3)
         pytest.fail(f"{job_id} still running after {JOB_LIMIT_S} s")
 
-    def run_job(self, task: str, dry_run: bool | None = None, confirm: bool = False) -> dict:
-        job_id = self.launch(task, dry_run, confirm)
+    def run_job(self, task: str, confirm: bool = False) -> dict:
+        job_id = self.launch(task, confirm)
         end = self.wait(job_id)
         assert end["status"] == "success", f"{task} ({job_id}): {end.get('message')}"
         return {**end, "job_id": job_id}

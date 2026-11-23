@@ -40,9 +40,10 @@ def redis(tmp_path, monkeypatch):
 def test_load_env_overwrites_and_removes_missing_keys(redis):
     assert config_store.ConfigStore().load_env()
 
-    assert redis == {"PARENT_OU": "ou_env", "OU_LEVEL": "6", "DRYRUN": "True"}  # never DHIS_TOKEN
+    assert redis == {"PARENT_OU": "ou_env", "OU_LEVEL": "6"}  # never DHIS_TOKEN; DRYRUN is the CLI's only
     assert config.get_disease_code() is None  # removed: the default
-    assert (config.get_parent_ou(), config.get_dry_run(), config.get_log_level()) == ("ou_env", True, "INFO")
+    assert (config.get_parent_ou(), config.get_dry_run(), config.get_log_level()) == ("ou_env", False, "INFO")
+    # DRYRUN=True of .env ignored: production mode, DRYRUN = TEST MODE = false
 
 
 def test_api_start_loads_env_into_redis(redis, app):

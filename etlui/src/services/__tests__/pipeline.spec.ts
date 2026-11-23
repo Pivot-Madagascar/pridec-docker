@@ -150,12 +150,12 @@ describe('cycle journal', () => {
       ['/pipeline/passes/current/pause'], ['/pipeline/passes/3f9c1a2b/resume'], ['/pipeline/passes/3f9c1a2b/abandon']])
   })
 
-  it('starts a pass with its fixed GEE variables and DRYRUN in the body, confirm in the query', async () => {
+  it('starts a pass with its fixed GEE variables in the body (no DRYRUN: the mode decides), confirm in the query', async () => {
     post.mockResolvedValue({ data: { id: '3f9c1a2b', state: 'active' } })
 
-    await pipeline.startPass(true, ['v1', 'v3'], false)
+    await pipeline.startPass(true, ['v1', 'v3'])
 
-    expect(post).toHaveBeenCalledWith('/pipeline/passes', { gee_variables: ['v1', 'v3'], dry_run: false }, { params: { confirm: true } })
+    expect(post).toHaveBeenCalledWith('/pipeline/passes', { gee_variables: ['v1', 'v3'] }, { params: { confirm: true } })
   })
 })
 

@@ -48,7 +48,7 @@ export interface Pass {
   gee_variables: string | null // comma-separated; null: every variable
   parent_ou: string | null
   log_level: string | null
-  dry_run: boolean | null
+  dry_run: boolean | null // DRYRUN = TEST MODE: etlhub sends the mode's, whatever the pass stored
   dhis_url: string | null
 }
 
@@ -59,7 +59,7 @@ export interface Checkpoints {
   run: ForecastRun | null
   lock: PipelineLock | null
   test_mode: boolean // the user's mode, kept in their session (PUT /pipeline/mode); other users keep theirs
-  dry_run: boolean // DRYRUN of the root .env, read only: whether the scripts write to DHIS2
+  dry_run: boolean // DRYRUN = TEST MODE, read only: whether the jobs write to DHIS2 (false: they do)
   steps: PipelineStep[]
 }
 

@@ -13,7 +13,8 @@ CONFIG_KEY = "app:config:dynamic"
 # Never a secret: Redis is persisted on disk (AOF).
 # GEE_VARIABLES is not one since 2026-11-20: each pass chooses its own (script_config._get, pass-config.md).
 # PIVOT_URL since 2026-11-20. PIVOT_TOKEN stays in the environment (a secret): GET /api/config says has_pivot_token only.
-EDITABLE_KEYS = ("PARENT_OU", "OU_LEVEL", "DISEASE_CODE", "DRYRUN", "LOG_LEVEL", "PIVOT_URL")
+# DRYRUN is not one since 2026-11-23: DRYRUN = TEST MODE (script_config._get); .env's DRYRUN is for the CLI only.
+EDITABLE_KEYS = ("PARENT_OU", "OU_LEVEL", "DISEASE_CODE", "LOG_LEVEL", "PIVOT_URL")
 
 class ConfigStore:
     def get_all(self) -> dict:

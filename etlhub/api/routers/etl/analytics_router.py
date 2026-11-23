@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query, Depends
 from fastapi.responses import JSONResponse
 
-from etlhub.api.routers import BLOCKED, CONFIRM_RELAUNCH, DRY_RUN, WebhookUrl, error_doc
+from etlhub.api.routers import BLOCKED, CONFIRM_RELAUNCH, WebhookUrl, error_doc
 from etlhub.api.routers.etl.ingest_router import add_launch_route
 from etlhub.application.use_cases.analytics_service import AnalyticsService
 from etlhub.domain.schemas import ETLResponse
@@ -38,10 +38,9 @@ add_launch_route(
 def api_post_forecast(
     webhook_url: WebhookUrl = Query(None),
     confirm: bool = CONFIRM_RELAUNCH,
-    dry_run: bool | None = DRY_RUN,
     service: AnalyticsService = Depends(get_analytics_service),
 ):
-    return service.post_forecast(webhook_url, confirm, dry_run)
+    return service.post_forecast(webhook_url, confirm)
 
 
 @router.post(
@@ -52,8 +51,8 @@ def api_post_forecast(
         "Updates the PRIDE-C datastore key in DHIS2. "
         "Executes `etl/scripts/update_pridec_key.py` synchronously: the request blocks until the script ends "
         "(200 with status success, or 500). `webhook_url` is notified on success only. "
-        "Never in dry run (409): pivot_dhis_tools ignores its dryRun and writes the key anyway, so it needs "
-        "`dry_run=false` (or, without it, a default of false: production mode with DRYRUN=false in .env)."
+        "Never in test mode (409): test mode is a dry run (DRYRUN = TEST MODE) and pivot_dhis_tools ignores its "
+        "dryRun, it would write the key anyway. Production mode only."
     ),
     response_description="PRIDE-C key updated successfully.",
     responses={
@@ -64,10 +63,9 @@ def api_post_forecast(
 def api_update_key(  # def, not async: see api_post_forecast
     webhook_url: WebhookUrl = Query(None),
     confirm: bool = CONFIRM_RELAUNCH,
-    dry_run: bool | None = DRY_RUN,
     service: AnalyticsService = Depends(get_analytics_service),
 ):
-    return service.update_key(webhook_url, confirm, dry_run)
+    return service.update_key(webhook_url, confirm)
 
 
 @router.post(

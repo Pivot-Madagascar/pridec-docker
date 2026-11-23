@@ -22,11 +22,11 @@ def _get(key: str, default=None) -> str | None:
     """Editable keys (config_store.EDITABLE_KEYS): Redis only, loaded from .env at API start; absent = the default.
     A Redis error fails the job instead of silently running on .env values. Other keys: the environment / .env."""
     # Imported here, not at module level: this module loads with the etlhub package, before tests mock redis.
-    from etlhub.core.job_context import PASS_KEYS, job_dry_run, job_pass_config
+    from etlhub.core.job_context import PASS_KEYS, current_test_mode, job_pass_config
     from etlhub.infrastructure.config_store import CONFIG_KEY, EDITABLE_KEYS
     from etlhub.infrastructure.redis_client import get_redis
-    if key == "DRYRUN" and (dry_run := job_dry_run.get()) is not None:  # the launch's choice (pass switch)
-        return "true" if dry_run else "false"
+    if key == "DRYRUN":  # DRYRUN = TEST MODE (since 2026-11-23): the mode served (a job's: its launcher's); never .env
+        return "true" if current_test_mode() else "false"
     if key in PASS_KEYS:  # fixed when the pass started (pass-config.md): the job's pass, else the active one
         config = job_pass_config.get()
         if config is None:

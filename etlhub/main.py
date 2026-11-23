@@ -33,7 +33,7 @@ from etlhub.domain.exceptions import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # .env is the default of the editable config: copied into Redis at each start, overwriting etlui's changes.
-    # No start on stale Redis values (e.g. DRYRUN=false while .env says true).
+    # No start on stale Redis values (e.g. a PARENT_OU .env no longer has).
     if not ConfigStore().load_env():
         raise RuntimeError("Could not load the .env config into Redis (app:config:dynamic): is Redis running?")
     get_checkpoint_store().check_schema()  # migrations run by hand only (python -m etlhub.migrate)

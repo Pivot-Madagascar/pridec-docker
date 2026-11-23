@@ -243,12 +243,6 @@ def apply_to_config_store(context: dict[str, str | None]) -> None:
         raise ETLException("Could not write the forecast run context (DISEASE_CODE, OU_LEVEL) to Redis")
 
 
-def dry_run_enabled() -> bool:
-    """DRYRUN as the ETL scripts read it: Redis, loaded from .env at each API start (main.py lifespan), default true."""
-    from etl.scripts.config import get_dry_run
-    return get_dry_run()
-
-
 def live_pass_config() -> dict:
     """What a new pass fixes besides its GEE variables and DRYRUN: PARENT_OU and LOG_LEVEL of the editable config
     (Redis, never through script_config: it reads the active pass) and the DHIS2 URL of the last login."""
@@ -286,7 +280,6 @@ class CheckpointStore:
     def __init__(self, db_path: str | Path | None = None, data_dir: str | Path | None = None,
                  apply_context: Callable[[dict], None] = apply_to_config_store,
                  test_mode: Callable[[], bool] = current_test_mode,
-                 dry_run: Callable[[], bool] = dry_run_enabled,
                  blob: RedisBlob | None = None, live_config: Callable[[], dict] = live_pass_config):
         """In test mode everything is kept in Redis (`blob`) and test/input, test/output; never in the SQLite file,
         except the single job lock of both modes. test_mode: the mode of the request or job served (the user's).
@@ -294,7 +287,7 @@ class CheckpointStore:
         The Redis keys and the uploads folder keep their dry_run names: they hold the test state of before TEST_MODE.
         """
         settings = get_settings()
-        self._test_mode, self._dry_run = test_mode, dry_run
+        self._test_mode = test_mode
         self._blob = blob or RedisBlob()
         self._db_path = Path(db_path or Path(settings.logs_dir) / "etlhub.db")
         self._data_dir = Path(data_dir or settings.data_dir)
@@ -380,14 +373,13 @@ class CheckpointStore:
         if cycle != pipeline.this_month():  # the calendar month: follow the calendar
             conn.execute("INSERT INTO pipeline_cycle (id, cycle) VALUES (1, ?)", (cycle,))
 
-    @staticmethod
-    def _passes(conn: sqlite3.Connection, where: str = "1", params: tuple = ()) -> list[dict]:
-        """Passes, oldest first. SELECT *: migration 1 reads passes from before PASS_CONFIG (migration 3)."""
+    def _passes(self, conn: sqlite3.Connection, where: str = "1", params: tuple = ()) -> list[dict]:
+        """Passes, oldest first. SELECT *: migration 1 reads passes from before PASS_CONFIG (migration 3).
+        dry_run is the mode's (DRYRUN = TEST MODE, since 2026-11-23): the value a pass stored when it started is not used."""
         cursor = conn.execute(f"SELECT * FROM passes WHERE {where} ORDER BY started_at", params)
         passes = [dict(zip([c[0] for c in cursor.description], r)) for r in cursor]
         for p in passes:
-            if p.get("dry_run") is not None:
-                p["dry_run"] = bool(p["dry_run"])
+            p["dry_run"] = self.default_dry_run()  # a store's db holds the passes of one mode, the one served
         return passes
 
     def _get_pass(self, conn: sqlite3.Connection, pass_id: str | None) -> dict | None:
@@ -708,47 +700,40 @@ class CheckpointStore:
     # --- jobs ----------------------------------------------------------------------------
 
     def default_dry_run(self) -> bool:
-        """DRYRUN of a launch that does not choose: true in test mode, else DRYRUN of .env (Redis)."""
-        return True if self._test_mode() else self._dry_run()
+        """DRYRUN = TEST MODE (rule of 2026-11-20, applied since 2026-11-23): test mode never writes to DHIS2, production always does.
+        Nothing else chooses it: no launch parameter, no Home choice, no .env."""
+        return self._test_mode()
 
-    def _config(self, gee_variables: str | None, dry_run: bool | None) -> dict:
+    def _config(self, gee_variables: str | None) -> dict:
         """The configuration a new pass fixes (PASS_CONFIG), read now: outside a transaction, never through the store."""
-        return {"gee_variables": gee_variables, "dry_run": self.default_dry_run() if dry_run is None else dry_run,
-                **self._live_config()}
+        return {"gee_variables": gee_variables, "dry_run": self.default_dry_run(), **self._live_config()}
 
     @staticmethod
-    def _check_config(p: dict, dry_run: bool | None, now: dict) -> bool:
-        """A launch in pass p follows its fixed configuration: its DRYRUN, on its DHIS2. Returns the job's DRYRUN.
-        dry_run: the launch's choice (None: none); now: _config() of this launch. A pass from before 2026-11-20
-        (nothing fixed) takes the launch's DRYRUN or the default, as then, without the DHIS2 check."""
-        if p.get("dry_run") is None:
-            return now["dry_run"]
+    def _check_config(p: dict, now: dict) -> None:
+        """A launch in pass p runs on its DHIS2, fixed when it started (none fixed before 2026-11-20).
+        now: _config() of this launch."""
         dhis_url = now["dhis_url"]
-        if dry_run is not None and dry_run != p["dry_run"]:
-            raise PipelineBlockedError(f"Pass {p['id']} runs with DRYRUN={str(p['dry_run']).lower()}, fixed when it "
-                                       "started: start a new pass to change it")
         if p.get("dhis_url") and dhis_url != p["dhis_url"]:
             raise PipelineBlockedError(f"Pass {p['id']} runs on the DHIS2 {p['dhis_url']}, fixed when it started: "
                                        f"log in to it to launch its jobs (session on {dhis_url or 'none'})")
-        return p["dry_run"]
 
-    def start(self, task: str, job_id: str, confirm: bool = False, carry_over: dict[str, dict] | None = None,
-              dry_run: bool | None = None) -> bool:
-        """Takes the lock and marks the checkpoint running. A refusal writes nothing. Returns the job's DRYRUN.
+    def start(self, task: str, job_id: str, confirm: bool = False, carry_over: dict[str, dict] | None = None) -> None:
+        """Takes the lock and marks the checkpoint running. A refusal writes nothing.
 
         Raises PipelineBlockedError, or ConfirmationRequiredError for an item already in success without confirm.
         A run job resets its dependents in the run and gets the run context (DISEASE_CODE, OU_LEVEL).
         Without an active pass, a launch starts one (confirm=true after a complete pass).
-        The launched event keeps the job's DRYRUN, the pass's (fixed when it started, since 2026-11-20; a launch asking
-        another one, or from a session on another DHIS2, is refused: _check_config): whether this job may write to DHIS2, and, for an
+        The launched event keeps the job's DRYRUN, the mode's (DRYRUN = TEST MODE; a launch from a session on another
+        DHIS2 than the pass's is refused: _check_config): whether this job may write to DHIS2, and, for an
         import, its parameters (`carry_over[item]`). A launch that starts a pass carries over the imports done before
         in the cycle (`carry_over`: the current parameters of each import; None records and carries nothing).
         """
-        config = self._config(None, dry_run)  # read before the transaction: fixed if this launch starts the pass
+        config = self._config(None)  # read before the transaction: fixed if this launch starts the pass
         with self._transaction() as conn:
             self._check_lock_free(conn)
             p = self._current(conn, confirm, config)
-            dry_run = self._check_config(p, dry_run, config)
+            self._check_config(p, config)
+            dry_run = config["dry_run"]  # the mode's: DRYRUN = TEST MODE, whatever the pass stored
             rows = self._rows(conn, p["id"])
             run = self._open_run(conn, p["id"])
             couple = run["couple"] if run else None
@@ -766,7 +751,6 @@ class CheckpointStore:
             if step == "forecast":
                 self._reset(conn, p, dependents(item), "relaunch", job_id)
                 self._apply_context(run_context(couple))  # inside the transaction: a failure writes nothing
-        return dry_run
 
     def _begin(self, conn: sqlite3.Connection, p: dict) -> None:
         """A new pass: its folders, empty working files (the previous pass saved or dropped them when it left), and
@@ -855,15 +839,13 @@ class CheckpointStore:
                             (job_id,)).fetchone()
 
     @contextmanager
-    def run(self, task: str, job_id: str, confirm: bool = False, dry_run: bool | None = None,
-            params: dict | None = None) -> Iterator[bool]:
-        """For synchronous work: start, then success or error when the block ends. Yields the job's DRYRUN.
+    def run(self, task: str, job_id: str, confirm: bool = False, params: dict | None = None) -> Iterator[None]:
+        """For synchronous work: start, then success or error when the block ends.
         params: kept in the launched event (approve_imports: the elements posted). Through `carry_over`, which carries
         nothing here: a launch that starts a pass cannot reach approve_imports (its imports are not done yet)."""
-        dry_run = self.start(task, job_id, confirm, carry_over={task: params} if params is not None else None,
-                             dry_run=dry_run)
+        self.start(task, job_id, confirm, carry_over={task: params} if params is not None else None)
         try:
-            yield dry_run
+            yield
         except BaseException:
             self.finish(job_id, "error")
             raise
@@ -958,14 +940,14 @@ class CheckpointStore:
     # --- passes --------------------------------------------------------------------------------
 
     def start_pass(self, confirm: bool = False, carry_over: dict[str, dict] | None = None,
-                   gee_variables: str | None = None, dry_run: bool | None = None) -> dict:
+                   gee_variables: str | None = None) -> dict:
         """Starts a pass on the target month at once (Home, "New pass"): its folders, and what is carried over from
         the cycle (uploads, and imports with the same parameters `carry_over`). After a complete or paused pass, only
         with confirm=true. Refused while a job runs or a pass is active. pass-folders.md § 6.
-        Its configuration is fixed now (PASS_CONFIG): gee_variables (comma-separated; None: all), dry_run (None: the
-        default), PARENT_OU, LOG_LEVEL and the DHIS2 URL of the last login.
+        Its configuration is fixed now (PASS_CONFIG): gee_variables (comma-separated; None: all), PARENT_OU, LOG_LEVEL
+        and the DHIS2 URL of the last login; dry_run is recorded but the mode decides (DRYRUN = TEST MODE).
         """
-        config = self._config(gee_variables, dry_run)
+        config = self._config(gee_variables)
         with self._transaction() as conn:
             self._check_lock_free(conn)
             if active := self._active(conn):
@@ -1236,7 +1218,7 @@ class CheckpointStore:
         state["run"] = run
         state["lock"] = lock
         state["test_mode"] = self._test_mode()
-        state["dry_run"] = self.default_dry_run()  # DRYRUN of a launch that does not choose (the pass switch starts on it)
+        state["dry_run"] = self.default_dry_run()  # DRYRUN = TEST MODE: every job of this mode
         return state
 
     # --- lock -------------------------------------------------------------------------------

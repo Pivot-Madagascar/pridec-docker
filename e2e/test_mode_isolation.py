@@ -76,11 +76,11 @@ def test_step_1_runs_in_the_worker_in_test_mode_with_dhis2_writes_in_dry_run(sta
     for task in imports:
         done = stack.item(task)["status"] == "success"
         if RELAUNCH_IMPORTS or not done:
-            stack.run_job(task, dry_run=True, confirm=done)
+            stack.run_job(task, confirm=done)  # test mode: a dry run (DRYRUN = TEST MODE)
     if stack.item("approve_imports")["status"] != "success":
         status, answer = stack.send("POST", "/pipeline/imports/approve", data={"decision": "approve"})
         assert status == 200, answer
-    stack.run_job("build_analytics", dry_run=True)
+    stack.run_job("build_analytics")
 
     journal = stack.get(f"/pipeline/passes/{run['pass_id']}/journal")[1]
     done = {e["item"] for e in journal if e["event"] in ("succeeded", "carried_over", "decided")}  # decided: approve

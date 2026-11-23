@@ -9,7 +9,7 @@ from pathlib import Path
 import httpx
 
 from etlhub.core.config import get_settings
-from etlhub.core.job_context import current_test_mode, job_dry_run, work_dir
+from etlhub.core.job_context import current_test_mode, work_dir
 from etlhub.domain.exceptions import ETLException
 from etlhub.domain.interfaces.event_publisher import EventPublisher
 from etlhub.domain.interfaces.job_repository import JobRepository
@@ -66,17 +66,13 @@ class _JobLogger(io.StringIO):
         return len(text)
 
 
-def _execute_etl_job(fn, log: _JobLogger, name: str, dry_run: bool | None = None, **kwargs) -> None:
-    """dry_run: this launch's DRYRUN, read by the scripts (script_config._get); None = DRYRUN of Redis (.env)."""
-    token = job_dry_run.set(dry_run)
-    try:
-        with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
-            try:
-                fn(**kwargs)
-            except Exception as e:
-                raise ETLException(f"{name} failed: {_reason(e)}") from e
-    finally:
-        job_dry_run.reset(token)
+def _execute_etl_job(fn, log: _JobLogger, name: str, **kwargs) -> None:
+    """The scripts read DRYRUN through script_config._get: the mode the job runs in (DRYRUN = TEST MODE)."""
+    with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+        try:
+            fn(**kwargs)
+        except Exception as e:
+            raise ETLException(f"{name} failed: {_reason(e)}") from e
 
 
 def _reason(e: Exception) -> str:

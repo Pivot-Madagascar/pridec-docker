@@ -29,9 +29,8 @@
     </div>
 
     <!-- The mode first: it decides which passes exist (a pass lives in one mode). -->
-    <!-- DRYRUN: chosen here for a new pass, fixed for it; a paused pass shows its own. -->
-    <ModeToggle :test-mode="state?.test_mode" :dry-run="passDryRun" :dry-run-editable="choice === 'new'" :disabled="busy"
-      @change="changeMode" @dry-run="value => (dryRunChoice = value)" />
+    <!-- DRYRUN follows the mode (DRYRUN = TEST MODE): never chosen here. -->
+    <ModeToggle :test-mode="state?.test_mode" :dry-run="state?.dry_run" :disabled="busy" @change="changeMode" />
 
     <div v-if="chosen" class="flex items-center gap-2 text-sm font-medium text-foreground">
       Cycle
@@ -64,8 +63,9 @@
           </template>
         </dl>
         <p class="mt-2 text-xs text-muted-foreground">
-          Fixed for the whole pass when it starts: a later change in Admin Config, of DRYRUN or of the DHIS2 login applies
-          to the next pass only (a launch from a session on another DHIS2 is refused). A resumed pass keeps its own values.
+          Fixed for the whole pass when it starts: a later change in Admin Config or of the DHIS2 login applies to the
+          next pass only (a launch from a session on another DHIS2 is refused). A resumed pass keeps its own values.
+          DHIS2 writes follow the mode: test mode is always a dry run, production always writes.
         </p>
       </div>
 
@@ -81,7 +81,7 @@
             <DialogTitle>Choose the mode, then the cycle</DialogTitle>
             <DialogDescription>Test or production first, then the month of the pass. Both stay editable at the top of the page.</DialogDescription>
           </DialogHeader>
-          <ModeToggle :test-mode="state?.test_mode" :dry-run="passDryRun" :disabled="busy" @change="changeMode" />
+          <ModeToggle :test-mode="state?.test_mode" :dry-run="state?.dry_run" :disabled="busy" @change="changeMode" />
           <div class="flex items-center gap-2 text-sm font-medium">
             Cycle
             <CyclePicker v-model="month" />
@@ -157,16 +157,13 @@ const geeShown = computed(() => {
   if (!resumed.value) return geeChosen.value.length === available.value.length ? 'all available variables' : geeChosen.value.join(', ')
   return resumed.value.gee_variables?.split(',').join(', ') ?? 'all available variables'
 })
-// DRYRUN of a new pass: the user's choice, else etlhub's default (true in test mode, else DRYRUN of .env).
-const dryRunChoice = ref<boolean | null>(null)
-const passDryRun = computed(() => (resumed.value ? resumed.value.dry_run : dryRunChoice.value) ?? state.value?.dry_run)
 const parameters = computed(() => {
   const config = configStore.config
   return [
     ['Cycle', monthName(cycle.value)],
     ['Pass', passLabel.value],
     ['Mode', state.value?.test_mode ? 'test (kept apart from production)' : 'production'],
-    ['DHIS2 writes', passDryRun.value ? 'Dry run: nothing is written' : 'No dry run: jobs write to DHIS2'],
+    ['DHIS2 writes', state.value?.dry_run ? 'Dry run: nothing is written' : 'No dry run: jobs write to DHIS2'],
     ['DHIS2', resumed.value?.dhis_url ?? config?.dhis_url ?? '-'],
     ['PARENT_OU', resumed.value?.parent_ou ?? config?.parent_ou ?? '-'],
     ['GEE_VARIABLES', geeShown.value || '-'],
@@ -176,7 +173,6 @@ const parameters = computed(() => {
 })
 
 const changeMode = async (testMode: boolean) => {
-  dryRunChoice.value = null // the default follows the mode
   await setMode(testMode)
   await loadCycles() // leaving test mode pauses the active test pass
 }
@@ -187,7 +183,7 @@ async function start(): Promise<void> {
   const ok =
     choice.value !== 'new'
       ? await resume(choice.value)
-      : (cycle.value === state.value?.cycle || (await setCycle(cycle.value))) && (await startPass(geeChosen.value, passDryRun.value))
+      : (cycle.value === state.value?.cycle || (await setCycle(cycle.value))) && (await startPass(geeChosen.value))
   if (ok) await router.push({ name: 'Dashboard' })
 }
 

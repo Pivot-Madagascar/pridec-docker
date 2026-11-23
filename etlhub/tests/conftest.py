@@ -50,11 +50,10 @@ def checkpoint_store(tmp_path, monkeypatch):
     """The real pipeline gate, on a temporary db: launches never touch logs/etlhub.db."""
     from etlhub.infrastructure import checkpoint_store as module
     # data_dir = tmp_path: input/ and output/ are emptied when a run opens, uploads/ keeps the uploaded files.
-    mode = {"test_mode": False, "dry_run": True}  # the mode served: production by default; tests switch mode[...]
+    mode = {"test_mode": False}  # the mode served: production by default (DRYRUN = TEST MODE: false); tests switch it
     store = module.CheckpointStore(
         tmp_path / "etlhub.db", data_dir=tmp_path, apply_context=lambda ctx: store.contexts.append(ctx),
-        test_mode=lambda: mode["test_mode"],
-        dry_run=lambda: mode["dry_run"], blob=FakeBlob(), live_config=lambda: dict(store.live),
+        test_mode=lambda: mode["test_mode"], blob=FakeBlob(), live_config=lambda: dict(store.live),
     )
     store.contexts = []  # run contexts the jobs received (instead of Redis)
     # PARENT_OU, LOG_LEVEL (Redis) and the DHIS2 URL of the last login, as a new pass fixes them (pass-config.md)
@@ -88,11 +87,11 @@ class FakeBlob:
 class OpenGate:
     """Pipeline gate that lets everything through: for tests that are not about the pipeline order."""
 
-    def start(self, task, job_id, confirm=False, carry_over=None, dry_run=None):
-        return self.default_dry_run() if dry_run is None else dry_run
+    def start(self, task, job_id, confirm=False, carry_over=None):
+        pass
 
     def default_dry_run(self):
-        return True
+        return True  # as test mode: nothing written
 
     def pass_config(self):
         return None
@@ -101,8 +100,8 @@ class OpenGate:
         pass
 
     @contextmanager
-    def run(self, task, job_id, confirm=False, dry_run=None, params=None):
-        yield self.start(task, job_id, confirm, dry_run=dry_run)
+    def run(self, task, job_id, confirm=False, params=None):
+        yield
 
     @contextmanager
     def change_input(self, name, confirm=False, removed=False):
