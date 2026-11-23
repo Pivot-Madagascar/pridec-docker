@@ -45,6 +45,10 @@ vi.mock('@/services/inputs', () => ({
   getExternalDataPreview: vi.fn()
 }))
 vi.mock('@/services/api', () => ({ default: { get: (...args: unknown[]) => apiGet(...args), getUri: ({ url }: { url: string }) => `http://api${url}` }, errorMessage: (_: unknown, f: string) => f }))
+vi.mock('@/views/TrackerView/components/JobLogsPanel.vue', async () => {
+  const { defineComponent, h } = await import('vue')
+  return { default: defineComponent({ props: ['jobId'], setup: p => () => h('div', { 'data-test': 'job-logs', 'data-job': p.jobId }) }) }
+})
 vi.mock('vue3-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }))
 
 import Dashboard from '@/views/Dashboard/Dashboard.vue'
@@ -56,7 +60,7 @@ function state(overrides: object = {}) {
     cycle: '202610', current_step: 'data_import', run: null, lock: null, test_mode: false, dry_run: true,
     pass: { id: '3f9c1a2b', cycle: '202610', state: 'active', started_at: 't', started_by: 'jdoe' },
     steps: [
-      { step: 'data_import', done: false, accessible: true, items: [{ ...item('import_gee', 'success', true), updated_at: '2026-10-13T14:02:11' }, item('build_analytics')] },
+      { step: 'data_import', done: false, accessible: true, items: [{ ...item('import_gee', 'success', true), updated_at: '2026-10-13T14:02:11' }, item('approve_imports'), item('build_analytics')] },
       { step: 'forecast', done: false, accessible: false, items: [item('config/Malaria')] },
       { step: 'system_update', done: false, accessible: false, items: [item('update_key')] }
     ],
@@ -100,11 +104,19 @@ describe('Dashboard', () => {
   })
 
   it('the last breadcrumb goes to the current item: scrolls to its card, blinks it orange when no job runs', async () => {
+    getCheckpoints.mockResolvedValue(state({ steps: [
+      { step: 'data_import', done: false, accessible: true, items: [item('import_gee', 'success', true),
+        item('approve_imports', 'success', true), item('build_analytics', 'pending', true)] },
+      { step: 'forecast', done: false, accessible: false, items: [] },
+      { step: 'system_update', done: false, accessible: false, items: [item('build_analytics'), item('update_key')] }
+    ] }))
     const wrapper = await mountPage()
+    expect(wrapper.find('[data-test="position"] [aria-current="page"]').text()).toBe('Build Analytics')
 
     await wrapper.find('[data-test="position-link"]').trigger('click')
     await flushPromises()
-    const card = wrapper.find('[data-section="dataImport"] [data-item="build_analytics"]')
+    // Step ①'s Build Analytics is done from the approval's dialog: its card is the one pointed to
+    const card = wrapper.find('[data-section="dataImport"] [data-item="approve_imports"]')
     expect(card.attributes('data-attention')).toBeDefined()
     expect(wrapper.find('[data-section="systemUpdate"] [data-attention]').exists()).toBe(false) // not its namesake of step ③
     wrapper.unmount()
@@ -211,8 +223,8 @@ describe('Dashboard', () => {
     expect(wrapper.text()).toContain('started by jdoe')
     // Where the pass stands, as a shadcn Breadcrumb next to the cycle: step / next item, the last one is the current page
     const crumbs = wrapper.find('[data-test="position"]')
-    expect(crumbs.findAll('li[data-slot="breadcrumb-item"]').map(li => li.text())).toEqual(['Data Import', 'Build Analytics'])
-    expect(crumbs.find('[aria-current="page"]').text()).toBe('Build Analytics')
+    expect(crumbs.findAll('li[data-slot="breadcrumb-item"]').map(li => li.text())).toEqual(['Data Import', 'Imports approval'])
+    expect(crumbs.find('[aria-current="page"]').text()).toBe('Imports approval')
     const aside = wrapper.find('[data-test="activity-aside"]')
     expect(aside.text().indexOf('Pause the cycle')).toBeGreaterThan(aside.text().indexOf('Recent Activity'))
     expect(aside.text()).toContain('Abandon the cycle')
@@ -280,7 +292,7 @@ describe('Dashboard', () => {
 
     const cards = wrapper.findAll('[data-test="action-card"]')
     const gee = cards.find(c => c.text().includes('Import GEE'))!
-    const build = cards.find(c => c.text().includes('Build Analytics'))!
+    const build = cards.find(c => c.text().includes('Update Key'))! // not launchable
     expect(gee.attributes('disabled')).toBeUndefined()
     expect(build.attributes('disabled')).toBeDefined()
     expect(gee.text()).toContain('✓ Done')
@@ -370,7 +382,7 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
-  it('shows the imports approval as a decision, not a job card, made line by line on the fetched Pivot data', async () => {
+  it('reviews and approves the fetched Pivot data line by line, shows the post, then offers Build Analytics', async () => {
     getCheckpoints.mockResolvedValue(state({ steps: [
       { step: 'data_import', done: false, accessible: true, items: [item('import_gee', 'success', true), item('approve_imports', 'pending', true), item('build_analytics')] },
       { step: 'forecast', done: false, accessible: false, items: [] },
@@ -388,10 +400,12 @@ describe('Dashboard', () => {
     ])
     const wrapper = await mountPage()
 
-    expect(wrapper.findAll('[data-test="action-card"]').map(c => c.text()).some(t => t.includes('approve_imports'))).toBe(false)
-    const buttons = wrapper.find('[data-test="imports-approval"]').findAll('button')
-    expect(buttons.map(b => b.text())).toEqual(['Details', 'Review and approve']) // Details: read only
-    await buttons[1].trigger('click')
+    const grid = wrapper.find('[data-section="dataImport"]')
+    expect(grid.find('[data-item="build_analytics"]').exists()).toBe(false) // launched from the approval's dialog
+    expect(wrapper.find('[data-test="imports-approval"]').findAll('button').map(b => b.text())).toEqual(['Details']) // read only
+    const card = grid.find('[data-item="approve_imports"]')
+    expect(card.text()).toContain('Review and Approve')
+    await card.trigger('click')
     await flushPromises()
 
     const dialog = wrapper.find('[data-test="approval-dialog"]')
@@ -408,10 +422,33 @@ describe('Dashboard', () => {
 
     await row('pridec_historic_COMRespinf').trigger('click') // a whole line selects
     await row('pridec_historic_COMMalaria').trigger('click') // and unselects
+    let posted!: () => void
+    decideImports.mockReturnValue(new Promise<void>(resolve => { posted = resolve })) // etlhub posts synchronously
     await dialog.find('[data-test="approve-imports"]').trigger('click')
     await flushPromises()
     expect(decideImports).toHaveBeenCalledWith('approve', ['pridec_historic_COMRespinf'], false)
-    expect(wrapper.find('[data-test="approval-dialog"]').exists()).toBe(false) // closed before the decision
+    const post = () => wrapper.find('[data-test="approval-post"]') // the dialog stays open on the post
+    expect(post().find('[data-test="posting-bar"]').exists()).toBe(true)
+    expect(post().text()).toContain('pridec_historic_COMRespinf')
+    expect(wrapper.find('[data-test="build-analytics"]').exists()).toBe(false)
+
+    getCheckpoints.mockResolvedValue(state({ steps: [
+      { step: 'data_import', done: false, accessible: true, items: [item('import_gee', 'success', true),
+        { ...item('approve_imports', 'success', true), job_id: 'approve_imports_1a2b3c4d' }, item('build_analytics', 'pending', true)] },
+      { step: 'forecast', done: false, accessible: false, items: [] },
+      { step: 'system_update', done: false, accessible: false, items: [] }
+    ] }))
+    posted()
+    await flushPromises()
+    expect(post().find('[data-test="posting-bar"]').exists()).toBe(false)
+    expect(post().find('[data-test="job-logs"]').attributes('data-job')).toBe('approve_imports_1a2b3c4d') // the post's steps
+    expect(grid.find('[data-item="approve_imports"]').text()).toContain('Approved: Build Analytics to launch')
+
+    launchJob.mockResolvedValue({ jobId: 'build_analytics_1', requestId: 'r' })
+    await wrapper.find('[data-test="build-analytics"]').trigger('click')
+    await flushPromises()
+    expect(launchJob).toHaveBeenCalledWith('build_analytics', false)
+    expect(wrapper.find('[data-test="approval-dialog"]').exists()).toBe(false) // the toast follows the build
     wrapper.unmount()
   })
 

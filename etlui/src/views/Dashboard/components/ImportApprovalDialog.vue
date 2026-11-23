@@ -13,7 +13,20 @@
     <template #actions>
       <Button variant="outline" size="sm" :disabled="loading" data-test="approval-refresh" @click="emit('refresh')">Refresh</Button>
     </template>
-    <template v-if="imports">
+    <!-- After "Approve and post": the post (etlhub posts synchronously, no progress to read), then its job's logs. -->
+    <section v-if="post" class="approval-post" data-test="approval-post">
+      <template v-if="post.posting">
+        <p class="approval-meta">
+          {{ sent.length ? `Posting ${sent.length} data element(s) to DHIS2 with the pass's DRYRUN…` : 'Approving without posting…' }}
+        </p>
+        <div class="post-bar" role="progressbar" aria-label="Posting to DHIS2" data-test="posting-bar"><span /></div>
+        <ul class="post-list">
+          <li v-for="name in sent" :key="name" class="approval-code">{{ name }}</li>
+        </ul>
+      </template>
+      <JobLogsPanel v-else-if="post.jobId" :job-id="post.jobId" />
+    </section>
+    <template v-else-if="imports">
       <p class="approval-meta">
         One line per data element fetched from Pivot in this pass. The checked lines are posted to DHIS2 with the pass's
         DRYRUN when you approve; flagged lines start unchecked. Approving with no line checked posts nothing.
@@ -72,9 +85,15 @@
       </section>
     </template>
     <template #footer>
-      <Button variant="outline" :disabled="!canReject || loading" @click="emit('reject')">Reject</Button>
-      <Button :disabled="!canApprove || loading || !imports" data-test="approve-imports" @click="emit('approve', chosen())">
-        {{ selected.size ? `Approve and post ${selected.size}` : 'Approve without posting' }}
+      <template v-if="!post">
+        <Button variant="outline" :disabled="!canReject || loading" @click="emit('reject')">Reject</Button>
+        <Button :disabled="!canApprove || loading || !imports" data-test="approve-imports" @click="approve">
+          {{ selected.size ? `Approve and post ${selected.size}` : 'Approve without posting' }}
+        </Button>
+      </template>
+      <!-- Step ①'s Build Analytics, once the approval is a success; enabled when etlhub allows it. -->
+      <Button v-if="approved && !post?.posting" :disabled="!canBuild" data-test="build-analytics" @click="emit('build')">
+        Build analytics
       </Button>
     </template>
   </PreviewDialog>
@@ -89,6 +108,7 @@ import { labelOf } from '@/config/pipeline'
 import type { FetchedImport } from '@/types/pipeline'
 import { checkProblems, parseCheckStats as stats } from '@/utils/checkSummary'
 import PreviewDialog from './PreviewDialog.vue'
+import JobLogsPanel from '@/views/TrackerView/components/JobLogsPanel.vue'
 
 const props = defineProps<{
   open: boolean
@@ -97,6 +117,9 @@ const props = defineProps<{
   imports: FetchedImport[] | null
   canApprove: boolean // approve_imports launchable, no job running
   canReject: boolean // approve_imports in success
+  post: { posting: boolean; jobId: string | null } | null // after "Approve and post": running, then its job
+  approved: boolean // approve_imports in success: Build analytics is offered
+  canBuild: boolean // build_analytics of step 1 launchable, no job running
 }>()
 
 const emit = defineEmits<{
@@ -104,6 +127,7 @@ const emit = defineEmits<{
   refresh: []
   approve: [elements: string[]]
   reject: []
+  build: []
 }>()
 
 // The lines to post: every element not flagged, each time the data is read.
@@ -120,6 +144,12 @@ function toggle(name: string): void {
 
 // In the dialog's order, not the order of the clicks.
 const chosen = () => (props.imports ?? []).flatMap(i => i.elements.map(e => e.data_element)).filter(n => selected.value.has(n))
+
+const sent = ref<string[]>([]) // what "Approve and post" sent, listed while it posts
+function approve(): void {
+  sent.value = chosen()
+  emit('approve', sent.value)
+}
 </script>
 
 <style scoped>
@@ -172,5 +202,32 @@ const chosen = () => (props.imports ?? []).flatMap(i => i.elements.map(e => e.da
 
 .approval-message.is-flagged {
   font-weight: 400;
+}
+
+.post-list {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+}
+
+/* Indeterminate: etlhub answers once every element is posted. */
+.post-bar {
+  @apply h-2 w-full overflow-hidden rounded-full bg-primary/20;
+}
+
+.post-bar span {
+  @apply block h-full w-2/5 rounded-full bg-primary;
+  animation: post-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes post-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .post-bar span {
+    @apply w-full opacity-60;
+    animation: none;
+  }
 }
 </style>

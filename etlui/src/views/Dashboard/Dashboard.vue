@@ -70,6 +70,7 @@
         <template #content-dataImport>
           <div class="action-grid">
             <ActionCard v-for="card in cards('data_import')" :key="card.key" :action="card" @action-click="launchItem" />
+            <ActionCard v-if="reviewCard" :action="reviewCard" @action-click="openApproval" />
           </div>
           <!-- Chosen on Home when the pass started, fixed for it: what Import GEE imports. -->
           <p v-if="state?.pass" class="gee-note" data-test="pass-gee">
@@ -81,7 +82,6 @@
               · choose the Pivot data elements to post to DHIS2, flagged ones after checking them; Details: what DHIS2 has
             </span>
             <Button variant="outline" @click="availability.show()">Details</Button>
-            <Button data-item="approve_imports" @click="fetched.show()">Review and approve</Button>
           </div>
         </template>
 
@@ -128,7 +128,8 @@
       @refresh="availability.load(true)"
     />
 
-    <!-- The imports decision, line by line: closes the dialog, then sends it (as decideFromReport). -->
+    <!-- The imports decision, line by line: stays open on the post and its logs, then offers step ①'s Build Analytics.
+         Reject closes it first. -->
     <ImportApprovalDialog
       :open="fetched.open.value"
       :loading="fetched.loading.value"
@@ -136,10 +137,14 @@
       :imports="fetched.imports.value"
       :can-approve="!busy && state?.lock == null && !!approveImports?.launchable"
       :can-reject="!busy && state?.lock == null && approveImports?.status === 'success'"
+      :post="approvalPost"
+      :approved="approveImports?.status === 'success'"
+      :can-build="!busy && state?.lock == null && !!buildItem?.launchable"
       @close="fetched.close"
       @refresh="fetched.refresh"
       @approve="elements => decideImportsFromApproval('approve', elements)"
       @reject="decideImportsFromApproval('reject')"
+      @build="buildFromApproval"
     />
 
     <ImpactDialog :pending="pending" :busy="busy" @confirm="confirm" @cancel="cancel" />
@@ -236,6 +241,7 @@ import { useFetchedImports } from '@/composables/useFetchedImports'
 import { useInputPreview } from '@/composables/useInputPreview'
 import { usePipeline } from '@/composables/usePipeline'
 import { jobOf, labelOf, position, positionItem, step, toCard } from '@/config/pipeline'
+import { ClipboardCheck } from '@lucide/vue'
 import type { InputName } from '@/types/inputs'
 import type { StepName } from '@/types/pipeline'
 
@@ -275,7 +281,9 @@ async function goToPosition() {
     return
   }
   await nextTick()
-  pointTo(`[data-section="${SECTIONS[name]}"] [data-item="${item.item}"]`, blink) // approve_imports: its Review and approve button
+  // Step ①'s Build Analytics has no card: it is launched from the approval's dialog, opened by its card.
+  const card = name === 'data_import' && item.item === 'build_analytics' ? 'approve_imports' : item.item
+  pointTo(`[data-section="${SECTIONS[name]}"] [data-item="${card}"]`, blink)
 }
 const availability = useImportAvailability() // "Details" of Data Import: is the imported data in DHIS2?
 const fetched = useFetchedImports(state) // "Review and approve": the Pivot elements fetched (Pinia), to post line by line
@@ -298,10 +306,23 @@ const pendingPause = ref(false)
 const pendingAbandon = ref(false)
 const pendingRunAbandon = ref(false)
 
-// approve_imports is a decision (Approve / Reject buttons), not a job card.
-const cards = (name: StepName) =>
-  (step(state.value, name)?.items ?? []).filter(i => i.item !== 'approve_imports').map(i => toCard(i, state.value, busy.value))
+// Step ①'s approve_imports (a decision) and build_analytics (after it) share the "Review and Approve" card.
+const cards = (name: StepName) => (step(state.value, name)?.items ?? [])
+  .filter(i => name !== 'data_import' || !['approve_imports', 'build_analytics'].includes(i.item))
+  .map(i => toCard(i, state.value, busy.value))
 const approveImports = computed(() => step(state.value, 'data_import')?.items.find(i => i.item === 'approve_imports'))
+const buildItem = computed(() => step(state.value, 'data_import')?.items.find(i => i.item === 'build_analytics'))
+// Opens the dialog; once the approval is a success, the card shows Build Analytics' status. Always clickable (to review).
+const reviewCard = computed(() => {
+  const approval = approveImports.value
+  if (!approval) return null
+  const shown = approval.status === 'success' && buildItem.value ? buildItem.value : approval
+  return {
+    ...toCard(shown, state.value, busy.value),
+    key: 'approve_imports', label: 'Review and Approve', icon: ClipboardCheck, inactive: false,
+    ...(shown !== approval && shown.status === 'pending' ? { statusText: 'Approved: Build Analytics to launch' } : {})
+  }
+})
 
 // A card's key is its checkpoint ('CSB/Malaria:forecast'); the server resolves which checkpoint a job counts for.
 // ponytail: calc_orgunit_alerts has no script yet (501): its button skips it (LevelColumn 'Skip').
@@ -319,9 +340,27 @@ const decideFromReport = async (decision: 'approve' | 'reject') => {
   await decide(decision)
 }
 
+// "Approve and post": the dialog shows the post while it runs, then the job it made. undefined: nothing sent since it
+// opened; else approve_imports' job before the click (still the same after a cancelled confirmation: back to the list).
+const postedFrom = ref<string | null | undefined>(undefined)
+const approvalPost = computed(() => {
+  if (postedFrom.value === undefined) return null
+  if (busy.value) return { posting: true, jobId: null }
+  const jobId = approveImports.value?.job_id ?? null
+  return jobId !== postedFrom.value ? { posting: false, jobId } : null
+})
+const openApproval = () => {
+  postedFrom.value = undefined
+  fetched.show()
+}
 const decideImportsFromApproval = async (decision: 'approve' | 'reject', elements: string[] = []) => {
-  fetched.close()
+  if (decision === 'reject') fetched.close()
+  else postedFrom.value = approveImports.value?.job_id ?? null
   await decideImports(decision, elements)
+}
+const buildFromApproval = () => {
+  fetched.close()
+  void launchItem('build_analytics') // followed by its toast, like a card
 }
 
 const confirmDelete = async () => {
