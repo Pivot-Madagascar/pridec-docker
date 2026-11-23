@@ -16,7 +16,9 @@ check each data element and ask on the terminal before posting a flagged one. et
    whole, a new pass starts empty, and they survive a logout and a forecast run's opening (until then, files in the
    mode's `input/temp_fetch`, emptied when a run opened). COM uses the pass's `PARENT_OU`; both read `PIVOT_URL`
    from the editable config (`/api/config`, Redis), `PIVOT_TOKEN` from etlhub's environment. Nothing goes to DHIS2.
-2. `GET /pipeline/imports/fetched`: per import, the elements fetched (rows, flagged, message). etlui's
+2. `GET /pipeline/imports/fetched`: per import, the elements fetched (rows, flagged, message) and, since 2026-11-23,
+   `post`: null until the approval posts the element, then `{status: posted | empty | failed, at, dry_run, error}`,
+   kept with its data in Redis (a new fetch of its import resets it); etlui shows it per line ("Approval state"). etlui's
    `ImportApprovalDialog` shows one selectable row each; flagged rows start unchecked. etlui keeps the answer in
    Pinia (`stores/fetchedImports.ts`) and asks again only when a Pivot import finishes, the pass or mode changes, or
    on Refresh.

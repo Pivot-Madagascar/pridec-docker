@@ -11,6 +11,7 @@ PIVOT_TOKEN, a secret, from the environment only.
 ponytail: two copies of the same steps; a change to one must be made to the other.
 """
 import logging
+from datetime import datetime
 
 from pivot_dhis_tools import fetch_pivot_com_etlhub, fetch_pivot_csb_etlhub, post_dataElements
 from etl.scripts import config
@@ -79,7 +80,7 @@ def fetched_imports() -> list[dict]:
 def _element(item: dict) -> dict:
     summary = item["summary"]
     return {"data_element": item["dataElement"], "rows": len(item["fetched_data"]), "flagged": bool(summary.get("flagged")),
-            "text": summary.get("text"), "error": summary.get("error")}
+            "text": summary.get("text"), "error": summary.get("error"), "post": item.get("post")}
 
 
 def not_fetched(elements: list[str]) -> list[str]:
@@ -87,9 +88,23 @@ def not_fetched(elements: list[str]) -> list[str]:
     return [name for name in elements if name not in fetched]
 
 
+def _mark(name: str, status: str, dry_run: bool, error: str | None = None) -> None:
+    """Keeps an element's post state with its fetched data (`post`, shown per line in the approval): posted, empty
+    (nothing to post) or failed. Until a new fetch of its import replaces the data, and the state with it."""
+    for task in PIVOT_ELEMENTS:
+        items = _store().load(task)
+        for item in items:
+            if item["dataElement"] == name:
+                item["post"] = {"status": status, "at": datetime.now().isoformat(timespec="seconds"), "dry_run": dry_run,
+                                "error": error}
+                _store().save(task, items)
+                return
+
+
 def post_pivot_imports(elements: list[str]) -> None:
     """approve_imports job: posts each chosen element's fetched values to DHIS2, with the job's DRYRUN (the pass's).
-    A failed post stops the job (error): the elements posted before it stay (CREATE_AND_UPDATE: posting again is safe)."""
+    A failed post stops the job (error): the elements posted before it stay (CREATE_AND_UPDATE: posting again is safe).
+    Each element's outcome is kept with it (_mark), for the approval's per-line state."""
     setup_logging()
     url, token, dry_run = get_dhis_url(), get_dhis_token(), get_dry_run()
     if not elements:
@@ -99,9 +114,15 @@ def post_pivot_imports(elements: list[str]) -> None:
         payload = {"dataValues": fetched[name]["fetched_data"]}
         if not payload["dataValues"]:
             logger.warning("%s: no value fetched, nothing to post", name)
+            _mark(name, "empty", dry_run)
             continue
         logger.info("Posting %s (%d values) to %s, dryRun=%s", name, len(payload["dataValues"]), url, dry_run)
-        _check_import(name, post_dataElements(dhis_url=url, payload=payload, token=token, dryRun=dry_run))
+        try:
+            _check_import(name, post_dataElements(dhis_url=url, payload=payload, token=token, dryRun=dry_run))
+        except Exception as e:
+            _mark(name, "failed", dry_run, str(e))
+            raise
+        _mark(name, "posted", dry_run)
 
 
 def _check_import(name: str, response) -> None:

@@ -45,10 +45,6 @@ vi.mock('@/services/inputs', () => ({
   getExternalDataPreview: vi.fn()
 }))
 vi.mock('@/services/api', () => ({ default: { get: (...args: unknown[]) => apiGet(...args), getUri: ({ url }: { url: string }) => `http://api${url}` }, errorMessage: (_: unknown, f: string) => f }))
-vi.mock('@/views/TrackerView/components/JobLogsPanel.vue', async () => {
-  const { defineComponent, h } = await import('vue')
-  return { default: defineComponent({ props: ['jobId'], setup: p => () => h('div', { 'data-test': 'job-logs', 'data-job': p.jobId }) }) }
-})
 vi.mock('vue3-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }))
 
 import Dashboard from '@/views/Dashboard/Dashboard.vue'
@@ -382,7 +378,7 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
-  it('reviews and approves the fetched Pivot data line by line, shows the post, then offers Build Analytics', async () => {
+  it('reviews and approves the fetched Pivot data line by line, shows the post state of each line, then offers Build Analytics', async () => {
     getCheckpoints.mockResolvedValue(state({ steps: [
       { step: 'data_import', done: false, accessible: true, items: [item('import_gee', 'success', true), item('approve_imports', 'pending', true), item('build_analytics')] },
       { step: 'forecast', done: false, accessible: false, items: [] },
@@ -416,20 +412,23 @@ describe('Dashboard', () => {
     expect(dialog.findAll('[data-test="approval-problems"]').map(r => r.text())).toEqual(
       ['↳ 1 orgUnits exceed case threshold of 100']) // the flagged line's problem only, the summary not repeated
     expect(dialog.find('[data-test="approval-empty"]').text()).toContain('Nothing fetched') // CSB
-    const footer = dialog.find('[data-test="preview-footer"]')
-    expect(footer.findAll('button').map(b => [b.text(), b.attributes('disabled') !== undefined])).toEqual([
+    const actions = dialog.find('[data-test="approval-actions"]') // right under the tables, not in the footer
+    expect(actions.findAll('button').map(b => [b.text(), b.attributes('disabled') !== undefined])).toEqual([
       ['Reject', true], ['Approve and post 1', false]]) // flagged unchecked; nothing approved yet: nothing to reject
+    expect(dialog.find('[data-test="preview-footer"] [data-test="approve-imports"]').exists()).toBe(false)
+    const stateOf = (name: string) => row(name).find('[data-test="approval-state"]').text()
 
     await row('pridec_historic_COMRespinf').trigger('click') // a whole line selects
     await row('pridec_historic_COMMalaria').trigger('click') // and unselects
+    expect([stateOf('pridec_historic_COMRespinf'), stateOf('pridec_historic_COMMalaria')]).toEqual(['Pending', '—'])
     let posted!: () => void
     decideImports.mockReturnValue(new Promise<void>(resolve => { posted = resolve })) // etlhub posts synchronously
     await dialog.find('[data-test="approve-imports"]').trigger('click')
     await flushPromises()
     expect(decideImports).toHaveBeenCalledWith('approve', ['pridec_historic_COMRespinf'], false)
-    const post = () => wrapper.find('[data-test="approval-post"]') // the dialog stays open on the post
-    expect(post().find('[data-test="posting-bar"]').exists()).toBe(true)
-    expect(post().text()).toContain('pridec_historic_COMRespinf')
+    expect([stateOf('pridec_historic_COMRespinf'), stateOf('pridec_historic_COMMalaria')]).toEqual(['Posting…', '—'])
+    expect(dialog.find('[data-test="posting-bar"]').exists()).toBe(false) // the lines say it, no progress bar
+    expect(wrapper.find('[data-test="busy-overlay"]').text()).toBe('Posting to DHIS2…') // a spinner over the content
     expect(wrapper.find('[data-test="build-analytics"]').exists()).toBe(false)
 
     getCheckpoints.mockResolvedValue(state({ steps: [
@@ -438,10 +437,15 @@ describe('Dashboard', () => {
       { step: 'forecast', done: false, accessible: false, items: [] },
       { step: 'system_update', done: false, accessible: false, items: [] }
     ] }))
+    getFetchedImports.mockResolvedValue([ // etlhub keeps each line's post with its data: read again after the approval
+      { task: 'import_pivot_com', elements: [el('pridec_historic_COMMalaria', false),
+        { ...el('pridec_historic_COMRespinf', true), post: { status: 'posted', at: 't', dry_run: true, error: null } }] },
+      { task: 'import_pivot_csb', elements: [] }
+    ])
     posted()
     await flushPromises()
-    expect(post().find('[data-test="posting-bar"]').exists()).toBe(false)
-    expect(post().find('[data-test="job-logs"]').attributes('data-job')).toBe('approve_imports_1a2b3c4d') // the post's steps
+    expect([stateOf('pridec_historic_COMRespinf'), stateOf('pridec_historic_COMMalaria')]).toEqual(['Posted (dry run)', '—'])
+    expect(wrapper.find('[data-test="busy-overlay"]').exists()).toBe(false)
     expect(grid.find('[data-item="approve_imports"]').text()).toContain('Approved: Build Analytics to launch')
 
     launchJob.mockResolvedValue({ jobId: 'build_analytics_1', requestId: 'r' })

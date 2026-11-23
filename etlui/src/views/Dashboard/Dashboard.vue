@@ -128,8 +128,8 @@
       @refresh="availability.load(true)"
     />
 
-    <!-- The imports decision, line by line: stays open on the post and its logs, then offers step ①'s Build Analytics.
-         Reject closes it first. -->
+    <!-- The imports decision, line by line: stays open, each chosen line showing its post state, then offers step ①'s
+         Build Analytics. Reject closes it first. -->
     <ImportApprovalDialog
       :open="fetched.open.value"
       :loading="fetched.loading.value"
@@ -137,7 +137,7 @@
       :imports="fetched.imports.value"
       :can-approve="!busy && state?.lock == null && !!approveImports?.launchable"
       :can-reject="!busy && state?.lock == null && approveImports?.status === 'success'"
-      :post="approvalPost"
+      :posting="approvalPosting"
       :approved="approveImports?.status === 'success'"
       :can-build="!busy && state?.lock == null && !!buildItem?.launchable"
       @close="fetched.close"
@@ -340,22 +340,17 @@ const decideFromReport = async (decision: 'approve' | 'reject') => {
   await decide(decision)
 }
 
-// "Approve and post": the dialog shows the post while it runs, then the job it made. undefined: nothing sent since it
-// opened; else approve_imports' job before the click (still the same after a cancelled confirmation: back to the list).
-const postedFrom = ref<string | null | undefined>(undefined)
-const approvalPost = computed(() => {
-  if (postedFrom.value === undefined) return null
-  if (busy.value) return { posting: true, jobId: null }
-  const jobId = approveImports.value?.job_id ?? null
-  return jobId !== postedFrom.value ? { posting: false, jobId } : null
-})
+// "Approve and post" sent from the dialog: its lines show "Posting…" while etlhub posts (busy, a confirmation included),
+// then their post state, read again with the list (useFetchedImports follows approve_imports).
+const approvalSent = ref(false)
+const approvalPosting = computed(() => approvalSent.value && busy.value)
 const openApproval = () => {
-  postedFrom.value = undefined
+  approvalSent.value = false
   fetched.show()
 }
 const decideImportsFromApproval = async (decision: 'approve' | 'reject', elements: string[] = []) => {
   if (decision === 'reject') fetched.close()
-  else postedFrom.value = approveImports.value?.job_id ?? null
+  else approvalSent.value = true
   await decideImports(decision, elements)
 }
 const buildFromApproval = () => {

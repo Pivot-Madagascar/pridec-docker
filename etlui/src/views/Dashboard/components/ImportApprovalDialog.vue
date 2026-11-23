@@ -6,6 +6,7 @@
     :loading="loading"
     :error="error"
     loading-label="Reading the fetched data…"
+    :busy="posting ? 'Posting to DHIS2…' : undefined"
     class="approval-dialog"
     data-test="approval-dialog"
     @close="emit('close')"
@@ -13,20 +14,7 @@
     <template #actions>
       <Button variant="outline" size="sm" :disabled="loading" data-test="approval-refresh" @click="emit('refresh')">Refresh</Button>
     </template>
-    <!-- After "Approve and post": the post (etlhub posts synchronously, no progress to read), then its job's logs. -->
-    <section v-if="post" class="approval-post" data-test="approval-post">
-      <template v-if="post.posting">
-        <p class="approval-meta">
-          {{ sent.length ? `Posting ${sent.length} data element(s) to DHIS2 with the pass's DRYRUN…` : 'Approving without posting…' }}
-        </p>
-        <div class="post-bar" role="progressbar" aria-label="Posting to DHIS2" data-test="posting-bar"><span /></div>
-        <ul class="post-list">
-          <li v-for="name in sent" :key="name" class="approval-code">{{ name }}</li>
-        </ul>
-      </template>
-      <JobLogsPanel v-else-if="post.jobId" :job-id="post.jobId" />
-    </section>
-    <template v-else-if="imports">
+    <template v-if="imports">
       <p class="approval-meta">
         One line per data element fetched from Pivot in this pass. The checked lines are posted to DHIS2 with the pass's
         DRYRUN when you approve; flagged lines start unchecked. Approving with no line checked posts nothing.
@@ -45,6 +33,7 @@
               <TableHead class="num">Missing</TableHead>
               <TableHead class="num">Negative</TableHead>
               <TableHead>Check</TableHead>
+              <TableHead>Approval state</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -72,10 +61,13 @@
                   <span v-if="el.flagged" class="is-flagged">Flagged</span>
                   <span v-else class="is-ok">OK</span>
                 </TableCell>
+                <TableCell data-test="approval-state" :class="stateClass(el)" :title="el.post?.error ?? undefined">
+                  {{ stateOf(el) }}
+                </TableCell>
               </TableRow>
               <TableRow v-if="el.flagged" class="cursor-pointer" data-test="approval-problems" @click="toggle(el.data_element)">
                 <TableCell />
-                <TableCell colspan="7" class="approval-message is-flagged">
+                <TableCell colspan="8" class="approval-message is-flagged">
                   <span v-for="problem in checkProblems(el.error)" :key="problem" class="block">↳ {{ problem }}</span>
                 </TableCell>
               </TableRow>
@@ -83,16 +75,17 @@
           </TableBody>
         </Table>
       </section>
-    </template>
-    <template #footer>
-      <template v-if="!post">
-        <Button variant="outline" :disabled="!canReject || loading" @click="emit('reject')">Reject</Button>
-        <Button :disabled="!canApprove || loading || !imports" data-test="approve-imports" @click="approve">
+      <!-- The decision, right under the tables: each chosen line then goes Pending → Posting… → Posted. -->
+      <div class="approval-actions" data-test="approval-actions">
+        <Button variant="outline" :disabled="!canReject || loading || posting" @click="emit('reject')">Reject</Button>
+        <Button :disabled="!canApprove || loading || posting" data-test="approve-imports" @click="approve">
           {{ selected.size ? `Approve and post ${selected.size}` : 'Approve without posting' }}
         </Button>
-      </template>
+      </div>
+    </template>
+    <template #footer>
       <!-- Step ①'s Build Analytics, once the approval is a success; enabled when etlhub allows it. -->
-      <Button v-if="approved && !post?.posting" :disabled="!canBuild" data-test="build-analytics" @click="emit('build')">
+      <Button v-if="approved && !posting" :disabled="!canBuild" data-test="build-analytics" @click="emit('build')">
         Build analytics
       </Button>
     </template>
@@ -105,10 +98,9 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { labelOf } from '@/config/pipeline'
-import type { FetchedImport } from '@/types/pipeline'
+import type { FetchedElement, FetchedImport } from '@/types/pipeline'
 import { checkProblems, parseCheckStats as stats } from '@/utils/checkSummary'
 import PreviewDialog from './PreviewDialog.vue'
-import JobLogsPanel from '@/views/TrackerView/components/JobLogsPanel.vue'
 
 const props = defineProps<{
   open: boolean
@@ -117,7 +109,7 @@ const props = defineProps<{
   imports: FetchedImport[] | null
   canApprove: boolean // approve_imports launchable, no job running
   canReject: boolean // approve_imports in success
-  post: { posting: boolean; jobId: string | null } | null // after "Approve and post": running, then its job
+  posting: boolean // "Approve and post" sent and etlhub posting (synchronously: no per-line progress to read)
   approved: boolean // approve_imports in success: Build analytics is offered
   canBuild: boolean // build_analytics of step 1 launchable, no job running
 }>()
@@ -130,10 +122,16 @@ const emit = defineEmits<{
   build: []
 }>()
 
-// The lines to post: every element not flagged, each time the data is read.
+// The lines to post: every element not flagged, when other lines are read (a new fetch). The same lines read again
+// (after an approval, for their post state) keep the choice.
 const selected = ref(new Set<string>())
+let shownLines: string | null = null
 watch(() => props.imports, imports => {
-  selected.value = new Set((imports ?? []).flatMap(i => i.elements.filter(e => !e.flagged).map(e => e.data_element)))
+  if (!imports) return
+  const lines = imports.flatMap(i => i.elements.map(e => `${e.data_element}:${e.flagged}`)).join()
+  if (lines === shownLines) return
+  shownLines = lines
+  selected.value = new Set(imports.flatMap(i => i.elements.filter(e => !e.flagged).map(e => e.data_element)))
 }, { immediate: true })
 
 function toggle(name: string): void {
@@ -145,11 +143,21 @@ function toggle(name: string): void {
 // In the dialog's order, not the order of the clicks.
 const chosen = () => (props.imports ?? []).flatMap(i => i.elements.map(e => e.data_element)).filter(n => selected.value.has(n))
 
-const sent = ref<string[]>([]) // what "Approve and post" sent, listed while it posts
+const sent = ref<string[]>([]) // what "Approve and post" sent: those lines show "Posting…" while it posts
 function approve(): void {
   sent.value = chosen()
   emit('approve', sent.value)
 }
+
+// A line's approval state: etlhub's `post` once posted (kept with the data), else the choice about to be sent.
+const POSTED: Record<string, string> = { posted: 'Posted', empty: 'Nothing to post', failed: 'Failed' }
+function stateOf(el: FetchedElement): string {
+  if (props.posting && sent.value.includes(el.data_element)) return 'Posting…'
+  if (el.post) return POSTED[el.post.status] + (el.post.dry_run && el.post.status !== 'failed' ? ' (dry run)' : '')
+  return selected.value.has(el.data_element) ? 'Pending' : '—'
+}
+const stateClass = (el: FetchedElement) =>
+  el.post?.status === 'failed' ? 'is-flagged' : el.post?.status === 'posted' && !props.posting ? 'is-ok' : undefined
 </script>
 
 <style scoped>
@@ -204,30 +212,10 @@ function approve(): void {
   font-weight: 400;
 }
 
-.post-list {
-  margin-top: 0.75rem;
-  font-size: 0.8125rem;
-}
-
-/* Indeterminate: etlhub answers once every element is posted. */
-.post-bar {
-  @apply h-2 w-full overflow-hidden rounded-full bg-primary/20;
-}
-
-.post-bar span {
-  @apply block h-full w-2/5 rounded-full bg-primary;
-  animation: post-slide 1.2s ease-in-out infinite;
-}
-
-@keyframes post-slide {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(250%); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .post-bar span {
-    @apply w-full opacity-60;
-    animation: none;
-  }
+.approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
 }
 </style>

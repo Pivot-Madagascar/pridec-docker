@@ -54,9 +54,11 @@ def test_each_import_keeps_its_answer_and_the_same_import_again_replaces_it_whol
 
     assert module.fetched_imports() == [
         {"task": "import_pivot_com", "elements": [{"data_element": "pridec_historic_COMMalaria", "rows": 1,
-                                                   "flagged": False, "text": "ok", "error": None}]},
+                                                   "flagged": False, "text": "ok", "error": None,
+                                                   "post": None}]},
         {"task": "import_pivot_csb", "elements": [{"data_element": "pridec_historic_CSBMalaria", "rows": 0,
-                                                   "flagged": True, "text": None, "error": "data is empty"}]}]
+                                                   "flagged": True, "text": None, "error": "data is empty",
+                                                   "post": None}]}]
     assert store.data["import_pivot_com"][0]["fetched_data"] == [ROW]  # what the approval posts
     assert calls["com"] == {"pivot_token": "t", "pivot_url": "http://pivot", "prior_months": 8, "parent_ou": "PASS_OU"}
     assert "parent_ou" not in calls["csb"]

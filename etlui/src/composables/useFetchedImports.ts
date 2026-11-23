@@ -6,7 +6,7 @@ import type { Checkpoints } from '@/types/pipeline'
 
 /**
  * The imports approval dialog of Data Import: the Pivot data elements fetched in this pass, kept in Pinia.
- * Read again only when it may have changed (an import_pivot_* job finished, another pass or mode) or on Refresh;
+ * Read again only when it may have changed (an import_pivot_* job or the approval finished, another pass or mode) or on Refresh;
  * reopening the dialog shows what was read.
  */
 export function useFetchedImports(state: Ref<Checkpoints | null>) {
@@ -14,11 +14,11 @@ export function useFetchedImports(state: Ref<Checkpoints | null>) {
   const { imports, loading, error } = storeToRefs(store)
   const open = ref(false)
 
-  // What the files depend on; null while a Pivot import runs (its files are being replaced).
+  // What the list depends on: the Pivot imports (their data) and the approval (each line's post); null while one runs.
   const stamp = computed(() => {
     const s = state.value
     if (!s) return null
-    const pivot = step(s, 'data_import')?.items.filter(i => i.item.startsWith('import_pivot_')) ?? []
+    const pivot = step(s, 'data_import')?.items.filter(i => i.item.startsWith('import_pivot_') || i.item === 'approve_imports') ?? []
     if (pivot.some(i => i.status === 'running')) return null
     return [s.test_mode, s.pass?.id, ...pivot.map(i => `${i.item}:${i.status}:${i.job_id}:${i.updated_at}`)].join('|')
   })

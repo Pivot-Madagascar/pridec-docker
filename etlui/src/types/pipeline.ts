@@ -125,6 +125,8 @@ export interface FetchedElement {
   flagged: boolean // the value check failed: empty, missing or negative values, or above the case threshold
   text: string | null // the check's summary
   error: string | null // why it is flagged
+  // Its post by the approval, kept by etlhub with the data (null: not posted; a new fetch of its import resets it)
+  post: { status: 'posted' | 'empty' | 'failed'; at: string; dry_run: boolean; error: string | null } | null
 }
 export interface FetchedImport {
   task: string // import_pivot_com, import_pivot_csb

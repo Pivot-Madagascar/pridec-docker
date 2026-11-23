@@ -97,7 +97,8 @@ def fetched(tmp_path, monkeypatch, checkpoint_store, job_store):
                  ("import_pivot_com", "pridec_historic_COMMalaria", {"text": None, "flagged": True, "error": "too many"}),
                  ("import_pivot_csb", "pridec_historic_CSBMalaria", {"text": "numNA: 0", "flagged": False, "error": None}))}
     posts = []
-    monkeypatch.setattr(fetch_pivot, "_store", lambda: SimpleNamespace(load=lambda task: saved.get(task, [])))
+    monkeypatch.setattr(fetch_pivot, "_store", lambda: SimpleNamespace(load=lambda task: saved.get(task, []),
+                                                                       save=saved.__setitem__))
     monkeypatch.setattr(fetch_pivot, "setup_logging", lambda: None)
     monkeypatch.setattr(fetch_pivot, "get_dhis_url", lambda: "https://dhis2.test")
     monkeypatch.setattr(fetch_pivot, "get_dhis_token", lambda: "t")
@@ -115,7 +116,13 @@ def test_imports_lists_the_fetched_elements_with_their_check(client, fetched):
 
     assert [i["task"] for i in imports] == ["import_pivot_com", "import_pivot_csb"]
     assert imports[0]["elements"] == [{"data_element": "pridec_historic_COMMalaria", "rows": 1, "flagged": True,
-                                       "text": None, "error": "too many"}]  # only what was fetched
+                                       "text": None, "error": "too many", "post": None}]  # only what was fetched; not posted
+
+
+def _post(client, name):
+    """The post state GET /pipeline/imports/fetched gives an element."""
+    imports = client.get("/pipeline/imports/fetched").json()["imports"]
+    return next(e for i in imports for e in i["elements"] if e["data_element"] == name)["post"]
 
 
 def test_imports_approval_posts_only_the_chosen_elements_with_the_mode_s_dry_run(client, checkpoint_store, fetched):
@@ -129,6 +136,9 @@ def test_imports_approval_posts_only_the_chosen_elements_with_the_mode_s_dry_run
     launched = [e for e in checkpoint_store.journal(checkpoint_store.progress()["pass"]["id"])
                 if e["event"] == "launched" and e["item"] == "approve_imports"]
     assert launched[0]["detail"]["params"] == {"elements": ["pridec_historic_CSBMalaria"]}
+    post = _post(client, "pridec_historic_CSBMalaria")  # each line's state, kept with the fetched data
+    assert (post["status"], post["dry_run"], bool(post["at"])) == ("posted", False, True)
+    assert _post(client, "pridec_historic_COMMalaria") is None  # not chosen
     assert client.post("/pipeline/imports/approve", json={"decision": "approve", "elements": []}).status_code == 409  # confirm
 
 
@@ -161,6 +171,8 @@ def test_a_dhis2_import_error_fails_the_approval(client, fetched, monkeypatch):
 
     assert response.status_code == 500 and "DHIS2 refused pridec_historic_CSBMalaria" in response.json()["message"]
     assert _approve_imports(client)["status"] == "error"
+    post = _post(client, "pridec_historic_CSBMalaria")
+    assert post["status"] == "failed" and "DHIS2 refused" in post["error"]
 
 
 def test_relaunch_of_a_success_returns_the_impact_then_accepts_confirm(client, checkpoint_store, queue):

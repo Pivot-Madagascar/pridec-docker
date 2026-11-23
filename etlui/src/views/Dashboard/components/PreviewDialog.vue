@@ -16,13 +16,21 @@
         </div>
       </header>
 
-      <div class="min-h-0 flex-1 overflow-auto px-6 py-5">
-        <div v-if="loading" class="flex h-full items-center justify-center gap-3 text-muted-foreground" role="status">
-          <LoaderCircle class="size-5 animate-spin text-primary" aria-hidden="true" />
-          {{ loadingLabel ?? 'Loading preview…' }}
+      <!-- The body; `busy` covers it with a spinner (the content stays visible under it, the clicks do not reach it). -->
+      <div class="relative min-h-0 flex-1">
+        <div class="h-full overflow-auto px-6 py-5">
+          <div v-if="loading" class="flex h-full items-center justify-center gap-3 text-muted-foreground" role="status">
+            <LoaderCircle class="size-5 animate-spin text-primary" aria-hidden="true" />
+            {{ loadingLabel ?? 'Loading preview…' }}
+          </div>
+          <div v-else-if="error" class="flex h-full items-center justify-center text-destructive" role="alert">{{ error }}</div>
+          <slot v-else />
         </div>
-        <div v-else-if="error" class="flex h-full items-center justify-center text-destructive" role="alert">{{ error }}</div>
-        <slot v-else />
+        <div v-if="busy" class="absolute inset-0 flex items-center justify-center gap-3 bg-background/70 font-medium text-foreground"
+          role="status" aria-live="polite" data-test="busy-overlay">
+          <LoaderCircle class="size-6 animate-spin text-primary" aria-hidden="true" />
+          {{ busy }}
+        </div>
       </div>
       <div v-if="$slots.footer" class="flex justify-end gap-3 border-t bg-card px-6 py-4" data-test="preview-footer"><slot name="footer" /></div>
     </DialogContent>
@@ -42,6 +50,7 @@ defineProps<{
   loading: boolean
   error: string
   loadingLabel?: string
+  busy?: string // a label: covers the body with a spinner while set (ImportApprovalDialog's post)
 }>()
 
 const emit = defineEmits<{
