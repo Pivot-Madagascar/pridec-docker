@@ -134,12 +134,14 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
-  it('shows the test mode before step 1 and switches it on the server', async () => {
+  it('shows the test mode before step 1 and, with no active pass, switches it on the server', async () => {
+    getCheckpoints.mockResolvedValue(state({ pass: null }))
     setMode.mockImplementation(async () => {
-      getCheckpoints.mockResolvedValue(state({ test_mode: true }))
+      getCheckpoints.mockResolvedValue(state({ pass: null, test_mode: true }))
       return true
     })
     const wrapper = await mountPage()
+    expect(wrapper.find('[data-test="mode-frozen"]').exists()).toBe(false)
 
     const html = wrapper.html()
     // The step's accordion title: the breadcrumb above the toggle also says 'Data Import'
@@ -157,7 +159,20 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
-  it('switching mode mid-pass asks to pause or abandon the pass, then sends the choice', async () => {
+  it('freezes the mode while the pass is active', async () => {
+    const wrapper = await mountPage() // state(): an active pass
+
+    const buttons = wrapper.findAll('[data-test="mode-btn"]')
+    expect(buttons.every(b => b.attributes('disabled') !== undefined)).toBe(true)
+    await buttons.find(b => b.text() === 'YES')!.trigger('click')
+    await flushPromises()
+    expect(setMode).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-test="mode-frozen"]').text()).toContain('pause or abandon the cycle')
+    wrapper.unmount()
+  })
+
+  it('a pass started meanwhile (the page did not know): etlhub asks to pause or abandon it, then gets the choice', async () => {
+    getCheckpoints.mockResolvedValue(state({ pass: null }))
     const message = 'Pass 3f9c1a2b (202610) is active in production mode, and a pass lives in one mode'
     setMode
       .mockRejectedValueOnce({ response: { status: 409, data: { code: 'confirmation_required', message, impact: {

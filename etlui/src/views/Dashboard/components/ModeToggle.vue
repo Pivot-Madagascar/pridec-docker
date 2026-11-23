@@ -13,6 +13,9 @@
         <template v-if="dryRun">DHIS2: dry run (test mode), the jobs write nothing.</template>
         <template v-else>DHIS2: no dry run (production), the jobs write to DHIS2.</template>
       </span>
+      <span v-if="frozen" class="mode-hint" data-test="mode-frozen">
+        Fixed while the pass is active: pause or abandon the cycle (left panel) to change it.
+      </span>
     </div>
     <!-- Single choice, never empty: clicking the active item again changes nothing. -->
     <ToggleGroup
@@ -38,6 +41,7 @@ defineProps<{
   testMode: boolean | undefined // unknown until the first read of the state
   dryRun: boolean | undefined // etlhub's: DRYRUN = TEST MODE
   disabled?: boolean
+  frozen?: boolean // the Forecast page while its pass is active: says why it is disabled
 }>()
 
 const emit = defineEmits<{
