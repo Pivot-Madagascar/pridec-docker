@@ -20,8 +20,8 @@
       <p class="availability-meta">
         Each cell: organisation units with a stored value, and below, how many the analytics tables have.
         N/A: not imported yet. Analytics behind: run Build Analytics.
-        A section checked earlier in this cycle is reused until its import is launched again (30 days at most);
-        Refresh checks them all now.
+        A section checked earlier in this cycle is reused until its import is launched again or Build Analytics
+        succeeds (30 days at most); Refresh checks them all now.
       </p>
 
       <section v-for="imp in report.imports" :key="imp.task" class="availability-section">

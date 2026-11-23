@@ -90,7 +90,7 @@ The workflow follows the reference documentation (`pivot_forecast.sh`, 3 phases)
 | `import_gee` | GEE (last 3 months) | DHIS2 `dataValueSets` | — |
 | `import_pivot_com`, `import_pivot_csb` | Pivot (8 months; COM under the pass's `PARENT_OU`) | `input/temp_fetch/<dataElement>_{fetched,flags}.json`, **nothing to DHIS2** (since 2026-11-20, `fetch_pivot.py`) | — |
 | `approve_imports` | `input/temp_fetch/<element>_fetched.json` of the elements chosen | DHIS2 `dataValueSets` (DRYRUN = TEST MODE) | import_pivot_com, import_pivot_csb |
-| `build_analytics` | — | DHIS2 `resourceTables/analytics` (`pivot_dhis_tools` v0.3.0 waits for completion, 15 min at most; nothing in dry run, i.e. in test mode) | the imports |
+| `build_analytics` | — | DHIS2 `resourceTables/analytics` (`pivot_dhis_tools` v0.3.0 waits for completion, 15 min at most, its progress in the job's log; nothing in dry run, i.e. in test mode; a success invalidates the stored import availability checks) | the imports |
 | `fetch_climate` | DHIS2 `analytics` | `input/climate_data.json` | import_gee, build_analytics |
 | `fetch_disease` | DHIS2 `analytics` (`DISEASE_CODE`) | `input/disease_data.json` | import_pivot_*, build_analytics |
 | `fetch_geojson` | DHIS2 `organisationUnits.geojson` | `input/orgUnit_poly.geojson` | — |

@@ -1159,7 +1159,8 @@ class CheckpointStore:
 
     def reusable_availability(self, params: dict[str, str]) -> dict[str, dict]:
         """Per task, the latest stored check of the shown cycle (any pass) that still holds: same params, at most
-        30 days old, and no launch of that import in the cycle since it started. Tasks without one are left out.
+        30 days old, no launch of that import in the cycle since it started, and no build_analytics succeeded since (the
+        analytics part of every section may have changed). Tasks without one are left out.
 
         {task: {"section", "checked_at", "checked_by", "pass_id", "last_analytics"}}.
         """
@@ -1171,8 +1172,9 @@ class CheckpointStore:
                 row = conn.execute(
                     "SELECT section, checked_at, checked_by, pass_id, last_analytics FROM availability_checks c"
                     " WHERE cycle = ? AND task = ? AND params = ? AND checked_at >= ?"
-                    " AND NOT EXISTS (SELECT 1 FROM pipeline_events e WHERE e.cycle = c.cycle AND e.item = c.task"
-                    " AND e.event = 'launched' AND e.at > c.checked_at)"
+                    " AND NOT EXISTS (SELECT 1 FROM pipeline_events e WHERE e.cycle = c.cycle AND e.at > c.checked_at"
+                    " AND ((e.item = c.task AND e.event = 'launched')"
+                    " OR (e.item = 'build_analytics' AND e.event = 'succeeded')))"
                     " ORDER BY checked_at DESC LIMIT 1", (cycle, task, task_params, cutoff)).fetchone()
                 if row:
                     found[task] = {"section": json.loads(row[0]),

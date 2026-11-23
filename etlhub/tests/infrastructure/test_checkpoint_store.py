@@ -857,6 +857,18 @@ def test_a_stored_check_holds_in_its_cycle_until_its_import_is_launched_or_30_da
     assert checkpoint_store.reusable_availability(asked) == {}  # another cycle
 
 
+def test_a_successful_build_analytics_invalidates_every_stored_check(checkpoint_store, month):
+    _imports_approved(checkpoint_store)
+    asked = {"import_gee": "P", "import_pivot_com": "P", "import_pivot_csb": "P"}
+    for task in asked:
+        _check(checkpoint_store, task)
+
+    checkpoint_store.start("build_analytics", "b1")
+    assert set(checkpoint_store.reusable_availability(asked)) == set(asked)  # still building: the analytics are as checked
+    checkpoint_store.finish("b1", "success")
+    assert checkpoint_store.reusable_availability(asked) == {}  # rebuilt: every section's analytics may have changed
+
+
 def test_every_launch_journals_the_mode_s_dryrun_and_an_import_its_parameters(checkpoint_store, month):
     _pass(checkpoint_store, "import_gee")
     _pass(checkpoint_store, "import_pivot_com")

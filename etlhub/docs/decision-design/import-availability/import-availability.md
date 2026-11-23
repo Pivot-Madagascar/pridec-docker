@@ -142,7 +142,8 @@ At each opening, per section, `reusable_availability` returns the **latest** sto
 | Same cycle | the cycle the Dashboard shows, **any pass** of it (and checks made before its first launch) |
 | Same parameters | the JSON above, byte for byte (keys sorted) |
 | At most 30 days old | older rows are deleted at each new check |
-| Its import not launched since | no `launched` event of that import (`import_gee`, `import_pivot_com` or `import_pivot_csb`) in the cycle after `checked_at`, **from its launch**, whatever its outcome. `build_analytics` does not invalidate |
+| Its import not launched since | no `launched` event of that import (`import_gee`, `import_pivot_com` or `import_pivot_csb`) in the cycle after `checked_at`, **from its launch**, whatever its outcome |
+| No analytics build since (2026-11-23) | no `succeeded` event of `build_analytics` in the cycle after `checked_at`: every section, since the analytics counts of each may have changed. While the build runs, the checks still hold |
 
 Only the sections without a valid check ask DHIS2. `last_analytics` comes from the check that asked DHIS2, else from
 the latest reused section. Test mode and production never share: they are separate stores.
@@ -174,8 +175,8 @@ so every check also shows in the Tracking page.
   each request has the scripts' usual 600 s timeout.
 - **Server time**: `last_analytics` is in DHIS2's local time and `last_updated` in UTC: they are shown, not compared.
 - **Access**: every logged-in user, for now (§ 8, Q6).
-- **Shared analytics column**: `build_analytics` does not invalidate a stored check (Q10), so a reused section keeps the
-  analytics counts of its check. Its date is shown; Refresh updates it.
+- **Shared analytics column**: since 2026-11-23 a `build_analytics` that succeeds invalidates every stored check (Q10),
+  so the analytics counts are read again after a build. A build launched from DHIS2 or the CLI is not seen: Refresh.
 - **Mixed times**: when one section is checked again, `last_analytics` is newer than the analytics counts of the
   reused sections. Each section's date shows it.
 - **Imports outside etlhub** (CLI, DHIS2 itself) invalidate nothing: etlhub does not see them. Refresh after one.
@@ -195,6 +196,7 @@ so every check also shows in the Tracking page.
 | Q8 | Why share? | Several users on the same cycle (accounts, workstations): do not redo a check already done |
 | Q9 | Shared between | **The passes of the same cycle** |
 | Q10 | What invalidates a stored check? | **A launch of its import** from Data Import, from the launch on, that section only. `build_analytics` does not. **30 days** at most |
+| Q10 (2026-11-23) | Changed by the owner (Build Analytics review, P2) | **A successful `build_analytics` also invalidates every stored check**: without it, Details kept showing "analytics behind" after a build until Refresh |
 | Q11 | Parameters compared | `PARENT_OU`, `CSB_IDS`, `COM_ELEMENTS`, `CSB_ELEMENTS`, plus periods, `GEE_VARIABLES`, `dhis_url` and the mode |
 | Q12 | Several valid checks | **The most recent**; a reuse is journaled `availability_reused` |
 
