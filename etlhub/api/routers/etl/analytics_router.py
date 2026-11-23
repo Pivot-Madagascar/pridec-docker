@@ -12,7 +12,7 @@ router = APIRouter(tags=["Analytics"])
 add_launch_route(
     router, "build_analytics", "Build analytics table",
     "Triggers the analytics table construction from ingested data. "
-    "Executes `etl/scripts/build_analytics.py` asynchronously. ",
+    "Runs etlhub's copy of `etl/scripts/build_analytics.py` asynchronously: waits for DHIS2's end, without limit. ",
     "Analytics build task accepted and queued in background.", "Build analytics task started in background",
 )
 

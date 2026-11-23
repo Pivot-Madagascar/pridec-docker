@@ -19,14 +19,11 @@ from etlhub.application.use_cases.fetch_pivot import import_pivot_com, import_pi
 from etl.scripts.fetch_pridec_climate import fetch_climate
 from etl.scripts.fetch_pridec_disease import fetch_disease
 from etl.scripts.fetch_pridec_geojson import fetch_geojson
-from etl.scripts.build_analytics import build_analytics
+from etlhub.application.use_cases.build_analytics import build_analytics
 from etlhub.application.use_cases.post_forecast import post_forecast
 from etl.scripts.update_pridec_key import update_key
 
 logger = logging.getLogger(__name__)
-# pivot_dhis_tools logs the analytics build's progress (every 30 s while DHIS2 builds) at DEBUG only: show it in the
-# build_analytics job's log, whatever LOG_LEVEL is. Its other DEBUG line is DHIS2's answer to the launch (no secret).
-logging.getLogger("pivot_dhis_tools.launch_analytics").setLevel(logging.DEBUG)
 
 # Jobs run by the Celery worker: task_type -> (function, label of the job status messages).
 ETL_JOBS = {
