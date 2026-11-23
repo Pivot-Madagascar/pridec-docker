@@ -4,6 +4,7 @@ import { applyDefaultFile, deleteInputFile, getDefaultFiles, getInputFiles, uplo
 import { useNotification } from '@/composables/useNotification'
 import { errorMessage } from '@/services/api'
 import { plainError } from '@/config/pipeline'
+import { useModeStore } from '@/stores/mode'
 import type { Checkpoints, ConfirmationRequired, Disease, Source } from '@/types/pipeline'
 import type { DefaultFile, InputName, ServerFile } from '@/types/inputs'
 
@@ -37,6 +38,7 @@ const isLaunchedJob = (r: unknown): r is pipeline.LaunchedJob => typeof r === 'o
 /** The pipeline state from etlhub, and every action on it. The server decides: nothing is computed here. */
 export function usePipeline(addActivity: AddActivity) {
   const { showNotification, followJob } = useNotification()
+  const mode = useModeStore()
   const state = ref<Checkpoints | null>(null)
   const serverFiles = ref<Partial<Record<InputName, ServerFile>>>({})
   const defaults = ref<Record<string, DefaultFile>>({})
@@ -55,6 +57,7 @@ export function usePipeline(addActivity: AddActivity) {
     try {
       const [checkpoints, files, defaultFiles] = await Promise.all([pipeline.getCheckpoints(), getInputFiles(), getDefaultFiles()])
       state.value = checkpoints
+      mode.set(checkpoints) // the header's badge, right after a mode change
       serverFiles.value = files
       defaults.value = defaultFiles
     } catch {

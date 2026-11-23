@@ -18,6 +18,7 @@
         </router-link>
 
         <div class="header-right">
+          <ModeBadge />
           <ThemeToggle />
           <Button variant="ghost" size="icon" aria-label="Open the menu" @click="isDrawerOpen = true">
             <Menu class="size-6" />
@@ -124,6 +125,7 @@ import { computed, onMounted, ref } from 'vue'
 import { Database, Menu } from '@lucide/vue'
 import Drawer from '@/components/Drawer.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
+import ModeBadge from '@/components/ModeBadge.vue'
 import { Toaster } from 'vue3-hot-toast'
 import { Button } from '@/components/ui/button'
 import LoadingScreen from '@/components/LoadingScreen.vue'

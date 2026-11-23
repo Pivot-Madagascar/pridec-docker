@@ -28,6 +28,7 @@ vi.mock('@/services/inputs', () => ({
 vi.mock('@/composables/useNotification', () => ({ useNotification: () => ({ showNotification, followJob }) }))
 
 import { usePipeline, POLL_MS } from '@/composables/usePipeline'
+import { useModeStore } from '@/stores/mode'
 
 const STATE = { cycle: '202610', lock: null, test_mode: false, dry_run: true, steps: [] }
 const LOCKED = { ...STATE, lock: { job_id: 'import_gee_1', task: 'import_gee', acquired_at: 't' } }
@@ -55,6 +56,16 @@ describe('usePipeline', () => {
 
     expect(await confirm()).toBe(true)
     expect(applyDefaultFile.mock.calls).toEqual([['config', false], ['config', true]])
+  })
+
+  it('gives the header the mode of each state it reads', async () => {
+    const { refresh } = usePipeline(addActivity)
+    getCheckpoints.mockResolvedValue({ ...STATE, test_mode: true, dry_run: true })
+
+    await refresh()
+
+    expect(useModeStore().testMode).toBe(true)
+    expect(useModeStore().dryRun).toBe(true)
   })
 
   it('launches, follows the job in a toast, logs only its end and reads the state again', async () => {
