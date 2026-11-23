@@ -88,8 +88,8 @@ The workflow follows the reference documentation (`pivot_forecast.sh`, 3 phases)
 | Step | Reads | Writes | Depends on |
 |---|---|---|---|
 | `import_gee` | GEE (last 3 months) | DHIS2 `dataValueSets` | — |
-| `import_pivot_com`, `import_pivot_csb` | Pivot (8 months; COM under the pass's `PARENT_OU`) | `input/temp_fetch/<dataElement>_{fetched,flags}.json`, **nothing to DHIS2** (since 2026-11-20, `fetch_pivot.py`) | — |
-| `approve_imports` | `input/temp_fetch/<element>_fetched.json` of the elements chosen | DHIS2 `dataValueSets` (DRYRUN = TEST MODE) | import_pivot_com, import_pivot_csb |
+| `import_pivot_com`, `import_pivot_csb` | Pivot (8 months; COM under the pass's `PARENT_OU`) | Redis `pivot_fetched:<mode>:<pass>:<task>`: the library's items (values and check), replaced whole by the next fetch of that import in the pass, kept across logouts and forecast runs (since 2026-11-23; files in `input/temp_fetch` before, emptied by a run's opening); **nothing to DHIS2** (since 2026-11-20, `fetch_pivot.py`, `infrastructure/fetched_imports.py`) | — |
+| `approve_imports` | the fetched values of the elements chosen (Redis, the pass's) | DHIS2 `dataValueSets` (DRYRUN = TEST MODE) | import_pivot_com, import_pivot_csb |
 | `build_analytics` | — | DHIS2 `resourceTables/analytics` (`application/use_cases/build_analytics.py`, etlhub's copy of the script and of `pivot_dhis_tools.launch_analytics` without its 15-minute limit since 2026-11-23: waits for DHIS2's end however long, checking every 30 s, each new message of its DHIS2 notification once in the job's log (DHIS2 updates one notification in place); a network cut or a 5xx while checking is waited out, a 4xx fails it; the CLI keeps the limit; nothing in dry run, i.e. in test mode; a success invalidates the stored import availability checks) | the imports |
 | `fetch_climate` | DHIS2 `analytics` | `input/climate_data.json` | import_gee, build_analytics |
 | `fetch_disease` | DHIS2 `analytics` (`DISEASE_CODE`) | `input/disease_data.json` | import_pivot_*, build_analytics |

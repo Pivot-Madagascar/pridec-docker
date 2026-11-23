@@ -92,14 +92,12 @@ def fetched(tmp_path, monkeypatch, checkpoint_store, job_store):
     for task in ("import_pivot_com", "import_pivot_csb"):
         checkpoint_store.start(task, task)
         checkpoint_store.finish(task, "success")
-    out = tmp_path / "temp_fetch"
-    out.mkdir()
-    for name, flags in (("pridec_historic_COMMalaria", {"text": None, "flagged": True, "error": "too many"}),
-                        ("pridec_historic_CSBMalaria", {"text": "numNA: 0", "flagged": False, "error": None})):
-        (out / f"{name}_fetched.json").write_text(json.dumps({"dataValues": [{"dataElement": name, "value": 5}]}))
-        (out / f"{name}_flags.json").write_text(json.dumps(flags))
+    saved = {task: [{"dataElement": name, "fetched_data": [{"dataElement": name, "value": 5}], "summary": flags}]
+             for task, name, flags in (
+                 ("import_pivot_com", "pridec_historic_COMMalaria", {"text": None, "flagged": True, "error": "too many"}),
+                 ("import_pivot_csb", "pridec_historic_CSBMalaria", {"text": "numNA: 0", "flagged": False, "error": None}))}
     posts = []
-    monkeypatch.setattr(fetch_pivot, "fetch_dir", lambda: out)
+    monkeypatch.setattr(fetch_pivot, "_store", lambda: SimpleNamespace(load=lambda task: saved.get(task, [])))
     monkeypatch.setattr(fetch_pivot, "setup_logging", lambda: None)
     monkeypatch.setattr(fetch_pivot, "get_dhis_url", lambda: "https://dhis2.test")
     monkeypatch.setattr(fetch_pivot, "get_dhis_token", lambda: "t")

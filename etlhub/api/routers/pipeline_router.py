@@ -154,8 +154,8 @@ def skip_alerts(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, st
     "/imports/fetched",
     summary="The Pivot data fetched in this pass, to approve element by element",
     description=(
-        "Per Pivot import (import_pivot_com, import_pivot_csb), the data elements its last fetch wrote in this mode's "
-        "input/temp_fetch: rows fetched and the value check (flagged: empty, missing or negative values, or above "
+        "Per Pivot import (import_pivot_com, import_pivot_csb), the data elements of its last fetch in the pass shown "
+        "and the caller's mode (kept in Redis; empty when never fetched there): rows fetched and the value check (flagged: empty, missing or negative values, or above "
         "100 cases per fokontany (COM) / 500 per CSB, with its message). Only the elements fetched are listed. Read only."
     ),
     responses={200: {"content": {"application/json": {"example": {"imports": [{"task": "import_pivot_com", "elements": [

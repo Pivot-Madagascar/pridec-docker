@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from etlhub.application.use_cases import fetch_pivot as module
@@ -9,9 +7,19 @@ ROW = {"period": "202601", "orgUnit": "ou1", "value": 5, "dataElement": "pridec_
 FLAGGED = {"text": None, "flagged": True, "error": "data is empty"}
 
 
+class _Store:  # the FetchedImports port, in memory (infrastructure/fetched_imports.py: Redis, per pass and mode)
+    def __init__(self):
+        self.data = {}
+
+    def save(self, task, items):
+        self.data[task] = items
+
+    def load(self, task):
+        return self.data.get(task, [])
+
+
 @pytest.fixture
-def fetched(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
+def fetched(monkeypatch):
     calls = {}
 
     def com(**kw):
@@ -29,22 +37,34 @@ def fetched(tmp_path, monkeypatch):
     monkeypatch.setattr(module, "PIVOT_TOKEN", "t")
     monkeypatch.setattr(module, "get_parent_ou", lambda: "PASS_OU")
     monkeypatch.setattr(module, "setup_logging", lambda: None)
-    return tmp_path, calls
+    monkeypatch.setattr(module, "_store", lambda: store)
+    store = _Store()
+    return store, calls
 
 
-def test_writes_fetched_and_flags_in_the_mode_input_folder(fetched, monkeypatch):
-    root, calls = fetched
+def test_nothing_fetched_lists_every_import_empty(fetched):
+    assert module.fetched_imports() == [{"task": "import_pivot_com", "elements": []},
+                                        {"task": "import_pivot_csb", "elements": []}]
+
+
+def test_each_import_keeps_its_answer_and_the_same_import_again_replaces_it_whole(fetched, monkeypatch):
+    store, calls = fetched
     module.import_pivot_com()
     module.import_pivot_csb()
-    out = root / "input" / "temp_fetch"
-    assert json.loads((out / "pridec_historic_COMMalaria_fetched.json").read_text()) == {"dataValues": [ROW]}
-    assert json.loads((out / "pridec_historic_CSBMalaria_flags.json").read_text()) == FLAGGED
+
+    assert module.fetched_imports() == [
+        {"task": "import_pivot_com", "elements": [{"data_element": "pridec_historic_COMMalaria", "rows": 1,
+                                                   "flagged": False, "text": "ok", "error": None}]},
+        {"task": "import_pivot_csb", "elements": [{"data_element": "pridec_historic_CSBMalaria", "rows": 0,
+                                                   "flagged": True, "text": None, "error": "data is empty"}]}]
+    assert store.data["import_pivot_com"][0]["fetched_data"] == [ROW]  # what the approval posts
     assert calls["com"] == {"pivot_token": "t", "pivot_url": "http://pivot", "prior_months": 8, "parent_ou": "PASS_OU"}
     assert "parent_ou" not in calls["csb"]
 
-    monkeypatch.setattr(module, "current_test_mode", lambda: True)
-    module.import_pivot_csb()
-    assert (root / "test" / "input" / "temp_fetch" / "pridec_historic_CSBMalaria_flags.json").exists()
+    monkeypatch.setattr(module, "fetch_pivot_com_etlhub", lambda **kw: [])  # COM again: nothing this time
+    module.import_pivot_com()
+    assert module.fetched_imports()[0] == {"task": "import_pivot_com", "elements": []}
+    assert module.fetched_imports()[1]["elements"]  # CSB untouched
 
 
 def test_missing_parent_ou_fails_before_fetching(fetched, monkeypatch):

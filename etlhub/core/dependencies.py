@@ -8,6 +8,7 @@ from etlhub.infrastructure.default_files import DefaultFiles
 from etlhub.infrastructure.tasks import CeleryTaskLauncher
 from etlhub.infrastructure import auth_store, etl_events
 from etlhub.infrastructure.config_store import ConfigStore
+from etlhub.infrastructure.fetched_imports import RedisFetchedImports
 
 from etlhub.domain.interfaces.job_repository import JobRepository
 from etlhub.domain.interfaces.task_launcher import TaskLauncher
@@ -16,6 +17,7 @@ from etlhub.domain.interfaces.pipeline_gate import PipelineGate
 from etlhub.domain.interfaces.auth_store import AuthStore
 from etlhub.domain.interfaces.config_repository import ConfigRepository
 from etlhub.domain.interfaces.event_publisher import EventPublisher
+from etlhub.domain.interfaces.fetched_imports import FetchedImports
 
 from etlhub.application.use_cases.forecast_service import ForecastService
 from etlhub.application.use_cases.analytics_service import AnalyticsService
@@ -53,6 +55,10 @@ def get_event_publisher() -> EventPublisher:
 
 def get_config_store() -> ConfigRepository:
     return ConfigStore()
+
+
+def get_fetched_imports() -> FetchedImports:
+    return RedisFetchedImports()
 
 
 def get_pipeline_gate() -> PipelineGate:

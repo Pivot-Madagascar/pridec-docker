@@ -11,8 +11,10 @@ check each data element and ask on the terminal before posting a flagged one. et
 ## Flow (step data_import)
 
 1. `import_pivot_com` / `import_pivot_csb` (Celery, `application/use_cases/fetch_pivot.py`): `fetch_pivot_*_etlhub`,
-   then `<element>_fetched.json` (`{"dataValues": [...]}`) and `<element>_flags.json` (`{text, flagged, error}`) in the
-   mode's `input/temp_fetch` (`test/input/temp_fetch` in test). COM uses the pass's `PARENT_OU`; both read `PIVOT_URL`
+   then its items (each element's values and `{text, flagged, error}` check) in Redis, `pivot_fetched:<mode>:<pass>:<task>`
+   (`infrastructure/fetched_imports.py`, since 2026-11-23): the next fetch of that import in the pass replaces them
+   whole, a new pass starts empty, and they survive a logout and a forecast run's opening (until then, files in the
+   mode's `input/temp_fetch`, emptied when a run opened). COM uses the pass's `PARENT_OU`; both read `PIVOT_URL`
    from the editable config (`/api/config`, Redis), `PIVOT_TOKEN` from etlhub's environment. Nothing goes to DHIS2.
 2. `GET /pipeline/imports/fetched`: per import, the elements fetched (rows, flagged, message). etlui's
    `ImportApprovalDialog` shows one selectable row each; flagged rows start unchecked. etlui keeps the answer in
