@@ -44,15 +44,11 @@ const router = createRouter({
     {
       path: '/parameters',
       name: 'Parameters',
-      component: () => import('@/views/Auth/ParametersPage.vue'),
+      component: () => import('@/views/Parameters/ParametersView.vue'),
       meta: { title: 'Parameters' }
     },
-    {
-      path: '/admin/config',
-      name: 'AdminConfig',
-      component: () => import('@/views/Admin/ConfigView.vue'),
-      meta: { title: 'Admin Configuration' }
-    }
+    // Merged into /parameters on 2026-11-23: old links open its Configuration section.
+    { path: '/admin/config', redirect: { path: '/parameters', query: { section: 'configuration' } } }
   ]
 })
 

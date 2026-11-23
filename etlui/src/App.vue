@@ -150,7 +150,6 @@ const navItems = computed(() => [
   { to: '/journal', label: 'Journal' },
   { to: '/logs', label: 'Logs' },
   { to: '/forecast', label: 'Forecast' },
-  { to: '/parameters', label: 'Parameters' },
-  { to: '/admin/config', label: 'Admin Config' }
+  { to: '/parameters', label: 'Parameters' }
 ])
 </script>
