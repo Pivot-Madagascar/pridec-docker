@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useModeStore } from '@/stores/mode'
 import { waitBetweenRoutes } from '@/router/loading'
 
 const router = createRouter({
@@ -9,7 +10,14 @@ const router = createRouter({
       path: '/',
       name: 'Home',
       component: () => import('@/views/Home/HomeView.vue'),
-      meta: { title: 'ETL UI - Start a pass' }
+      meta: { title: 'ETL UI - Start a pass' },
+      // Home starts a pass: with one active in the user's mode, straight to the forecast page, Home never shown.
+      // etlhub is asked each time (another user or tab may have started one); unknown (an error): Home, which says it.
+      beforeEnter: async () => {
+        const mode = useModeStore()
+        await mode.load()
+        return mode.passActive ? { name: 'Dashboard' } : true
+      }
     },
     {
       path: '/forecast',
