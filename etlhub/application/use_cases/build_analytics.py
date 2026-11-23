@@ -2,7 +2,7 @@
 without the library's 15-minute limit, which failed the job (TimeoutError) while DHIS2 went on building.
 
 Waits for DHIS2's end however long (no job timeout: a stuck job is released from the Journal), and writes each new DHIS2
-notification once to the job's log, followed live in etlui through the log WebSocket. A network cut or a 5xx while
+message of DHIS2's notifications once to the job's log, followed live in etlui through the log WebSocket. A network cut or a 5xx while
 checking is waited out (DHIS2 goes on building); a 4xx fails the job.
 ponytail: a copy; the CLI (etl/) keeps the 15-minute limit. Drop it once pivot_dhis_tools can wait without limit.
 """
@@ -14,6 +14,8 @@ import httpx
 from etl.scripts.config import check_envvars, get_dhis_token, get_dhis_url, get_dry_run, setup_logging
 
 logger = logging.getLogger("analytics")
+# httpx logs every request at INFO: one line per poll, next to the DHIS2 line that says more. Its warnings still show.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 POLL_SECONDS = 30  # as pivot_dhis_tools
 
 
@@ -33,7 +35,7 @@ def build_analytics() -> None:
         raise RuntimeError(f"Unexpected analytics status endpoint from DHIS2: {endpoint}")
     status_url = f"{dhis_url}{endpoint}"
     logger.info("Analytics build launched, status at %s, checked every %d s", status_url, POLL_SECONDS)
-    seen = set()
+    last = {}  # uid -> its last message logged: DHIS2 updates one notification in place (same uid, new message)
     while True:
         time.sleep(POLL_SECONDS)
         try:
@@ -47,9 +49,8 @@ def build_analytics() -> None:
         status.raise_for_status()  # 4xx: the token or the task is gone, waiting won't help
         notifications = status.json()  # newest first
         for n in reversed(notifications):
-            key = n.get("uid") or (n.get("time"), n.get("message"))
-            if key not in seen:
-                seen.add(key)
+            if last.get(n.get("uid")) != n.get("message"):  # a new message: logged once, however many polls show it
+                last[n.get("uid")] = n.get("message")
                 logger.info("DHIS2: %s", n.get("message"))
         if errors := [n for n in notifications if n.get("level") == "ERROR"]:
             raise RuntimeError(f"Analytics table build failed: {errors[0].get('message')}")

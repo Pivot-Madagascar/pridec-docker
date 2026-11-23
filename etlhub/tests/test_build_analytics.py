@@ -66,19 +66,21 @@ def test_test_mode_builds_nothing(run_job):
     assert "DRY RUN - analytics tables will not be built" in log
 
 
-def test_production_waits_for_dhis2_however_long_and_logs_each_notification_once(run_job):
-    started = note("a", "Analytics table update started")
-    running = [note("b", "Populating analytics tables"), started]
-    polls = [[started]] + [running] * 40 + [[note("c", "Analytics tables updated", completed=True)] + running]
+def test_production_waits_for_dhis2_however_long_and_logs_each_new_message_once(run_job):
+    # DHIS2 2.40 updates one notification in place (same uid, new message): seen on dhis2-pridec-test, 2026-11-23
+    polls = ([[note("job", "Analytics table update process")]]
+             + [[note("job", "[6/11] generating Category table")]] * 40
+             + [[note("job", "[200/2799] in_In3EKQS6P2p_ax_2024_wT02C")]]
+             + [[note("job", "Analytics tables updated: 00:04:56.441", completed=True)]])
 
-    log, sent = run_job(polls)  # 42 polls of 30 s: 21 min, past the library's 15
+    log, sent = run_job(polls)  # 43 polls of 30 s: 21.5 min, past the library's 15
 
     auth = {"Authorization": "ApiToken d2pat_login"}
     assert sent[0] == ("POST", "https://dhis2.test/api/33/resourceTables/analytics", auth)
-    assert sent[1:] == [("GET", "https://dhis2.test" + STATUS, auth)] * 42
-    for message in ("Analytics table update started", "Populating analytics tables", "Analytics tables updated"):
-        assert log.count(message) == 1
-    assert log.index("update started") < log.index("Populating") < log.index("tables updated")
+    assert sent[1:] == [("GET", "https://dhis2.test" + STATUS, auth)] * 43
+    messages = ["update process", "[6/11]", "[200/2799]", "tables updated: 00:04:56.441"]
+    assert [log.count(m) for m in messages] == [1, 1, 1, 1]
+    assert [log.index(m) for m in messages] == sorted(log.index(m) for m in messages)
 
 
 def test_an_error_notification_fails_the_job(run_job):
