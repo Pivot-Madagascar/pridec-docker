@@ -3,6 +3,14 @@ import { useAuthStore } from '@/stores/auth'
 import { useModeStore } from '@/stores/mode'
 import { waitBetweenRoutes } from '@/router/loading'
 
+// Forecast, Tracking and Logs only exist for an active pass of the user's mode: without one, Home (start or resume).
+// etlhub is asked each time, like Home's route; unknown (an error): Home too, which shows it.
+const needsActivePass = async () => {
+  const mode = useModeStore()
+  await mode.load()
+  return mode.passActive ? true : { name: 'Home' }
+}
+
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -23,12 +31,14 @@ const router = createRouter({
     {
       path: '/forecast',
       name: 'Dashboard',
+      beforeEnter: needsActivePass,
       component: () => import('@/views/Dashboard/Dashboard.vue'),
       meta: { title: 'ETL UI - Dashboard', label: 'Forecast' }
     },
     {
       path: '/tracking',
       name: 'Tracking',
+      beforeEnter: needsActivePass,
       component: () => import('@/views/TrackerView/TrackerView.vue'),
       meta: { title: 'Request Tracking', label: 'Tracking' }
     },
@@ -41,6 +51,7 @@ const router = createRouter({
     {
       path: '/logs',
       name: 'ETLLogs',
+      beforeEnter: needsActivePass,
       component: () => import('@/views/LogsStreamPage.vue'),
       meta: { title: 'ETL Logs Stream', label: 'Logs' }
     },
