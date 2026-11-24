@@ -30,10 +30,27 @@ const sleep = () => new Promise(resolve => setTimeout(resolve, JOB_POLL_MS))
 // While the pointer is on the toasts, a toast whose time is up checks again this often.
 export const LEAVE_MS = 1000
 
+// The pinned toasts (their pin button): they never close on their own; unpinned, within LEAVE_MS once their time is up.
+const pinned = reactive(new Set<string>())
+
 // vue3-hot-toast 0.0.5 does not pause on hover (its dismiss timers are never cleared): every toast is shown with an
-// infinite duration and closed from here, never while the pointer is on the toasts (:hover reaches App.vue's layer).
+// infinite duration and closed from here, never while it is pinned or the pointer is on the toasts (:hover reaches
+// App.vue's layer).
 function closeAfter(id: string, ms: number) {
-  setTimeout(() => (document.querySelector('[data-toasts]:hover') ? closeAfter(id, LEAVE_MS) : toast.dismiss(id)), ms)
+  const keep = () => pinned.has(id) || document.querySelector('[data-toasts]:hover')
+  setTimeout(() => (keep() ? closeAfter(id, LEAVE_MS) : toast.dismiss(id)), ms)
+}
+
+/** A toast's content (JobToast) with its pin and close buttons; `id()`: the toast's, known once it is shown. */
+function withActions(view: { label: string; steps?: JobStep[] }, id: () => string, onClose = () => {}) {
+  const close = () => {
+    pinned.delete(id())
+    toast.dismiss(id())
+    onClose()
+  }
+  const pin = () => (pinned.has(id()) ? pinned.delete(id()) : pinned.add(id()))
+  // markRaw: the toaster stores it in its own state; the render reads `view` and `pinned`, so it updates in place.
+  return markRaw({ render: () => h(JobToast, { ...view, pinned: pinned.has(id()), onPin: pin, onClose: close }) })
 }
 
 /**
@@ -45,11 +62,12 @@ async function followJob(label: string, jobId: string): Promise<JobEnd> {
   const view = reactive({ label, steps: [] as JobStep[] })
   const add = (key: JobStep['key'], detail?: string) => view.steps.push({ key, at: new Date().toLocaleTimeString(), detail })
   let workerMessage = '' // the running step's first message: the elapsed time follows it
-  // The toast keeps this component: the steps update in place (markRaw: the toaster stores it in its own state).
-  const content = markRaw({ render: () => h(JobToast, view) })
+  let id = ''
+  let closed = false // closed by the user: the job is still followed (its end is returned), the toast never comes back
+  const content = withActions(view, () => id, () => (closed = true))
 
   add('accepted', `Queued for a worker · ${jobId}`)
-  const id = toast.loading(content)
+  id = toast.loading(content)
   for (;;) {
     let job: { status: string | null; message: string | null }
     try {
@@ -75,14 +93,19 @@ async function followJob(label: string, jobId: string): Promise<JobEnd> {
     const success = job.status === 'success'
     const message = job.message ?? job.status ?? 'Status unknown: the job record expired'
     add(success ? 'success' : 'error', `${message} · ${formatElapsed(Date.now() - started)}`)
-    toast[success ? 'success' : 'error'](content, { id, duration: Number.POSITIVE_INFINITY })
-    closeAfter(id, JOB_END_MS)
+    if (!closed) {
+      toast[success ? 'success' : 'error'](content, { id, duration: Number.POSITIVE_INFINITY })
+      closeAfter(id, JOB_END_MS)
+    }
     return { success, message }
   }
 }
 
 export function useNotification() {
-  const showNotification = (msg: string, type: 'success' | 'error') =>
-    closeAfter(toast[type](msg, { duration: Number.POSITIVE_INFINITY }), 5000)
+  const showNotification = (msg: string, type: 'success' | 'error') => {
+    let id = ''
+    id = toast[type](withActions({ label: msg }, () => id), { duration: Number.POSITIVE_INFINITY })
+    closeAfter(id, 5000)
+  }
   return { showNotification, followJob }
 }

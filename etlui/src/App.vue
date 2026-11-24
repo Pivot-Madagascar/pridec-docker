@@ -1,7 +1,7 @@
 <template>
   <!-- A manual popover puts the toasts in the top layer, above the dialogs (portals with a z-index). -->
   <div ref="toasts" popover="manual" data-toasts class="toast-layer">
-    <Toaster position="bottom-right" />
+    <Toaster position="bottom-right" :toast-options="TOAST_OPTIONS" />
   </div>
 
   <!-- Login: the page alone, no menu. -->
@@ -70,5 +70,10 @@ const auth = useAuthStore()
 const userName = computed(() => auth.user?.displayName || auth.user?.username)
 
 const toasts = ref<HTMLElement>()
+// The toasts in the app's theme (light / dark): its tokens replace the library's white box (#fff, #363636), inline style.
+// ponytail: its icons keep their own colours, vue3-hot-toast 0.0.5 drops iconTheme; readable on both themes.
+const TOAST_OPTIONS = {
+  style: { background: 'var(--popover)', color: 'var(--popover-foreground)', border: '1px solid var(--border)' }
+}
 onMounted(() => toasts.value?.showPopover?.()) // without the Popover API the div simply stays in the page
 </script>

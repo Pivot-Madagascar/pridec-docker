@@ -5,7 +5,12 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 const logout = vi.fn()
 vi.mock('@/services/auth', () => ({ logout: () => logout() }))
 vi.mock('@/services/pipeline', () => ({ getCheckpoints: vi.fn().mockResolvedValue({ test_mode: true, dry_run: true }) }))
-vi.mock('vue3-hot-toast', () => ({ Toaster: { render: () => null } }))
+vi.mock('vue3-hot-toast', async () => {
+  const { h } = await import('vue')
+  // The toaster's options, read back from the DOM: a stub has no theme of its own.
+  return { Toaster: { props: ['toastOptions'], setup: (props: { toastOptions?: { style?: object } }) =>
+    () => h('div', { 'data-test': 'toaster', 'data-style': JSON.stringify(props.toastOptions?.style) }) } }
+})
 
 import App from '@/App.vue'
 import { getCheckpoints } from '@/services/pipeline'
@@ -52,6 +57,14 @@ describe('App', () => {
 
     const entries = wrapper.findAll('[data-test="nav-item"]').map(a => a.text())
     expect(entries).toEqual(['Forecast', 'Journal', 'Tracking', 'Logs', 'Parameters'])
+    wrapper.unmount()
+  })
+
+  it('shows the toasts in the app\'s theme, through its tokens', async () => {
+    const wrapper = await mountAt('/')
+
+    expect(JSON.parse(wrapper.find('[data-test="toaster"]').attributes('data-style')!)).toEqual(
+      { background: 'var(--popover)', color: 'var(--popover-foreground)', border: '1px solid var(--border)' })
     wrapper.unmount()
   })
 

@@ -1,33 +1,49 @@
 <template>
-  <!-- The content of a job's toast (followJob): every step reached so far, the last one live. -->
+  <!-- The content of a toast: a message, or a job's (followJob) every step reached so far, the last one live. -->
   <div class="job-toast min-w-56 text-left">
-    <p class="text-sm font-semibold text-gray-900">{{ label }}</p>
-    <ol class="mt-1.5 space-y-1.5 border-l border-gray-200 pl-3">
+    <div class="flex items-start gap-2">
+      <p class="flex-1 text-sm font-semibold text-popover-foreground">{{ label }}</p>
+      <!-- Pinned: the toast no longer closes on its own; × closes it at once. -->
+      <Button variant="ghost" size="icon-xs" data-test="toast-pin" :aria-pressed="pinned"
+        :aria-label="pinned ? 'Unpin' : 'Pin'" :title="pinned ? 'Unpin' : 'Pin'"
+        :class="{ 'text-primary': pinned }" @click="emit('pin')">
+        <PinOff v-if="pinned" aria-hidden="true" />
+        <Pin v-else aria-hidden="true" />
+      </Button>
+      <Button variant="ghost" size="icon-xs" data-test="toast-close" aria-label="Close" title="Close" @click="emit('close')">
+        <X aria-hidden="true" />
+      </Button>
+    </div>
+    <ol v-if="steps.length" class="mt-1.5 space-y-1.5 border-l border-border pl-3">
       <li v-for="(step, index) in steps" :key="step.key" class="relative text-xs leading-snug">
         <span
           class="absolute -left-[17px] top-1 h-2 w-2 rounded-full"
           :class="[DOT[step.key], { 'animate-pulse': index === steps.length - 1 && !ENDS.has(step.key) }]"
         />
         <span class="font-medium" :class="TEXT[step.key]">{{ TITLE[step.key] }}</span>
-        <span class="text-gray-400"> · {{ step.at }}</span>
-        <span v-if="step.detail" class="block break-words text-gray-600">{{ step.detail }}</span>
+        <span class="text-muted-foreground"> · {{ step.at }}</span>
+        <span v-if="step.detail" class="block break-words text-muted-foreground">{{ step.detail }}</span>
       </li>
     </ol>
   </div>
 </template>
 
 <script setup lang="ts">
+import { Pin, PinOff, X } from '@lucide/vue'
+import { Button } from '@/components/ui/button'
 import type { JobStep } from '@/composables/useNotification'
 
-defineProps<{ label: string; steps: JobStep[] }>()
+withDefaults(defineProps<{ label: string; steps?: JobStep[]; pinned?: boolean }>(), { steps: () => [], pinned: false })
+const emit = defineEmits<{ pin: []; close: [] }>()
 
 const ENDS = new Set(['success', 'error'])
 const TITLE: Record<JobStep['key'], string> = { accepted: 'Accepted', running: 'Running', success: 'Completed', error: 'Failed' }
+// The app's tokens (base.css), so the toast follows its light / dark theme.
 const DOT: Record<JobStep['key'], string> = {
-  accepted: 'bg-blue-500', running: 'bg-amber-500', success: 'bg-green-500', error: 'bg-red-500',
+  accepted: 'bg-primary', running: 'bg-warning', success: 'bg-success', error: 'bg-destructive',
 }
 const TEXT: Record<JobStep['key'], string> = {
-  accepted: 'text-blue-700', running: 'text-amber-700', success: 'text-green-700', error: 'text-red-700',
+  accepted: 'text-primary', running: 'text-warning', success: 'text-success', error: 'text-destructive',
 }
 </script>
 

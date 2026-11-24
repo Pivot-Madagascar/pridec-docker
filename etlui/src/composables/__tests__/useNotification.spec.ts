@@ -73,6 +73,32 @@ describe('followJob', () => {
     expect(toast.dismiss).toHaveBeenCalledWith('toast-2')
   })
 
+  it('keeps a pinned toast until it is unpinned, then closes it within LEAVE_MS', async () => {
+    vi.useFakeTimers()
+    useNotification().showNotification('Upload config: success', 'success')
+    const wrapper = mount(toast.success.mock.calls[0][0] as unknown as Component)
+    expect(wrapper.text()).toContain('Upload config: success')
+
+    await wrapper.find('[data-test="toast-pin"]').trigger('click')
+    expect(wrapper.find('[data-test="toast-pin"]').attributes('aria-pressed')).toBe('true')
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(toast.dismiss).not.toHaveBeenCalled()
+
+    await wrapper.find('[data-test="toast-pin"]').trigger('click')
+    await vi.advanceTimersByTimeAsync(LEAVE_MS)
+    expect(toast.dismiss).toHaveBeenCalledWith('toast-2')
+  })
+
+  it('closes a toast at once with its close button; a closed job toast never comes back at the job\'s end', async () => {
+    getJobLogs.mockResolvedValueOnce(job('success', 'Done'))
+    const ended = useNotification().followJob('Run Forecast', 'forecast_1')
+
+    await shown().find('[data-test="toast-close"]').trigger('click')
+    expect(toast.dismiss).toHaveBeenCalledWith('toast-1')
+    expect(await ended).toEqual({ success: true, message: 'Done' }) // still followed: Recent Activity gets its end
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
   it('formats an elapsed time for people', () => {
     expect([formatElapsed(42_000), formatElapsed(206_000), formatElapsed(3_900_000)]).toEqual(['42 s', '3 min 26 s', '1 h 05 min'])
   })
