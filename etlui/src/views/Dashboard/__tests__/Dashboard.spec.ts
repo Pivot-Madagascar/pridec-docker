@@ -16,6 +16,7 @@ const applyDefaultFile = vi.fn()
 const getImportAvailability = vi.fn()
 const getFetchedImports = vi.fn()
 const getGeeImports = vi.fn()
+const skipAlerts = vi.fn()
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 vi.mock('@/services/pipeline', () => ({
@@ -31,7 +32,8 @@ vi.mock('@/services/pipeline', () => ({
   abandonPass: (...args: unknown[]) => abandonPass(...args),
   getImportAvailability: (...args: unknown[]) => getImportAvailability(...args),
   getFetchedImports: (...args: unknown[]) => getFetchedImports(...args),
-  getGeeImports: (...args: unknown[]) => getGeeImports(...args)
+  getGeeImports: (...args: unknown[]) => getGeeImports(...args),
+  skipAlerts: (...args: unknown[]) => skipAlerts(...args)
 }))
 vi.mock('@/services/inputs', () => ({
   getInputFiles: vi.fn().mockResolvedValue({}),
@@ -378,6 +380,29 @@ describe('Dashboard', () => {
     const gee = wrapper.find('[data-test="gee-dialog"]')
     expect(gee.find('[data-test="busy-overlay"]').text()).toBe('Importing from GEE…')
     expect(gee.find('[data-test="import-state"]').text()).toBe('Importing…') // under the spinner
+    wrapper.unmount()
+  })
+
+  it('launches the CSB alert thresholds of the open run, or skips them', async () => {
+    getCheckpoints.mockResolvedValue(forecastState('CSB/Malaria', { 'CSB/Malaria:calc_orgunit_alerts': ['pending', true] }))
+    launchJob.mockResolvedValue({ jobId: 'calc_orgunit_alerts_1', requestId: 'r' })
+    skipAlerts.mockResolvedValue(undefined)
+    const wrapper = await mountPage()
+
+    const csb = wrapper.find('#forecast-Malaria').findAll('[data-test="level-column"]')[2]
+    await csb.find('[data-test="card-steps"]').trigger('click')
+    await flushPromises()
+    const alerts = csb.findAll('[data-test="item"]').find(i => i.text().includes('Alert thresholds'))!
+    expect(alerts.findAll('button').map(b => b.text())).toEqual(['Launch', 'Skip'])
+
+    await alerts.findAll('button')[0].trigger('click')
+    await flushPromises()
+    expect(launchJob).toHaveBeenCalledWith('calc_orgunit_alerts', false, undefined) // the job, no longer a skip
+    expect(skipAlerts).not.toHaveBeenCalled()
+
+    await alerts.find('[data-test="skip-alerts"]').trigger('click')
+    await flushPromises()
+    expect(skipAlerts).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
 

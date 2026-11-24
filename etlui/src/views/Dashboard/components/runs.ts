@@ -23,7 +23,7 @@ export interface RunsProps {
 export interface RunsEmit {
   (e: 'open' | 'report', source: Source, disease: Disease): void
   (e: 'launch', item: string): void
-  (e: 'validate' | 'abandon'): void
+  (e: 'validate' | 'abandon' | 'skip'): void // skip: calc_orgunit_alerts marked done without computing (skip_alerts)
   (e: 'delete' | 'use-default', name: InputName): void
   (e: 'preview', name: InputName, from: PreviewFrom): void
 }

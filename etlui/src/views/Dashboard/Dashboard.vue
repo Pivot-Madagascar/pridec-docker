@@ -126,6 +126,7 @@
             @preview="openPreview"
             @use-default="useDefault"
             @abandon="pendingRunAbandon = true"
+            @skip="skipAlerts"
           />
         </template>
 
@@ -376,8 +377,7 @@ const reviewCard = computed(() => {
 })
 
 // A card's key is its checkpoint ('CSB/Malaria:forecast'); the server resolves which checkpoint a job counts for.
-// ponytail: calc_orgunit_alerts has no script yet (501): its button skips it (LevelColumn 'Skip').
-const launchItem = (item: string) => (jobOf(item) === 'calc_orgunit_alerts' ? skipAlerts() : launch(jobOf(item), labelOf(item)))
+const launchItem = (item: string) => launch(jobOf(item), labelOf(item))
 const clickImport = (item: string) => (item === 'import_gee' ? gee.show() : launchItem(item))
 // The dialog's choice, kept on the pass by etlhub; a confirmation (relaunch after a success) resends it.
 const importGee = (variables: string[]) => launch('import_gee', labelOf('import_gee'), { gee_variables: variables })

@@ -80,6 +80,10 @@
             >
               {{ row.launch }}
             </Button>
+            <Button v-if="row.skip" variant="ghost" size="sm" :disabled="blocked" data-test="skip-alerts"
+              :aria-label="`Skip : ${row.label}`" @click="emit('skip')">
+              Skip
+            </Button>
             <!-- The approval is a decision: read the forecast report, then approve or reject it there. -->
             <Button v-else-if="row.look === 'waiting'" size="sm" :disabled="blocked" @click="emit('validate')">
               Read and approve
@@ -199,8 +203,9 @@ const rows = computed(() =>
       item: i.item, job, look,
       label: ITEM_NAMES[job] ?? job,
       updated: lastUpdate(i),
-      // ponytail: calc_orgunit_alerts has no script yet (501), so its button skips it; back to Launch once it exists.
-      launch: !launchable ? null : job === 'calc_orgunit_alerts' ? 'Skip' : i.status === 'pending' ? 'Launch' : 'Relaunch'
+      launch: !launchable ? null : i.status === 'pending' ? 'Launch' : 'Relaunch',
+      // The CSB alerts can also be marked done without computing them (POST /pipeline/runs/current/skip_alerts).
+      skip: launchable && job === 'calc_orgunit_alerts' && i.status !== 'success'
     }
   })
 )
