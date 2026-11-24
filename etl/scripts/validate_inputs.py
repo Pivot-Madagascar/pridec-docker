@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import date
 import argparse
 import json
+import os
+import sys
 import geopandas as gpd
 import pandas as pd
 import logging
@@ -25,6 +27,13 @@ class ValidationResult:
     config: dict
     input_data: pd.DataFrame
     graph_poly: gpd.GeoDataFrame
+
+# Output paths written on successful validation
+VALID_INPUT_PATHS = {
+    "config": "input/config_valid.json",
+    "input_data": "input/input_valid.json",
+    "graph_poly": "input/polygon_valid.geojson",
+}
 
 # ---------------------------------------------------------------------------
 # Helper fx
@@ -157,13 +166,8 @@ def validate_inputs(
     # inla_hyper --------------------------------------------------------
     if config.get("inla_hyper") is None:
         messages.append("No inla_hyper provided. Setting to default values.")
-        config["inla_hyper"] = {
-            "prec.unstruct": (1, 5e-4),
-            "prec.spatial": (1, 5e-4),
-            "prec.timerw1": (1, 0.01),
-        }
     else:
-        required_keys = {"prec.unstruct", "prec.spatial", "prec.timerw1"}
+        required_keys = {"prec.spatial", "phi.spatial", "prec.timerw1"}
         hyper = config["inla_hyper"]
         keys_ok = set(hyper.keys()) == required_keys
         lens_ok = all(len(v) == 2 for v in hyper.values())
@@ -172,17 +176,12 @@ def validate_inputs(
         )
         if not (keys_ok and lens_ok and types_ok):
             errors.append( "ERROR in config: `inla_hyper` poorly specified."
-                "`prec.unstruct`, `prec.spatial`, `prec.timerw1` should each be "
+                "`prec.spatial`, `phi.spatial`, `prec.timerw1` should each be "
                 "numeric sequences of length 2."
             )
     # ranger_hyper ------------------------------------------------------
     if config.get("ranger_hyper") is None:
         messages.append("No ranger_hyper provided. Setting to default values.")
-        config["ranger_hyper"] = {
-            "mtry": None,
-            "min.node.size": None,
-            "num.trees": 500,
-        }
     else:
         required_ranger_keys = {"mtry", "min.node.size", "num.trees"}
         if set(config["ranger_hyper"].keys()) != required_ranger_keys:
@@ -406,7 +405,14 @@ if __name__ == "__main__":
     
     if args.help:
         print_help()
-        exit(0)
+        sys.exit(0)
+
+    # Remove outputs from any previous run so a failed validation can't leave
+    # stale files behind for the forecast step to pick up.
+    for path in VALID_INPUT_PATHS.values():
+        if os.path.exists(path):
+            os.remove(path)
+            logger.debug(f"Removed stale output {path}")
 
     config, external_data, disease_data, climate_data, orgunit_poly = load_inputs(args)
     
@@ -422,19 +428,20 @@ if __name__ == "__main__":
             logger.info(msg)
         logger.info("SUCCESS: All inputs valid.")
         # save the validated and formatted inputs to be directly used by forecast function
-        with open("input/config_valid.json", "w") as f:
+        with open(VALID_INPUT_PATHS["config"], "w") as f:
             json.dump(result.config, f, indent=2)
-        logger.info(f"Validated config saved to input/config_valid.json")
+        logger.info(f"Validated config saved to {VALID_INPUT_PATHS['config']}")
 
-        result.input_data.to_json("input/input_valid.json", orient="records", indent=2)
-        logger.info("Validated input data saved to input/input_valid.json")
+        result.input_data.to_json(VALID_INPUT_PATHS["input_data"], orient="records", indent=2)
+        logger.info(f"Validated input data saved to {VALID_INPUT_PATHS['input_data']}")
 
-        result.graph_poly.to_file("input/polygon_valid.geojson", driver="GeoJSON")
-        logger.info("Validated orgUnit polygons saved to input/polygon_valid.geojson")
+        result.graph_poly.to_file(VALID_INPUT_PATHS["graph_poly"], driver="GeoJSON")
+        logger.info(f"Validated orgUnit polygons saved to {VALID_INPUT_PATHS['graph_poly']}")
 
     except ValidationError as e:
         for msg in e.messages:
             logger.info(msg)
         for err in e.errors:
             logger.error(err)
-        exit(1)
+        logger.error("Validation failed. No validated outputs were written.")
+        sys.exit(2)  # 2 = invalid inputs; 1 is left for unexpected crashes
