@@ -8,6 +8,7 @@ vi.mock('@/services/pipeline', () => ({ getCheckpoints: vi.fn().mockResolvedValu
 vi.mock('vue3-hot-toast', () => ({ Toaster: { render: () => null } }))
 
 import App from '@/App.vue'
+import { getCheckpoints } from '@/services/pipeline'
 import { useAuthStore } from '@/stores/auth'
 
 const page = { template: '<p data-test="page">page</p>' }
@@ -42,6 +43,15 @@ describe('App', () => {
     expect(wrapper.find('header h1').text()).toBe('Journal')
     expect(wrapper.find('[data-test="user-name"]').text()).toBe('Tester')
     expect(wrapper.find('[data-test="page"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('hides Start a pass while the user\'s mode has an active pass', async () => {
+    vi.mocked(getCheckpoints).mockResolvedValueOnce({ test_mode: true, dry_run: true, pass: { state: 'active' } } as never)
+    const wrapper = await mountAt('/journal')
+
+    const entries = wrapper.findAll('[data-test="nav-item"]').map(a => a.text())
+    expect(entries).toEqual(['Forecast', 'Journal', 'Tracking', 'Logs', 'Parameters'])
     wrapper.unmount()
   })
 

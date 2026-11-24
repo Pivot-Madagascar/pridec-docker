@@ -407,6 +407,22 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
+  it('opens only the pass\'s current step, the others closed but clickable', async () => {
+    getCheckpoints.mockResolvedValue(forecastState(null)) // current_step: forecast
+    const wrapper = await mountPage()
+    const states = () => wrapper.findAll('[data-section]').map(s => [s.attributes('data-section'), s.attributes('data-state')])
+
+    expect(states()).toEqual([['dataImport', 'closed'], ['forecast', 'open'], ['systemUpdate', 'closed']])
+    await wrapper.findAll('[data-test="accordion-header"]')[0].find('button').trigger('click') // a closed step still opens
+    expect(states()).toEqual([['dataImport', 'open'], ['forecast', 'open'], ['systemUpdate', 'closed']])
+    wrapper.unmount()
+
+    getCheckpoints.mockResolvedValue(state({ current_step: null })) // a complete pass: nothing left to open
+    const complete = await mountPage()
+    expect(complete.findAll('[data-section]').map(s => s.attributes('data-state'))).toEqual(['closed', 'closed', 'closed'])
+    complete.unmount()
+  })
+
   it('offers the open run\'s input files as a zip, right after the data check', async () => {
     getCheckpoints.mockResolvedValue(forecastState('CSB/Malaria', {}))
     const wrapper = await mountPage()

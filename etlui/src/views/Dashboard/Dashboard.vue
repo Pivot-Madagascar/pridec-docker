@@ -307,9 +307,14 @@ watch(() => state.value?.test_mode, (mode, before) => { if (before !== undefined
 const crumbs = computed(() => (state.value ? position(state.value) : []))
 const target = computed(() => (state.value ? positionItem(state.value) : null))
 
-// The accordion's open steps: the breadcrumb's link reopens the one of the current item.
-const openSteps = ref(['dataImport', 'forecast', 'systemUpdate'])
+// The accordion's open steps: at first the pass's current step only (etlhub's `current_step`; none once complete), the
+// others closed but clickable. A new current step opens too, the ones the user opened stay; so does the breadcrumb's link.
+const openSteps = ref<string[]>([])
 const SECTIONS: Record<StepName, string> = { data_import: 'dataImport', forecast: 'forecast', system_update: 'systemUpdate' }
+const openStep = (name: StepName) => {
+  if (!openSteps.value.includes(SECTIONS[name])) openSteps.value = [...openSteps.value, SECTIONS[name]]
+}
+watch(() => state.value?.current_step, name => { if (name) openStep(name) })
 const runFocus = ref<RunFocus | null>(null)
 // The steps' cards: their progress is etlhub's `done` and `accessible`, nothing decided here.
 const STEP_TITLES: Record<StepName, string> = { data_import: 'Data Import', forecast: 'Forecasts', system_update: 'System Update' }
@@ -324,7 +329,7 @@ async function goToPosition() {
   if (!target.value) return
   const { step: name, item } = target.value
   const blink = !state.value?.lock
-  if (!openSteps.value.includes(SECTIONS[name])) openSteps.value = [...openSteps.value, SECTIONS[name]]
+  openStep(name)
   if (name === 'forecast') {
     runFocus.value = { item: item.item, blink, at: Date.now() }
     return

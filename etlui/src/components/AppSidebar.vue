@@ -22,7 +22,7 @@
     <SidebarContent>
       <SidebarGroup>
         <SidebarMenu>
-          <SidebarMenuItem v-for="item in NAV" :key="item.to">
+          <SidebarMenuItem v-for="item in nav" :key="item.to">
             <!-- The active entry is filled with the primary colour (the reference's menu). -->
             <SidebarMenuButton
               as-child
@@ -72,6 +72,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { Activity, BookOpen, ChartLine, CircleHelp, Database, FileCode, LogOut, Play, ScrollText, Settings } from '@lucide/vue'
 import {
@@ -79,6 +80,7 @@ import {
   SidebarRail, useSidebar
 } from '@/components/ui/sidebar'
 import { useAuthStore } from '@/stores/auth'
+import { useModeStore } from '@/stores/mode'
 
 const NAV = [
   { to: '/', label: 'Start a pass', icon: Play },
@@ -88,6 +90,10 @@ const NAV = [
   { to: '/logs', label: 'Logs', icon: ScrollText },
   { to: '/parameters', label: 'Parameters', icon: Settings }
 ]
+
+// A pass is active in the user's mode: nothing to start, Start a pass leaves the menu (its route would send to Forecast).
+const mode = useModeStore()
+const nav = computed(() => NAV.filter(item => item.to !== '/' || !mode.passActive))
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8111'
 const auth = useAuthStore()
