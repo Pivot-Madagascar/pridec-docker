@@ -2,8 +2,8 @@ from fastapi import APIRouter, Query, Depends
 
 from etlhub.api.routers import BLOCKED, CONFIRM_OVERWRITE, CONFIRM_RELAUNCH, WebhookUrl, error_doc
 from etlhub.application.use_cases.availability_service import AvailabilityService
-from etlhub.application.use_cases.ingestion_service import IngestionService
-from etlhub.domain.schemas import ETLResponse, ImportAvailabilityReport
+from etlhub.application.use_cases.ingestion_service import IngestionService, chosen_gee_variables
+from etlhub.domain.schemas import ETLResponse, GeeChoice, ImportAvailabilityReport
 from etlhub.core.dependencies import get_availability_service, get_ingestion_service
 
 router = APIRouter(tags=["Ingest"])
@@ -32,10 +32,34 @@ def add_launch_route(router: APIRouter, task_type: str, summary: str, descriptio
     )(endpoint)
 
 
+@router.post(
+    "/import_gee",
+    response_model=ETLResponse,
+    status_code=202,
+    summary="Import GEE data into DHIS2",
+    description=(
+        "Launches the GEE import in the background: one fetch of the chosen variables from GEE, then one post per "
+        "variable of its values only, each one's state in GET /pipeline/imports/gee (gee-import.md). Body "
+        "`gee_variables` (optional): the variables chosen in etlui's Import GEE dialog, kept on the active pass once "
+        "the launch is accepted (a 409 changes nothing). Pass `webhook_url` to be notified when the job completes."
+    ),
+    response_description="Task accepted and queued in background.",
+    responses={**BLOCKED, 400: error_doc("Empty or unknown GEE variables", {"message": "Unknown GEE variables: x"})},
+    name="api_import_gee",
+)
+async def api_import_gee(
+    body: GeeChoice | None = None,
+    webhook_url: WebhookUrl = Query(None),
+    confirm: bool = CONFIRM_RELAUNCH,
+    service: IngestionService = Depends(get_ingestion_service),
+):
+    chosen = chosen_gee_variables(body.gee_variables) if body and body.gee_variables is not None else None
+    job_id = service.launch("import_gee", webhook_url, confirm, gee_variables=chosen)
+    return ETLResponse(status="accepted", message="Import GEE task started in background", job_id=job_id,
+                       webhook_url=webhook_url)
+
+
 for _args in [
-    ("import_gee", "Import GEE data into DHIS2",
-     "Launches the GEE import process in the background. Executes `etl/scripts/import_gee.py` asynchronously. ",
-     "Task accepted and queued in background.", "Import GEE task started in background"),
     ("import_pivot_com", "Import Pivot COM data into DHIS2",
      "Launches the Pivot COM historical data import in the background. "
      "Executes `etl/scripts/import_pivot_COM.py` asynchronously. ",

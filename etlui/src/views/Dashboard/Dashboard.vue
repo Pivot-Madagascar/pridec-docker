@@ -87,7 +87,7 @@
         <CardContent class="px-4 text-xs text-muted-foreground">
           <!-- Chosen on Home when the pass started, fixed for it: what Import GEE imports. -->
           <p v-if="state?.pass" data-test="pass-gee">Import GEE: {{ state.pass.gee_variables?.split(',').join(', ') ?? 'all available variables' }}</p>
-          <p v-else>Chosen on Home when the pass starts.</p>
+          <p v-else>Chosen in Import GEE (Data Import).</p>
         </CardContent>
       </Card>
     </div>
@@ -97,7 +97,8 @@
       <Accordion v-model:open="openSteps" :items="accordionItems">
         <template #content-dataImport>
           <div class="action-grid">
-            <ActionCard v-for="card in cards('data_import')" :key="card.key" :action="card" @action-click="launchItem" />
+            <!-- Import GEE opens its dialog (the variables to import); the Pivot imports launch at once. -->
+            <ActionCard v-for="card in cards('data_import')" :key="card.key" :action="card" @action-click="clickImport" />
             <ActionCard v-if="reviewCard" :action="reviewCard" @action-click="openApproval" />
           </div>
           <div class="imports-approval" data-test="imports-approval">
@@ -173,6 +174,19 @@
       @approve="elements => decideImportsFromApproval('approve', elements)"
       @reject="decideImportsFromApproval('reject')"
       @build="buildFromApproval"
+    />
+
+    <!-- Import GEE: the variables to import, each one's state; stays open while the import runs. -->
+    <GeeImportDialog
+      :open="gee.open.value"
+      :loading="gee.loading.value"
+      :error="gee.error.value"
+      :variables="gee.variables.value"
+      :can-import="!busy && state?.lock == null && !!geeItem?.launchable"
+      :importing="geeItem?.status === 'running'"
+      @close="gee.close"
+      @refresh="gee.refresh"
+      @import="importGee"
     />
 
     <ImpactDialog :pending="pending" :busy="busy" @confirm="confirm" @cancel="cancel" />
@@ -257,6 +271,7 @@ import ConfirmDialog from '@/views/Dashboard/components/ConfirmDialog.vue'
 import CsvPreview from '@/views/Dashboard/components/CsvPreview.vue'
 import ForecastReportModal from '@/views/Dashboard/components/ForecastReportModal.vue'
 import ForecastRuns from '@/views/Dashboard/components/ForecastRuns.vue'
+import GeeImportDialog from '@/views/Dashboard/components/GeeImportDialog.vue'
 import ImpactDialog from '@/views/Dashboard/components/ImpactDialog.vue'
 import ImportAvailabilityDialog from '@/views/Dashboard/components/ImportAvailabilityDialog.vue'
 import ImportApprovalDialog from '@/views/Dashboard/components/ImportApprovalDialog.vue'
@@ -267,6 +282,7 @@ import RecentActivity from '@/views/Dashboard/components/RecentActivity.vue'
 import { useActivityLog } from '@/composables/useActivityLog'
 import { useImportAvailability } from '@/composables/useImportAvailability'
 import { useFetchedImports } from '@/composables/useFetchedImports'
+import { useGeeImports } from '@/composables/useGeeImports'
 import { useInputPreview } from '@/composables/useInputPreview'
 import { usePipeline } from '@/composables/usePipeline'
 import { jobOf, labelOf, position, positionItem, step, toCard } from '@/config/pipeline'
@@ -318,6 +334,7 @@ async function goToPosition() {
 }
 const availability = useImportAvailability() // "Details" of Data Import: is the imported data in DHIS2?
 const fetched = useFetchedImports(state) // "Review and approve": the Pivot elements fetched (Pinia), to post line by line
+const gee = useGeeImports(state) // "Import GEE": the variables to import, each one's state
 
 const {
   current: previewCurrent,
@@ -338,9 +355,12 @@ const pendingAbandon = ref(false)
 const pendingRunAbandon = ref(false)
 
 // Step ①'s approve_imports (a decision) and build_analytics (after it) share the "Review and Approve" card.
+// Import GEE's card always opens its dialog (to see each variable's state, even while it runs): never inactive.
 const cards = (name: StepName) => (step(state.value, name)?.items ?? [])
   .filter(i => name !== 'data_import' || !['approve_imports', 'build_analytics'].includes(i.item))
   .map(i => toCard(i, state.value, busy.value))
+  .map(c => (c.key === 'import_gee' ? { ...c, inactive: false, loading: false } : c))
+const geeItem = computed(() => step(state.value, 'data_import')?.items.find(i => i.item === 'import_gee'))
 const approveImports = computed(() => step(state.value, 'data_import')?.items.find(i => i.item === 'approve_imports'))
 const buildItem = computed(() => step(state.value, 'data_import')?.items.find(i => i.item === 'build_analytics'))
 // Opens the dialog; once the approval is a success, the card shows Build Analytics' status. Always clickable (to review).
@@ -358,6 +378,9 @@ const reviewCard = computed(() => {
 // A card's key is its checkpoint ('CSB/Malaria:forecast'); the server resolves which checkpoint a job counts for.
 // ponytail: calc_orgunit_alerts has no script yet (501): its button skips it (LevelColumn 'Skip').
 const launchItem = (item: string) => (jobOf(item) === 'calc_orgunit_alerts' ? skipAlerts() : launch(jobOf(item), labelOf(item)))
+const clickImport = (item: string) => (item === 'import_gee' ? gee.show() : launchItem(item))
+// The dialog's choice, kept on the pass by etlhub; a confirmation (relaunch after a success) resends it.
+const importGee = (variables: string[]) => launch('import_gee', labelOf('import_gee'), { gee_variables: variables })
 
 // run = null: the open run's report (output/); otherwise the report archived when that run closed.
 const openReport = (run: { source: string; disease: string } | null, decide: boolean) => {

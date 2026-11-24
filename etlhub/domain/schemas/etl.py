@@ -1,6 +1,14 @@
 from pydantic import BaseModel, Field
 
 
+class GeeChoice(BaseModel):
+    """Body of POST /import_gee, and of POST /pipeline/passes (kept for the API: etlui sends none since 2026-11-24).
+    No dry_run: the mode decides (DRYRUN = TEST MODE); a dry_run sent is ignored."""
+    gee_variables: list[str] | None = Field(
+        None, description="The GEE variables to import (GET /pipeline/imports/gee lists them), kept on the pass; "
+                          "absent: the pass's choice (all of them until one is made); empty or unknown: 400")
+
+
 class ETLResponse(BaseModel):
     status: str = Field(default="", examples=["accepted", "success", "error"])
     message: str = Field(default="", examples=["Task started in background", "Job completed successfully"])

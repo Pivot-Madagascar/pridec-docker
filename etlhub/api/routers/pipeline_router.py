@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from etlhub.api.routers import BLOCKED, error_doc
-from etlhub.application.use_cases import fetch_pivot
+from etlhub.application.use_cases import fetch_pivot, gee_import
 from etlhub.application.use_cases.analytics_service import AnalyticsService
 from etlhub.application.use_cases.check_import_availability import COM_ELEMENTS, CSB_ELEMENTS
 from etlhub.application.use_cases.ingestion_service import chosen_gee_variables, current_import_params
@@ -16,6 +16,7 @@ from etlhub.core.dependencies import (get_analytics_service, get_auth_store, get
 from etlhub.core.job_context import current_test_mode
 from etlhub.domain.interfaces.auth_store import AuthStore
 from etlhub.domain.exceptions import ConfirmationRequiredError
+from etlhub.domain.schemas import GeeChoice
 from etlhub.domain.interfaces.job_repository import JobRepository
 from etlhub.domain.interfaces.pipeline_gate import PipelineGate
 from etlhub.domain.interfaces.task_launcher import TaskLauncher
@@ -47,12 +48,6 @@ class Mode(BaseModel):
     test_mode: bool
     # What becomes of the active pass of the mode left (a pass lives in one mode); asked with a 409 when missing.
     pass_action: Literal["pause", "abandon"] | None = None
-
-
-class PassStart(BaseModel):
-    # Fixed for the pass (pass-config.md). The variables import_gee imports (GET /api/config gee_variables lists them;
-    # absent: all). No dry_run: the mode decides (DRYRUN = TEST MODE); a dry_run sent is ignored.
-    gee_variables: list[str] | None = None
 
 
 class Cycle(BaseModel):
@@ -168,6 +163,24 @@ def fetched_imports() -> dict:
     return {"imports": fetch_pivot.fetched_imports()}
 
 
+@router.get(
+    "/imports/gee",
+    summary="The GEE variables, whether the pass imports them, and each one's import state",
+    description=(
+        "Every variable import_gee can import (pridec_gee's), `chosen`: in the pass shown's choice (its gee_variables, "
+        "set by POST /import_gee; all when none was made), and `state`: null until import_gee runs in the pass and the "
+        "caller's mode, then {status: running | imported | empty | failed, at, dry_run, error, rows} of its last import "
+        "(replaced whole by the next). Read only."
+    ),
+    responses={200: {"content": {"application/json": {"example": {"variables": [
+        {"variable": "pridec_climate_precipitation", "chosen": True,
+         "state": {"status": "imported", "at": "2026-11-24T10:12:03", "dry_run": True, "error": None, "rows": 840}}]}}}}},
+)
+def gee_imports(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
+    shown = gate.progress()["pass"]
+    return {"variables": gee_import.gee_imports(shown["gee_variables"] if shown else None)}
+
+
 @router.post(
     "/imports/approve",
     summary="Approve the Pivot data elements to post, or reject the imports (step data_import)",
@@ -256,9 +269,9 @@ def set_cycle(body: Cycle, gate: PipelineGate = Depends(get_pipeline_gate)) -> d
         400: error_doc("No GEE variable, or an unknown one", {"message": "Unknown GEE variables: pridec_climate_x"}),
         **BLOCKED},
 )
-def start_pass(body: PassStart | None = None, confirm: bool = CONFIRM,
+def start_pass(body: GeeChoice | None = None, confirm: bool = CONFIRM,
                gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
-    body = body or PassStart()
+    body = body or GeeChoice()
     chosen = chosen_gee_variables(body.gee_variables)
     return gate.start_pass(confirm, current_import_params(gee_variables=chosen), ",".join(chosen))
 

@@ -15,6 +15,7 @@ const apiGet = vi.fn()
 const applyDefaultFile = vi.fn()
 const getImportAvailability = vi.fn()
 const getFetchedImports = vi.fn()
+const getGeeImports = vi.fn()
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 vi.mock('@/services/pipeline', () => ({
@@ -29,7 +30,8 @@ vi.mock('@/services/pipeline', () => ({
   pausePass: (...args: unknown[]) => pausePass(...args),
   abandonPass: (...args: unknown[]) => abandonPass(...args),
   getImportAvailability: (...args: unknown[]) => getImportAvailability(...args),
-  getFetchedImports: (...args: unknown[]) => getFetchedImports(...args)
+  getFetchedImports: (...args: unknown[]) => getFetchedImports(...args),
+  getGeeImports: (...args: unknown[]) => getGeeImports(...args)
 }))
 vi.mock('@/services/inputs', () => ({
   getInputFiles: vi.fn().mockResolvedValue({}),
@@ -314,9 +316,10 @@ describe('Dashboard', () => {
     expect(gee.text()).toContain('Last update: 2026-10-13 14:02')
     expect(build.text()).not.toContain('Last update')
 
-    await gee.trigger('click')
+    await gee.trigger('click') // its dialog first: the variables to import
     await flushPromises()
-    expect(launchJob).toHaveBeenCalledWith('import_gee', false)
+    expect(wrapper.find('[data-test="gee-dialog"]').exists()).toBe(true)
+    expect(launchJob).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -330,7 +333,12 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
-  it('asks for the approval checkbox before resending with confirm=true', async () => {
+  it('imports the GEE variables checked in the Import GEE dialog, asking for the approval checkbox before resending them with confirm=true', async () => {
+    getGeeImports.mockResolvedValue([
+      { variable: 'pridec_climate_evi', chosen: true, state: null },
+      { variable: 'pridec_climate_precipitation', chosen: true, state: { status: 'imported', at: 't', dry_run: true, error: null, rows: 840 } },
+      { variable: 'pridec_climate_windspeed', chosen: false, state: { status: 'failed', at: 't', dry_run: true, error: '500 Server Error', rows: null } }
+    ])
     launchJob
       .mockRejectedValueOnce({ response: { status: 409, data: { code: 'confirmation_required', message: 'import_gee is already in success',
         impact: { item: 'import_gee', step: 'data_import', reset_items: [], blocked_steps: ['forecast', 'system_update'] } } } })
@@ -339,6 +347,13 @@ describe('Dashboard', () => {
 
     await wrapper.findAll('[data-test="action-card"]').find(c => c.text().includes('Import GEE'))!.trigger('click')
     await flushPromises()
+    const gee = wrapper.find('[data-test="gee-dialog"]')
+    expect(gee.findAll('[data-test="import-state"]').map(c => c.text())).toEqual(['Pending', 'Imported (dry run)', 'Failed'])
+    expect(gee.find('[data-variable="pridec_climate_windspeed"] [data-test="import-state"]').attributes('title')).toBe('500 Server Error')
+    await gee.find('[data-variable="pridec_climate_precipitation"]').trigger('click') // unchecked: never posted
+    await gee.find('[data-test="gee-import"]').trigger('click') // "Import 1 variable"
+    await flushPromises()
+    expect(launchJob).toHaveBeenCalledWith('import_gee', false, { gee_variables: ['pridec_climate_evi'] })
     const dialog = wrapper.find('[data-test="impact-dialog"]')
     expect(dialog.text()).toContain('forecast, system_update')
     const confirmButton = dialog.findAll('button').find(b => b.text() === 'Confirm')!
@@ -347,7 +362,22 @@ describe('Dashboard', () => {
     await dialog.find('[role="checkbox"]').trigger('click')
     await confirmButton.trigger('click')
     await flushPromises()
-    expect(launchJob).toHaveBeenLastCalledWith('import_gee', true)
+    expect(launchJob).toHaveBeenLastCalledWith('import_gee', true, { gee_variables: ['pridec_climate_evi'] }) // the same choice
+    wrapper.unmount()
+  })
+
+  it('covers the Import GEE lines with a spinner while the import runs', async () => {
+    getGeeImports.mockResolvedValue([{ variable: 'pridec_climate_evi', chosen: true, state: { status: 'running', at: 't', dry_run: true, error: null, rows: null } }])
+    getCheckpoints.mockResolvedValue(state({ lock: { job_id: 'import_gee_1', task: 'import_gee', acquired_at: 't' }, steps: [
+      { step: 'data_import', done: false, accessible: true, items: [{ ...item('import_gee', 'running'), job_id: 'import_gee_1' }, item('approve_imports'), item('build_analytics')] },
+      { step: 'forecast', done: false, accessible: false, items: [] }, { step: 'system_update', done: false, accessible: false, items: [] }] }))
+    const wrapper = await mountPage()
+
+    await wrapper.find('[data-item="import_gee"]').trigger('click') // still clickable while it runs
+    await flushPromises()
+    const gee = wrapper.find('[data-test="gee-dialog"]')
+    expect(gee.find('[data-test="busy-overlay"]').text()).toBe('Importing from GEE…')
+    expect(gee.find('[data-test="import-state"]').text()).toBe('Importing…') // under the spinner
     wrapper.unmount()
   })
 
@@ -470,7 +500,7 @@ describe('Dashboard', () => {
     launchJob.mockResolvedValue({ jobId: 'build_analytics_1', requestId: 'r' })
     await wrapper.find('[data-test="build-analytics"]').trigger('click')
     await flushPromises()
-    expect(launchJob).toHaveBeenCalledWith('build_analytics', false)
+    expect(launchJob).toHaveBeenCalledWith('build_analytics', false, undefined)
     expect(wrapper.find('[data-test="approval-dialog"]').exists()).toBe(false) // the toast follows the build
     wrapper.unmount()
   })
@@ -549,7 +579,7 @@ describe('Dashboard', () => {
     expect(launchButtons).toHaveLength(1) // only what etlhub marks launchable
     await launchButtons[0].trigger('click')
     await flushPromises()
-    expect(launchJob).toHaveBeenCalledWith('fetch_disease', false)
+    expect(launchJob).toHaveBeenCalledWith('fetch_disease', false, undefined)
     wrapper.unmount()
   })
 

@@ -106,7 +106,9 @@ export function usePipeline(addActivity: AddActivity) {
   return {
     state, serverFiles, defaults, busy, pending, refresh, stop, confirm,
     cancel: () => { pending.value = null },
-    launch: (task: string, label: string) => act(label, c => pipeline.launchJob(task, c)),
+    // body: Import GEE's chosen variables; a confirmation resends it (the retry keeps this call).
+    launch: (task: string, label: string, body?: { gee_variables: string[] }) =>
+      act(label, c => pipeline.launchJob(task, c, body)),
     openRun: (source: Source, disease: Disease) => act(`Open run ${source}/${disease}`, c => pipeline.openRun(source, disease, c)),
     abandonRun: () => act('Abandon run', () => pipeline.abandonRun()),
     decide: (decision: 'approve' | 'reject') => act(decision === 'approve' ? 'Approve forecast' : 'Reject forecast', () => pipeline.decideRun(decision)),
@@ -116,7 +118,7 @@ export function usePipeline(addActivity: AddActivity) {
     setMode: (testMode: boolean) => act(testMode ? 'Switch to test mode' : 'Switch to production',
       (_c, choice) => pipeline.setMode(testMode, choice as pipeline.PassAction | undefined)),
     setCycle: (cycle: string | null) => act(`Cycle ${cycle ?? 'of the current month'}`, () => pipeline.setCycle(cycle)),
-    startPass: (geeVariables: string[]) => act('Start a new pass', c => pipeline.startPass(c, geeVariables)),
+    startPass: () => act('Start a new pass', c => pipeline.startPass(c)),
     pause: () => act('Pause the cycle', () => pipeline.pausePass()),
     resume: (passId: string) => act('Resume the cycle', () => pipeline.resumePass(passId)),
     abandonPass: (passId: string) => act('Abandon the cycle', () => pipeline.abandonPass(passId)),

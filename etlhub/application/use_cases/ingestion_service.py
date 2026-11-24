@@ -17,10 +17,14 @@ class IngestionService:
         self._task_launcher = task_launcher
         self._plan = plan
 
-    def launch(self, task_type: str, webhook_url: str | None = None, confirm: bool = False, **kwargs) -> str:
+    def launch(self, task_type: str, webhook_url: str | None = None, confirm: bool = False,
+               gee_variables: list[str] | None = None, **kwargs) -> str:
+        """gee_variables (import_gee, chosen_gee_variables): kept on the pass by the gate if it accepts the launch;
+        None: the pass's choice."""
         job_id = f"{task_type}_{uuid.uuid4().hex[:8]}"
-        params = current_import_params(self._plan) if task_type in IMPORT_TASKS else None
-        self._task_launcher.launch(task_type, job_id, webhook_url=webhook_url, confirm=confirm, carry_over=params, **kwargs)
+        params = current_import_params(self._plan, gee_variables) if task_type in IMPORT_TASKS else None
+        self._task_launcher.launch(task_type, job_id, webhook_url=webhook_url, confirm=confirm, carry_over=params,
+                                   gee_variables=",".join(gee_variables) if gee_variables else None, **kwargs)
         return job_id
 
 
@@ -47,7 +51,7 @@ def available_gee_variables() -> list[str]:
 
 
 def chosen_gee_variables(selection: list[str] | None) -> list[str]:
-    """The GEE variables of a new pass, in pridec_gee's order (equal choices give equal import parameters); None: all.
+    """The GEE variables chosen for import_gee (its dialog; Home before 2026-11-24), in pridec_gee's order (equal choices give equal import parameters); None: all.
     ValidationError (400) for an empty choice or an unknown name."""
     available = available_gee_variables()
     if selection is None:

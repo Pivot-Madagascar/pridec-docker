@@ -9,6 +9,11 @@ Status: implemented 2026-11-20. Schema version 3: run `python -m etlhub.migrate`
 > started before, even in test mode with `dry_run = 0`, follows the mode (`CheckpointStore._passes`, `_check_config`).
 > The other fixed values (GEE variables, PARENT_OU, LOG_LEVEL, DHIS2 URL) are unchanged.
 
+> **Changed on 2026-11-24: the GEE variables are chosen in Import GEE**, no longer fixed when the pass starts
+> ([../gee-import/gee-import.md](../gee-import/gee-import.md)). The GEE row below is superseded: Home has no checkboxes;
+> each `POST /import_gee` may send `gee_variables`, written on the pass once the launch is accepted. PARENT_OU, LOG_LEVEL
+> and the DHIS2 URL stay fixed as below.
+
 ## Decision
 
 A pass fixes its whole configuration when it starts, and nothing changes it afterwards: not Admin Config, not `.env`, not another login, not the calendar.

@@ -600,3 +600,34 @@ def test_update_key_is_refused_in_test_mode_and_nothing_is_written(app, client, 
         assert refused.status_code == 409
         assert "cannot run in test mode" in refused.json()["message"]
     assert ran == [] and checkpoint_store.progress()["lock"] is None
+
+
+def test_import_gee_imports_the_variables_chosen_in_its_dialog_and_keeps_them_on_the_pass(client, checkpoint_store,
+                                                                                          queue, monkeypatch):
+    import sys
+    monkeypatch.setattr(sys.modules["pridec_gee"], "AVAILABLE_VARIABLES", ["a_1", "b_2", "c_3"])  # a MagicMock here
+
+    refused = client.post("/import_gee", json={"gee_variables": ["a_1", "nope"]})
+    assert (refused.status_code, refused.json()["message"]) == (400, "Unknown GEE variables: nope")
+    assert queue == [] and client.get("/pipeline/checkpoints").json()["pass"] is None  # nothing started
+
+    assert client.post("/import_gee", json={"gee_variables": ["c_3", "a_1"]}).status_code == 202  # starts the pass
+    assert checkpoint_store.pass_config()["gee_variables"] == "a_1,c_3"  # pridec_gee's order
+    assert queue[0][1]["pass_config"]["gee_variables"] == "a_1,c_3"  # what the job imports
+    checkpoint_store.finish(queue[-1][0][0], "success")
+
+    blocked = client.post("/import_gee", json={"gee_variables": ["b_2"]})  # in success: a confirmation first
+    assert blocked.status_code == 409 and checkpoint_store.pass_config()["gee_variables"] == "a_1,c_3"  # unchanged
+    assert client.post("/import_gee", params={"confirm": "true"}, json={"gee_variables": ["b_2"]}).status_code == 202
+    assert checkpoint_store.pass_config()["gee_variables"] == "b_2"
+    checkpoint_store.finish(queue[-1][0][0], "success")
+
+    assert client.post("/import_gee", params={"confirm": "true"}).status_code == 202  # no body: the pass's choice
+    assert queue[-1][1]["pass_config"]["gee_variables"] == "b_2"
+
+    from etlhub.application.use_cases import gee_import
+    state = {"status": "imported", "at": "t", "dry_run": True, "error": None, "rows": 3}
+    monkeypatch.setattr(gee_import, "_store", lambda: SimpleNamespace(load=lambda task: [{"variable": "b_2", **state}]))
+    listed = client.get("/pipeline/imports/gee").json()["variables"]
+    assert [(v["variable"], v["chosen"], v["state"]) for v in listed] == [("a_1", False, None), ("b_2", True, {"variable": "b_2", **state}),
+                                                                           ("c_3", False, None)]

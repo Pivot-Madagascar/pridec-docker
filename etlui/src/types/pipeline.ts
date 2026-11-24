@@ -128,6 +128,13 @@ export interface FetchedElement {
   // Its post by the approval, kept by etlhub with the data (null: not posted; a new fetch of its import resets it)
   post: { status: 'posted' | 'empty' | 'failed'; at: string; dry_run: boolean; error: string | null } | null
 }
+// GET /pipeline/imports/gee: a GEE variable of pridec_gee (gee-import.md).
+export interface GeeVariable {
+  variable: string // pridec_climate_precipitation...
+  chosen: boolean // in the pass's choice (all of them until Import GEE is launched with one)
+  // Its last import in the pass (null: never): one fetch for all, then one post per variable; a new import replaces it.
+  state: { status: 'running' | 'imported' | 'empty' | 'failed'; at: string; dry_run: boolean; error: string | null; rows: number | null } | null
+}
 export interface FetchedImport {
   task: string // import_pivot_com, import_pivot_csb
   elements: FetchedElement[] // only the elements fetched

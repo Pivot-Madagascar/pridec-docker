@@ -150,12 +150,25 @@ describe('cycle journal', () => {
       ['/pipeline/passes/current/pause'], ['/pipeline/passes/3f9c1a2b/resume'], ['/pipeline/passes/3f9c1a2b/abandon']])
   })
 
-  it('starts a pass with its fixed GEE variables in the body (no DRYRUN: the mode decides), confirm in the query', async () => {
+  it('starts a pass with an empty body (GEE variables: chosen in Import GEE; no DRYRUN: the mode decides), confirm in the query', async () => {
     post.mockResolvedValue({ data: { id: '3f9c1a2b', state: 'active' } })
 
-    await pipeline.startPass(true, ['v1', 'v3'])
+    await pipeline.startPass(true)
 
-    expect(post).toHaveBeenCalledWith('/pipeline/passes', { gee_variables: ['v1', 'v3'] }, { params: { confirm: true } })
+    expect(post).toHaveBeenCalledWith('/pipeline/passes', {}, { params: { confirm: true } })
+  })
+
+  it('launches Import GEE with the chosen variables in the body, and reads the import state of each variable', async () => {
+    post.mockResolvedValue({ data: { job_id: 'import_gee_1' } })
+    const variables = [{ variable: 'v1', chosen: true, state: null }]
+    get.mockResolvedValue({ data: { variables } })
+
+    await pipeline.launchJob('import_gee', true, { gee_variables: ['v1', 'v3'] })
+
+    expect(post).toHaveBeenCalledWith('/import_gee', { gee_variables: ['v1', 'v3'] },
+      { params: { confirm: true }, headers: { 'X-Request-ID': expect.any(String) } })
+    expect(await pipeline.getGeeImports()).toEqual(variables)
+    expect(get).toHaveBeenCalledWith('/pipeline/imports/gee')
   })
 })
 

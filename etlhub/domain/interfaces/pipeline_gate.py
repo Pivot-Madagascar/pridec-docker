@@ -10,7 +10,8 @@ class PipelineGate(Protocol):
     # event keeps the import's own, and a launch that starts a pass carries over the imports already done in the cycle
     # with the same parameters and DRYRUN (cycle-passes.md § 11).
     # The job's DRYRUN (default_dry_run(): the mode) is journaled with the launch.
-    def start(self, task: str, job_id: str, confirm: bool = False, carry_over: dict[str, dict] | None = None) -> None: ...
+    def start(self, task: str, job_id: str, confirm: bool = False, carry_over: dict[str, dict] | None = None,
+              gee_variables: str | None = None) -> None: ...
 
     # DRYRUN = TEST MODE: true in test mode, false in production. Nothing else chooses it.
     def default_dry_run(self) -> bool: ...

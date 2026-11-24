@@ -125,41 +125,29 @@ describe('HomeView', () => {
     await startButton(wrapper).trigger('click')
     await flushPromises()
     expect(setCycle).toHaveBeenCalledWith('202609')
-    expect(startPass).toHaveBeenCalledWith(false, ['v1', 'v2', 'v3'])
+    expect(startPass).toHaveBeenCalledWith(false)
     expect(resumePass).not.toHaveBeenCalled()
     expect(push).toHaveBeenCalledWith({ name: 'Dashboard' })
   })
 
-  it('a new pass imports the GEE variables left checked; a paused one keeps its own', async () => {
+  it('chooses no GEE variable (Import GEE does, on the forecast page); a paused pass shows its own', async () => {
     getCycles.mockResolvedValue([{ cycle: '202610', target: true, passes: [
       { ...pass('pppp1111', '202610', 'paused'), gee_variables: 'v1,v3' }, pass('oooo0000', '202610', 'paused')] }])
     startPass.mockResolvedValue(undefined)
     const wrapper = await mountPage()
     await closeCycleDialog(wrapper)
 
-    // The paused pass is chosen first: its own variables, no checkbox
-    expect(wrapper.find('[data-test="gee-choice"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('GEE_VARIABLESv1, v3')
-    await wrapper.find('[role="radio"][value="oooo0000"]').trigger('click') // started by a launch: all of them
+    expect(wrapper.text()).toContain('GEE_VARIABLESv1, v3') // the paused pass chosen first: its own
+    await wrapper.find('[role="radio"][value="oooo0000"]').trigger('click') // never chosen: all of them
     expect(wrapper.text()).toContain('GEE_VARIABLESall available variables')
 
     await wrapper.find('[role="radio"][value="new"]').trigger('click')
     await flushPromises()
-    const boxes = wrapper.findAll('[data-test="gee-choice"] [role="checkbox"]')
-    expect(boxes.map(b => b.attributes('aria-checked'))).toEqual(['true', 'true', 'true']) // all by default
-    await boxes[1].trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('GEE_VARIABLESv1, v3')
-    await boxes[0].trigger('click')
-    await boxes[2].trigger('click')
-    await flushPromises()
-    expect(startButton(wrapper).attributes('disabled')).toBeDefined() // none left
-    await boxes[2].trigger('click')
-    await flushPromises()
-
+    expect(wrapper.find('[role="checkbox"]').exists()).toBe(false) // no choice here any more
+    expect(wrapper.text()).toContain('GEE_VARIABLESchosen in Import GEE (Data Import), all until then')
     await startButton(wrapper).trigger('click')
     await flushPromises()
-    expect(startPass).toHaveBeenCalledWith(false, ['v3'])
+    expect(startPass).toHaveBeenCalledWith(false)
   })
 
   it('DRYRUN follows the mode, never chosen; a paused pass shows the configuration it started with', async () => {
@@ -180,7 +168,7 @@ describe('HomeView', () => {
     expect(wrapper.find('[data-test="dry-run-btn"]').exists()).toBe(false) // no Dry run choice for a new pass either
     await startButton(wrapper).trigger('click')
     await flushPromises()
-    expect(startPass).toHaveBeenCalledWith(false, ['v1', 'v2', 'v3']) // no dry_run sent
+    expect(startPass).toHaveBeenCalledWith(false) // no dry_run sent
   })
 
   it('starts a new pass beside a paused one after the confirm, then goes to the forecast page', async () => {
@@ -201,7 +189,7 @@ describe('HomeView', () => {
     await wrapper.find('[data-test="impact-dialog"] [role="checkbox"]').trigger('click') // the impact is read
     await wrapper.findAll('button').find(b => b.text() === 'Confirm')!.trigger('click')
     await flushPromises()
-    expect(startPass).toHaveBeenLastCalledWith(true, ['v1', 'v2', 'v3'])
+    expect(startPass).toHaveBeenLastCalledWith(true)
     expect(resumePass).not.toHaveBeenCalled()
     expect(push).toHaveBeenCalledWith({ name: 'Dashboard' })
   })
@@ -253,7 +241,7 @@ describe('HomeView', () => {
     expect(wrapper.find('[data-test="pass-choice"] [role="radio"][value="new"]').attributes('data-state')).toBe('checked') // kept on the page
     await startButton(wrapper).trigger('click')
     await flushPromises()
-    expect(startPass).toHaveBeenCalledWith(false, ['v1', 'v2', 'v3'])
+    expect(startPass).toHaveBeenCalledWith(false)
     expect(resumePass).not.toHaveBeenCalled()
   })
 

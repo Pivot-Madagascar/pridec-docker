@@ -31,7 +31,7 @@
         <ItemDescription class="line-clamp-none">Choose the cycle, then start a new pass or resume a paused one. The forecast page follows.</ItemDescription>
       </ItemContent>
       <ItemActions v-if="state">
-        <Button size="lg" :disabled="busy || (choice === 'new' && !geeChosen.length)" @click="start">Start</Button>
+        <Button size="lg" :disabled="busy" @click="start">Start</Button>
       </ItemActions>
     </Item>
 
@@ -50,21 +50,8 @@
             </div>
 
             <p v-if="!state" class="text-sm text-muted-foreground">Loading the pipeline state…</p>
-            <template v-else>
-              <ReusePassChoice />
-
-              <!-- A new pass chooses the GEE variables its Import GEE imports, fixed for the pass; a resumed one keeps its own. -->
-              <fieldset v-if="choice === 'new'" class="space-y-2 text-sm text-foreground" data-test="gee-choice">
-                <legend class="mb-2 font-semibold">GEE variables of this pass</legend>
-                <div class="grid gap-1 sm:grid-cols-2">
-                  <Label v-for="name in available" :key="name" class="font-mono text-xs font-normal">
-                    <Checkbox :model-value="geeChosen.includes(name)" @update:model-value="toggleGee(name, $event === true)" />
-                    {{ name }}
-                  </Label>
-                </div>
-                <p v-if="!geeChosen.length" class="text-xs text-destructive">Choose at least one variable.</p>
-              </fieldset>
-            </template>
+            <!-- The GEE variables are chosen in Import GEE, on the forecast page (gee-import.md). -->
+            <ReusePassChoice v-else />
           </CardContent>
         </Card>
       </div>
@@ -124,7 +111,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useConfigStore } from '@/stores/config'
@@ -158,18 +144,11 @@ watch(paused, list => { choice.value = list[0]?.id ?? 'new' })
 
 const passLabel = computed(() => (choice.value === 'new' ? 'new pass' : `resume ${choice.value}`))
 
-// Every variable of pridec_gee (GET /api/config), all chosen by default.
-const available = computed(() => configStore.config?.gee_variables ?? [])
-const geeChosen = ref<string[]>([])
-watch(available, list => { geeChosen.value = [...list] }, { immediate: true })
-const toggleGee = (name: string, on: boolean) => {
-  geeChosen.value = on ? [...geeChosen.value, name] : geeChosen.value.filter(v => v !== name)
-}
 // The paused pass to resume: its configuration, fixed when it started (null for a pass from before 2026-11-20).
 const resumed = computed(() => paused.value.find(p => p.id === choice.value) ?? null)
-// What the pass imports: the choice of a new pass, or the one a paused pass keeps (null: all).
+// What the pass imports: chosen in Import GEE (forecast page); a paused pass shows its choice (null: all).
 const geeShown = computed(() => {
-  if (!resumed.value) return geeChosen.value.length === available.value.length ? 'all available variables' : geeChosen.value.join(', ')
+  if (!resumed.value) return 'chosen in Import GEE (Data Import), all until then'
   return resumed.value.gee_variables?.split(',').join(', ') ?? 'all available variables'
 })
 const parameters = computed(() => {
@@ -198,7 +177,7 @@ async function start(): Promise<void> {
   const ok =
     choice.value !== 'new'
       ? await resume(choice.value)
-      : (cycle.value === state.value?.cycle || (await setCycle(cycle.value))) && (await startPass(geeChosen.value))
+      : (cycle.value === state.value?.cycle || (await setCycle(cycle.value))) && (await startPass())
   if (ok) await router.push({ name: 'Dashboard' })
 }
 

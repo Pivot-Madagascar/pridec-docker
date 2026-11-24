@@ -76,7 +76,7 @@ describe('usePipeline', () => {
 
     expect(await launch('import_gee', 'Import GEE')).toBe(true)
 
-    expect(launchJob).toHaveBeenCalledWith('import_gee', false) // no dry_run: etlhub applies the pass's
+    expect(launchJob).toHaveBeenCalledWith('import_gee', false, undefined) // no dry_run: etlhub applies the pass's
     expect(followJob).toHaveBeenCalledWith('Import GEE', 'import_gee_1')
     expect(showNotification).not.toHaveBeenCalled()
     expect(addActivity).not.toHaveBeenCalled() // the 202 is not an activity
@@ -108,12 +108,12 @@ describe('usePipeline', () => {
     launchJob.mockResolvedValueOnce('import_gee_2')
     const { launch, pending, confirm } = usePipeline(addActivity)
 
-    await launch('import_gee', 'Import GEE')
+    await launch('import_gee', 'Import GEE', { gee_variables: ['v1'] })
     expect(pending.value).toMatchObject({ label: 'Import GEE', impact })
     expect(showNotification).not.toHaveBeenCalledWith(expect.anything(), 'error')
 
     expect(await confirm()).toBe(true)
-    expect(launchJob).toHaveBeenLastCalledWith('import_gee', true)
+    expect(launchJob).toHaveBeenLastCalledWith('import_gee', true, { gee_variables: ['v1'] }) // the same choice resent
     expect(pending.value).toBeNull()
   })
 
@@ -147,6 +147,6 @@ describe('usePipeline', () => {
     await refresh()
 
     await launch('import_gee', 'Import GEE')
-    expect(launchJob).toHaveBeenLastCalledWith('import_gee', false)
+    expect(launchJob).toHaveBeenLastCalledWith('import_gee', false, undefined)
   })
 })

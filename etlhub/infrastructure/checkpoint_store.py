@@ -717,7 +717,8 @@ class CheckpointStore:
             raise PipelineBlockedError(f"Pass {p['id']} runs on the DHIS2 {p['dhis_url']}, fixed when it started: "
                                        f"log in to it to launch its jobs (session on {dhis_url or 'none'})")
 
-    def start(self, task: str, job_id: str, confirm: bool = False, carry_over: dict[str, dict] | None = None) -> None:
+    def start(self, task: str, job_id: str, confirm: bool = False, carry_over: dict[str, dict] | None = None,
+              gee_variables: str | None = None) -> None:
         """Takes the lock and marks the checkpoint running. A refusal writes nothing.
 
         Raises PipelineBlockedError, or ConfirmationRequiredError for an item already in success without confirm.
@@ -727,8 +728,10 @@ class CheckpointStore:
         DHIS2 than the pass's is refused: _check_config): whether this job may write to DHIS2, and, for an
         import, its parameters (`carry_over[item]`). A launch that starts a pass carries over the imports done before
         in the cycle (`carry_over`: the current parameters of each import; None records and carries nothing).
+        gee_variables (import_gee, comma-separated): the choice of its dialog, kept on the pass once the launch is
+        accepted (a refusal changes nothing); None keeps the pass's. gee-import.md.
         """
-        config = self._config(None)  # read before the transaction: fixed if this launch starts the pass
+        config = self._config(gee_variables)  # read before the transaction: fixed if this launch starts the pass
         with self._transaction() as conn:
             self._check_lock_free(conn)
             p = self._current(conn, confirm, config)
@@ -739,6 +742,8 @@ class CheckpointStore:
             couple = run["couple"] if run else None
             step, item = resolve_slot(task, rows, couple)
             require_confirmation(step, item, rows, confirm)
+            if gee_variables is not None:
+                conn.execute("UPDATE passes SET gee_variables = ? WHERE id = ?", (gee_variables, p["id"]))
             if p.get("new"):
                 self._begin(conn, p)
             self._take_lock(conn, job_id, task)

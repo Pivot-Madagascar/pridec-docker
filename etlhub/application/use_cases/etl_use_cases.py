@@ -14,7 +14,7 @@ from etlhub.domain.exceptions import ETLException
 from etlhub.domain.interfaces.event_publisher import EventPublisher
 from etlhub.domain.interfaces.job_repository import JobRepository
 from etlhub.application.use_cases.validation_use_cases import validate_input_files
-from etl.scripts.import_gee import import_gee
+from etlhub.application.use_cases.gee_import import import_gee  # one post per variable, its state kept
 from etlhub.application.use_cases.fetch_pivot import import_pivot_com, import_pivot_csb, post_pivot_imports
 from etl.scripts.fetch_pridec_climate import fetch_climate
 from etl.scripts.fetch_pridec_disease import fetch_disease

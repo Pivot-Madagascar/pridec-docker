@@ -1,6 +1,6 @@
 import api, { withConfirm } from '@/services/api'
 import type {
-  Checkpoints, Disease, FetchedImport, ForecastRun, ImportAvailabilityReport, JournalCycle, JournalEvent, Source
+  Checkpoints, Disease, FetchedImport, ForecastRun, GeeVariable, ImportAvailabilityReport, JournalCycle, JournalEvent, Source
 } from '@/types/pipeline'
 
 // GET /pipeline/checkpoints: the whole state of the current cycle, in the current mode.
@@ -20,13 +20,14 @@ export async function getImportAvailability(refresh = false): Promise<ImportAvai
 // The X-Request-ID (a UUID) becomes the request_id etlhub tracks: GET /api/tracking/requests/{requestId} finds this launch.
 // No dry_run: DRYRUN = TEST MODE, decided by etlhub from the mode.
 export type LaunchedJob = { jobId: string | null; requestId: string }
-export async function launchJob(task: string, confirm = false): Promise<LaunchedJob> {
+// body: Import GEE's chosen variables ({gee_variables}), kept on the pass by etlhub once the launch is accepted.
+export async function launchJob(task: string, confirm = false, body?: { gee_variables: string[] }): Promise<LaunchedJob> {
   const requestId = crypto.randomUUID()
   const config = { params: withConfirm(confirm)?.params ?? {}, headers: { 'X-Request-ID': requestId } }
   const response =
     task === 'forecast'
       ? await api.post('/forecast/', {}, config)
-      : await api.post(`/${task}`, undefined, config)
+      : await api.post(`/${task}`, body, config)
   return { jobId: response.data?.job_id ?? null, requestId }
 }
 
@@ -50,6 +51,12 @@ export async function decideRun(decision: 'approve' | 'reject'): Promise<void> {
 // POST /pipeline/runs/current/skip_alerts: temporary, calc_orgunit_alerts has no script yet (501); unlocks approve.
 export async function skipAlerts(): Promise<void> {
   await api.post('/pipeline/runs/current/skip_alerts')
+}
+
+// GET /pipeline/imports/gee: every GEE variable, whether the pass imports it, and the state of its last import.
+export async function getGeeImports(): Promise<GeeVariable[]> {
+  const response = await api.get<{ variables: GeeVariable[] }>('/pipeline/imports/gee')
+  return response.data.variables
 }
 
 // GET /pipeline/imports/fetched: per Pivot import, the data elements fetched in this pass with their value check.
@@ -92,11 +99,11 @@ export async function pausePass(): Promise<void> {
 }
 
 // POST /pipeline/passes: starts a new pass on the target month at once (409 confirmation_required after a complete
-// or paused pass of that month: the paused one stays paused). Fixed for the whole pass (pass-config.md): geeVariables,
-// what its import_gee imports (400 if empty or unknown); etlhub also fixes PARENT_OU, LOG_LEVEL and the DHIS2 URL of
-// the login. DRYRUN is never sent: the mode decides it (DRYRUN = TEST MODE).
-export async function startPass(confirm = false, geeVariables: string[]): Promise<void> {
-  await api.post('/pipeline/passes', { gee_variables: geeVariables }, withConfirm(confirm))
+// or paused pass of that month: the paused one stays paused). etlhub fixes PARENT_OU, LOG_LEVEL and the DHIS2 URL of
+// the login (pass-config.md); the GEE variables are chosen in the Import GEE dialog since 2026-11-24 (gee-import.md).
+// DRYRUN is never sent: the mode decides it (DRYRUN = TEST MODE).
+export async function startPass(confirm = false): Promise<void> {
+  await api.post('/pipeline/passes', {}, withConfirm(confirm))
 }
 
 // POST /pipeline/passes/{id}/resume: a paused pass of the current mode becomes active again.
