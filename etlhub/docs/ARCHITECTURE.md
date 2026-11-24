@@ -58,7 +58,7 @@ Worth knowing:
 - Forecast logs are appended line by line as `docker run` prints them (since 2026-10-21).
 - `etlui` marks a step `success` as soon as it receives the 202, without waiting for the job to finish.
 - No timeout on jobs (Celery, forecast `subprocess.Popen`, calls of the `etl/` scripts), by decision (2026-11-17): durations are never static, a forecast can exceed 10 minutes. If the worker is killed, `job:{id}` stays `running` until the TTL (24 h) expires, and the WebSocket stays open.
-- `/post_forecast` and `/update_key` do not follow this model: they run **synchronously** in the API, which blocks the asyncio loop.
+- `/update_key` (and the imports approval) do not follow this model: they run **synchronously** in the API (a sync `def` handler since 2026-11-17, off the asyncio loop). `/post_forecast` follows it since 2026-11-24 (Celery, 202).
 
 ## 5. State and persistence
 

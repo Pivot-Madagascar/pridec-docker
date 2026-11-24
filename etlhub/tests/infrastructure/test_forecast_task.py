@@ -82,6 +82,20 @@ def test_generic_task_runs_the_job_with_its_kwargs(monkeypatch, job_store, webho
     assert webhooks[-1]["status"] == "success"
 
 
+def test_a_job_that_returns_a_message_ends_with_it(monkeypatch, job_store, webhooks):
+    """post_forecast tells when a CSB run's alerts were not included: the toast shows the job's end message."""
+    from etlhub.application.use_cases import etl_use_cases
+    from etlhub.infrastructure import etl_events
+    log = etl_use_cases._JobLogger(job_store, "x_1", etl_events)
+    assert etl_use_cases._execute_etl_job(lambda: "the end", log, "x") == "the end"  # passed on, not dropped
+    monkeypatch.setattr(tasks, "run_etl_job", lambda *args, **kw: "Forecast posted; the alert data was not included")
+
+    tasks.task_etl.run("post_forecast", "post_forecast_1")
+
+    assert job_store.get("post_forecast_1")["message"] == "Forecast posted; the alert data was not included"
+    assert webhooks[-1]["status"] == "success"
+
+
 def test_a_gate_error_at_the_end_does_not_turn_a_success_into_an_error(monkeypatch, job_store, webhooks):
     # In test mode the gate lives in Redis: a Redis error must not mark a successful job as failed.
     class BrokenGate:

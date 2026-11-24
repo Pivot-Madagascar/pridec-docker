@@ -16,30 +16,13 @@ add_launch_route(
 )
 
 
-@router.post(
-    "/post_forecast",
-    response_model=ETLResponse,
-    summary="Publish forecast results to DHIS2",
-    description=(
-        "Publishes `output/forecast.json`, then `output/alerts.json` if present, to DHIS2. "
-        "Runs synchronously: the request blocks until both are posted "
-        "(200 with status success, or 500). `webhook_url` is notified on success only."
-    ),
-    response_description="Forecast published successfully to DHIS2.",
-    responses={
-        500: error_doc("Internal Server Error - publish failed", {"message": "post_forecast failed: ..."}),
-        **BLOCKED,
-    },
+add_launch_route(
+    router, "post_forecast", "Publish forecast results to DHIS2",
+    "Publishes the open run's `output/forecast.json`, then `output/alerts.json` if present, to DHIS2, in the "
+    "background (a Celery job since 2026-11-24, was synchronous). Its end message says when a CSB run's alert data "
+    "was not included (no alerts.json). A success closes the run. ",
+    "Task accepted and queued in background.", "Forecast publication started in background",
 )
-# def, not async: FastAPI runs it in its threadpool, the event loop stays free.
-# ponytail: run_etl_job redirects the process-wide stdout/stderr, so prints of other API threads during the run land in
-# this job's log (one inline job at a time: the gate). Upgrade: run both through Celery (etlhub-practices, migration m2).
-def api_post_forecast(
-    webhook_url: WebhookUrl = Query(None),
-    confirm: bool = CONFIRM_RELAUNCH,
-    service: AnalyticsService = Depends(get_analytics_service),
-):
-    return service.post_forecast(webhook_url, confirm)
 
 
 @router.post(
@@ -59,7 +42,10 @@ def api_post_forecast(
         **BLOCKED,
     },
 )
-def api_update_key(  # def, not async: see api_post_forecast
+# def, not async: FastAPI runs it in its threadpool, the event loop stays free.
+# ponytail: run_etl_job redirects the process-wide stdout/stderr, so prints of other API threads during the run land in
+# this job's log (one inline job at a time: the gate). Upgrade: run it through Celery, like post_forecast (2026-11-24).
+def api_update_key(
     webhook_url: WebhookUrl = Query(None),
     confirm: bool = CONFIRM_RELAUNCH,
     service: AnalyticsService = Depends(get_analytics_service),

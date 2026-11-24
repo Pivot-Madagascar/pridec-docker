@@ -51,9 +51,11 @@ def _run(job_id: str, task_name: str, run_fn, webhook_url: str | None) -> None:
     job_store = JobStore()
     _update_task_status(job_store, job_id, "running", f"Starting {task_name}")
     try:
-        run_fn(job_store=job_store, job_id=job_id)
-        _update_task_status(job_store, job_id, "success", f"{task_name} completed")
-        notify_webhook(webhook_url, job_id, "success", f"{task_name} completed")
+        result = run_fn(job_store=job_store, job_id=job_id)
+        # A job may say how it ended (post_forecast: alerts not included); else the usual message.
+        message = result if isinstance(result, str) and result else f"{task_name} completed"
+        _update_task_status(job_store, job_id, "success", message)
+        notify_webhook(webhook_url, job_id, "success", message)
     except Exception as e:
         tb = traceback.format_exc()
         job_store.append_logs(job_id, tb)  # after the job's own output (a forecast's R logs), not instead of it

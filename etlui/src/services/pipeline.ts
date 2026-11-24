@@ -16,7 +16,7 @@ export async function getImportAvailability(refresh = false): Promise<ImportAvai
   return response.data
 }
 
-// POST /<task> (or /forecast/ with {}: etlhub's ForecastParams defaults are the files written by validate_inputs): 202 with a job_id for Celery jobs, 200 for post_forecast and update_key.
+// POST /<task> (or /forecast/ with {}: etlhub's ForecastParams defaults are the files written by validate_inputs): 202 with a job_id for Celery jobs (post_forecast too since 2026-11-24), 200 for update_key.
 // The X-Request-ID (a UUID) becomes the request_id etlhub tracks: GET /api/tracking/requests/{requestId} finds this launch.
 // No dry_run: DRYRUN = TEST MODE, decided by etlhub from the mode.
 export type LaunchedJob = { jobId: string | null; requestId: string }

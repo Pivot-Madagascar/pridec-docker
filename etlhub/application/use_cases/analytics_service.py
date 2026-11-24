@@ -14,8 +14,8 @@ RUNNING_INLINE: set[str] = set()
 
 
 class AnalyticsService:
-    """post_forecast, update_key and approve_imports (posts the chosen Pivot elements): run synchronously, inside the
-    pipeline gate."""
+    """update_key and approve_imports (posts the chosen Pivot elements): run synchronously, inside the pipeline gate.
+    post_forecast is a Celery job since 2026-11-24."""
 
     def __init__(self, job_repo: JobRepository, gate: PipelineGate, events: EventPublisher):
         self._job_repo = job_repo
@@ -41,9 +41,6 @@ class AnalyticsService:
                 RUNNING_INLINE.discard(job_id)
         notify_webhook(webhook_url, job_id, "success", message)
         return ETLResponse(status="success", message=message, job_id=job_id, webhook_url=webhook_url)
-
-    def post_forecast(self, webhook_url: str | None = None, confirm: bool = False) -> ETLResponse:
-        return self._run("post_forecast", "Forecast posted successfully", webhook_url, confirm)
 
     def update_key(self, webhook_url: str | None = None, confirm: bool = False) -> ETLResponse:
         return self._run("update_key", "Key updated successfully", webhook_url, confirm)

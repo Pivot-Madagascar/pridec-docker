@@ -37,9 +37,10 @@ ETL_JOBS = {
     "build_analytics": (build_analytics, "analytics build"),
     "validate_inputs": (validate_input_files, "validate inputs"),
     "calc_orgunit_alerts": (calc_orgunit_alerts, "org unit alerts calculation"),
+    "post_forecast": (post_forecast, "forecast publication"),  # a Celery job since 2026-11-24 (was synchronous)
 }
 # Run synchronously by the API (AnalyticsService).
-SYNC_JOBS = {"post_forecast": post_forecast, "update_key": update_key, "approve_imports": post_pivot_imports}
+SYNC_JOBS = {"update_key": update_key, "approve_imports": post_pivot_imports}
 
 
 class _JobLogger(io.StringIO):
@@ -68,11 +69,12 @@ class _JobLogger(io.StringIO):
         return len(text)
 
 
-def _execute_etl_job(fn, log: _JobLogger, name: str, **kwargs) -> None:
-    """The scripts read DRYRUN through script_config._get: the mode the job runs in (DRYRUN = TEST MODE)."""
+def _execute_etl_job(fn, log: _JobLogger, name: str, **kwargs):
+    """The scripts read DRYRUN through script_config._get: the mode the job runs in (DRYRUN = TEST MODE).
+    Returns the job function's result: a string is its end message (post_forecast's)."""
     with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
         try:
-            fn(**kwargs)
+            return fn(**kwargs)
         except Exception as e:
             raise ETLException(f"{name} failed: {_reason(e)}") from e
 
@@ -82,10 +84,10 @@ def _reason(e: Exception) -> str:
     return str(e) or "\n".join(getattr(e, "errors", None) or []) or type(e).__name__
 
 
-def run_etl_job(task_type: str, job_store: JobRepository, job_id: str, events: EventPublisher, **kwargs) -> None:
+def run_etl_job(task_type: str, job_store: JobRepository, job_id: str, events: EventPublisher, **kwargs):
     fn = SYNC_JOBS[task_type] if task_type in SYNC_JOBS else ETL_JOBS[task_type][0]
     with _into_mode_folder(task_type):
-        _execute_etl_job(fn, _JobLogger(job_store, job_id, events), task_type, **kwargs)
+        return _execute_etl_job(fn, _JobLogger(job_store, job_id, events), task_type, **kwargs)
 
 
 # The file each fetch_* script of etl/ writes into os.getcwd()/input (no parameter): the production folder.
