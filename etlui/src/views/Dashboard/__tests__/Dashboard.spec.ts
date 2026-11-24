@@ -34,7 +34,7 @@ vi.mock('@/services/pipeline', () => ({
   getFetchedImports: (...args: unknown[]) => getFetchedImports(...args),
   getGeeImports: (...args: unknown[]) => getGeeImports(...args),
   skipAlerts: (...args: unknown[]) => skipAlerts(...args),
-  inputArchiveUrl: () => 'http://api.test/output/archive?folder=input'
+  archiveUrl: (folder: string) => `http://api.test/output/archive?folder=${folder}`
 }))
 vi.mock('@/services/inputs', () => ({
   getInputFiles: vi.fn().mockResolvedValue({}),
@@ -435,6 +435,23 @@ describe('Dashboard', () => {
     const link = csb.find('[data-test="input-archive"] a[download]')
     expect(link.attributes('href')).toBe('http://api.test/output/archive?folder=input')
     expect(link.text()).toBe('Download the input files')
+    expect(csb.find('[data-test="output-archive"]').exists()).toBe(false) // no forecast computed yet
+    wrapper.unmount()
+  })
+
+  it('offers the open run\'s output files as a zip once the forecast computation succeeded, right after the approval', async () => {
+    getCheckpoints.mockResolvedValue(forecastState('COM/Malaria', { 'COM/Malaria:forecast': ['success'], 'COM/Malaria:approve': ['pending', true] }))
+    const wrapper = await mountPage()
+
+    const com = wrapper.find('#forecast-Malaria').findAll('[data-test="level-column"]')[1]
+    await com.find('[data-test="card-steps"]').trigger('click')
+    await flushPromises()
+    const approval = com.find('[data-test="steps-dialog"] [data-job="approve"]')
+    expect(approval.element.nextElementSibling).toBeNull() // the approval ends its list…
+    expect(approval.element.parentElement!.nextElementSibling!.getAttribute('data-test')).toBe('output-archive') // …then the download
+    const link = com.find('[data-test="output-archive"] a[download]')
+    expect(link.attributes('href')).toBe('http://api.test/output/archive?folder=output')
+    expect(link.text()).toBe('Download the output files')
     wrapper.unmount()
   })
 

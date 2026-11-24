@@ -313,7 +313,7 @@ const todo = computed(() => {
   border: 1px solid var(--border);
 }
 
-.forecast-runs .input-archive {
+.forecast-runs .archive-download {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -323,7 +323,7 @@ const todo = computed(() => {
 }
 
 /* The text on the left, the download button on the right. */
-.forecast-runs .input-archive .item-text {
+.forecast-runs .archive-download .item-text {
   margin-right: auto;
 }
 

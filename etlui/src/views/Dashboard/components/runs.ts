@@ -18,8 +18,8 @@ export interface RunsProps {
   defaults: Record<string, DefaultFile>
   // Returns true once uploaded: the selected file is then cleared.
   uploadFile: (name: InputName, file: File) => Promise<boolean>
-  // The open run's input/ as a zip: the files the forecast computation will read.
-  inputArchiveUrl: string
+  // The open run's input/ (what the forecast computation reads) or output/ (what it produced) as a zip.
+  archiveUrl: (folder: 'input' | 'output') => string
 }
 
 export interface RunsEmit {

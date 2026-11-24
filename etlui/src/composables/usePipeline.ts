@@ -125,6 +125,6 @@ export function usePipeline(addActivity: AddActivity) {
     upload: (name: InputName, file: File) => act(`Upload ${name}`, c => uploadInputFile(name, file, c)),
     remove: (name: InputName) => act(`Delete ${name}`, c => deleteInputFile(name, c)),
     useDefault: (name: InputName) => act(`Use the default ${name}`, c => applyDefaultFile(name, c)),
-    inputArchiveUrl: () => pipeline.inputArchiveUrl() // the open run's input/ as a zip (a link, not an action)
+    archiveUrl: (folder: pipeline.ArchiveFolder) => pipeline.archiveUrl(folder) // the open run's input/ or output/ as a zip (a link)
   }
 }

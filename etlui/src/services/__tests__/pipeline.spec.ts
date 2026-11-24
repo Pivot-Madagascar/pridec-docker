@@ -137,7 +137,8 @@ describe('cycle journal', () => {
     expect(await pipeline.getJournal('3f9c1a2b')).toEqual([{ event: 'launched' }])
     expect(get).toHaveBeenCalledWith('/pipeline/passes/3f9c1a2b/journal')
     expect(pipeline.journalCsvUrl('3f9c1a2b')).toBe('http://localhost:8111/pipeline/passes/3f9c1a2b/journal.csv')
-    expect(pipeline.inputArchiveUrl()).toBe('http://localhost:8111/output/archive?folder=input') // the open run's input/ only
+    expect(pipeline.archiveUrl('input')).toBe('http://localhost:8111/output/archive?folder=input') // the open run's input/ only
+    expect(pipeline.archiveUrl('output')).toBe('http://localhost:8111/output/archive?folder=output')
   })
 
   it('pauses the active pass, resumes or abandons one by its id', async () => {

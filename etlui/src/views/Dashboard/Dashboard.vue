@@ -118,7 +118,7 @@
             :server-files="serverFiles"
             :defaults="defaults"
             :upload-file="upload"
-            :input-archive-url="inputArchiveUrl()"
+            :archive-url="archiveUrl"
             @open="openRun"
             @launch="launchItem"
             @validate="openReport(null, true)"
@@ -299,7 +299,7 @@ const { activityLog, addActivity } = useActivityLog()
 const {
   state, serverFiles, defaults, busy, pending, refresh, confirm, cancel,
   launch, openRun, abandonRun, decide, decideImports, skipAlerts, setMode, upload, remove, useDefault,
-  pause, abandonPass, inputArchiveUrl
+  pause, abandonPass, archiveUrl
 } = usePipeline(addActivity)
 const active = computed(() => state.value?.pass?.state === 'active')
 // A mode never shows what happened in the other: the switch empties Recent Activity.

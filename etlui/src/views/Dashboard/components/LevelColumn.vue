@@ -106,14 +106,15 @@
             </Button>
           </li>
         </ol>
-        <!-- After the data check: what input/ holds, i.e. what the forecast computation will read. Not an item: no state. -->
-        <div v-if="column.check" class="input-archive" data-test="input-archive">
+        <!-- A download below the list, not an item (no state): input/ after the data check, output/ after the approval
+             once the forecast computation succeeded. -->
+        <div v-if="column.archive" class="archive-download" :data-test="`${column.archive}-archive`">
           <span class="item-text">
-            <span class="item-label">Input files</span>
-            <span class="item-state">The files the forecast computation will use, as a zip</span>
+            <span class="item-label">{{ ARCHIVES[column.archive].label }}</span>
+            <span class="item-state">{{ ARCHIVES[column.archive].hint }}</span>
           </span>
-          <Button as="a" variant="outline" :href="runs.inputArchiveUrl" target="_blank" rel="noopener" download>
-            <Download aria-hidden="true" /> Download the input files
+          <Button as="a" variant="outline" :href="runs.archiveUrl(column.archive)" target="_blank" rel="noopener" download>
+            <Download aria-hidden="true" /> {{ ARCHIVES[column.archive].button }}
           </Button>
         </div>
         </li>
@@ -229,16 +230,22 @@ const rows = computed(() =>
 // A column is done when all its items succeed (none loaded yet: not done).
 type Row = (typeof rows.value)[number]
 const PREPARE = ['fetch_disease', 'fetch_climate', 'fetch_geojson']
-function column(title: string, columnInputs: typeof inputs.value, columnRows: Row[], check?: Row) {
+const ARCHIVES = {
+  input: { label: 'Input files', hint: 'The files the forecast computation will use, as a zip', button: 'Download the input files' },
+  output: { label: 'Output files', hint: 'What the forecast computation produced, its report included, as a zip', button: 'Download the output files' }
+} as const
+type Archive = keyof typeof ARCHIVES
+function column(title: string, columnInputs: typeof inputs.value, columnRows: Row[], check?: Row, archive?: Archive) {
   const states = [...columnInputs.map(i => i.status), ...[...columnRows, ...(check ? [check] : [])].map(r => r.look)]
-  return { title, inputs: columnInputs, rows: columnRows, check, done: states.length > 0 && states.every(s => s === 'success') }
+  return { title, inputs: columnInputs, rows: columnRows, check, archive, done: states.length > 0 && states.every(s => s === 'success') }
 }
 const columns = computed(() => {
   const jobs = (keep: (job: string) => boolean) => rows.value.filter(r => keep(r.job))
   return [
     column('Input files', inputs.value, []),
-    column('Prepare the data', [], jobs(j => PREPARE.includes(j)), rows.value.find(r => r.job === 'validate_inputs')),
-    column('Forecast and approval', [], jobs(j => ![...PREPARE, 'validate_inputs', 'post_forecast'].includes(j))),
+    column('Prepare the data', [], jobs(j => PREPARE.includes(j)), rows.value.find(r => r.job === 'validate_inputs'), 'input'),
+    column('Forecast and approval', [], jobs(j => ![...PREPARE, 'validate_inputs', 'post_forecast'].includes(j)), undefined,
+      byJob('forecast')?.status === 'success' ? 'output' : undefined),
     column('Publication', [], jobs(j => j === 'post_forecast'))
   ]
 })
