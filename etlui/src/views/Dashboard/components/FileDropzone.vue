@@ -7,14 +7,18 @@
         <span class="status-text">
           On server · {{ formatSize(serverFile.size ?? 0) }}<template v-if="serverFile.modified"> · {{ formatDate(serverFile.modified) }}</template>
         </span>
-        <Button variant="outline" size="sm" :aria-label="`Preview ${label} on the server`" @click="emit('preview-server')">
-          <Eye />
-          Preview
-        </Button>
-        <Button variant="destructive" size="sm" :disabled="busy" :aria-label="`Delete ${label} from the server`" @click="emit('delete')">
-          <Trash2 />
-          {{ busy ? 'Deleting…' : 'Delete' }}
-        </Button>
+        <!-- Together on one line, beside the text (icons only on a narrow component), or under it. -->
+        <div class="status-actions">
+          <Button variant="outline" size="sm" title="Preview" :aria-label="`Preview ${label} on the server`" @click="emit('preview-server')">
+            <Eye />
+            <span class="action-text">Preview</span>
+          </Button>
+          <Button variant="destructive" size="sm" :disabled="busy" :title="busy ? 'Deleting…' : 'Delete'"
+            :aria-label="`Delete ${label} from the server`" @click="emit('delete')">
+            <Trash2 />
+            <span class="action-text">{{ busy ? 'Deleting…' : 'Delete' }}</span>
+          </Button>
+        </div>
       </template>
       <span v-else class="status-text">Not on server</span>
     </div>
@@ -49,23 +53,32 @@
         <span v-if="error" class="dropzone-error" role="alert">{{ error }}</span>
       </div>
 
+      <!-- One line always: on a narrow component the buttons keep their icon only, their name in title and aria-label. -->
       <div v-if="modelValue" class="dropzone-actions">
-        <Button variant="outline" size="sm" :aria-label="`Preview the selected ${label}`" @click="emit('preview-local', modelValue)">
+        <Button variant="outline" size="sm" title="Preview" :aria-label="`Preview the selected ${label}`" @click="emit('preview-local', modelValue)">
           <Eye />
-          Preview
+          <span class="action-text">Preview</span>
         </Button>
-        <Button as="label" :for="inputId" variant="outline" size="sm" :class="{ 'pointer-events-none opacity-50': busy }">Replace</Button>
-        <Button variant="destructive" size="sm" :disabled="busy" @click="clear">Remove</Button>
+        <Button as="label" :for="inputId" variant="outline" size="sm" title="Replace" :aria-label="`Replace the selected ${label}`"
+          :class="{ 'pointer-events-none opacity-50': busy }">
+          <Replace />
+          <span class="action-text">Replace</span>
+        </Button>
+        <Button variant="destructive" size="sm" :disabled="busy" title="Remove" :aria-label="`Remove the selected ${label}`" @click="clear">
+          <X />
+          <span class="action-text">Remove</span>
+        </Button>
         <Button
           size="sm"
           :disabled="busy || disabled"
           :aria-busy="busy"
+          :title="busy ? 'Uploading…' : 'Upload'"
           :aria-label="`Upload ${label} to the server`"
           @click="emit('upload', modelValue)"
         >
           <LoaderCircle v-if="busy" class="animate-spin" aria-hidden="true" />
           <Upload v-else />
-          {{ busy ? 'Uploading…' : 'Upload' }}
+          <span class="action-text">{{ busy ? 'Uploading…' : 'Upload' }}</span>
         </Button>
       </div>
 
@@ -75,20 +88,22 @@
     <!-- The file of the repo (assets/) offered for this item, until a file is on the server: delete that one to get it back. -->
     <div v-if="defaultFile && !serverFile?.exists" class="status-row is-present default-status" data-test="default-status">
       <span class="status-text">Default · {{ defaultFile.filename }} · {{ formatSize(defaultFile.size) }}</span>
-      <Button variant="outline" size="sm" :aria-label="`Preview the default ${label}`" @click="emit('preview-default')">
-        <Eye />
-        Preview
-      </Button>
-      <Button variant="outline" size="sm" :disabled="disabled || busy" :aria-label="`Use the default ${label}`" @click="emit('use-default')">
-        Use default
-      </Button>
+      <div class="status-actions">
+        <Button variant="outline" size="sm" :aria-label="`Preview the default ${label}`" @click="emit('preview-default')">
+          <Eye />
+          Preview
+        </Button>
+        <Button variant="outline" size="sm" :disabled="disabled || busy" :aria-label="`Use the default ${label}`" @click="emit('use-default')">
+          Use default
+        </Button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, useId } from 'vue'
-import { CircleCheck, Eye, LoaderCircle, Trash2, Upload } from '@lucide/vue'
+import { CircleCheck, Eye, LoaderCircle, Replace, Trash2, Upload, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import type { DefaultFile, ServerFile } from '@/types/inputs'
 
@@ -256,7 +271,7 @@ const formatDate = (iso: string) =>
 
 .dropzone-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap; /* the 4 buttons on one line (their text hides on a narrow component, below) */
   justify-content: flex-end;
   gap: 0.5rem;
   flex-shrink: 0;
@@ -268,10 +283,12 @@ const formatDate = (iso: string) =>
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  container-type: inline-size; /* the layout follows the component's width (a narrow Steps column), not the screen's */
 }
 
 .status-row {
   display: flex;
+  flex-wrap: wrap; /* its buttons go under the text rather than out of the component */
   align-items: center;
   gap: 0.5rem;
   min-height: 2rem;
@@ -293,16 +310,33 @@ const formatDate = (iso: string) =>
 }
 
 .status-text {
-  flex: 1;
+  flex: 1 1 10rem;
   min-width: 0;
 }
 
-@media (max-width: 640px) {
+/* A row's buttons never split: they wrap together, right-aligned. */
+.status-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+/* Too narrow for the file and its 4 buttons side by side: the buttons on their own line, wrapping if needed. */
+@container (max-width: 38rem) {
   .dropzone {
     flex-wrap: wrap;
   }
   .dropzone-actions {
     width: 100%;
+    flex-shrink: 1;
+  }
+}
+
+/* Too narrow for 4 buttons with their text (~370px): icons only, still on one line (the server row's 2 as well). */
+@container (max-width: 26rem) {
+  .action-text {
+    display: none;
   }
 }
 </style>
