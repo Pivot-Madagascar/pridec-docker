@@ -33,7 +33,8 @@ vi.mock('@/services/pipeline', () => ({
   getImportAvailability: (...args: unknown[]) => getImportAvailability(...args),
   getFetchedImports: (...args: unknown[]) => getFetchedImports(...args),
   getGeeImports: (...args: unknown[]) => getGeeImports(...args),
-  skipAlerts: (...args: unknown[]) => skipAlerts(...args)
+  skipAlerts: (...args: unknown[]) => skipAlerts(...args),
+  inputArchiveUrl: () => 'http://api.test/output/archive?folder=input'
 }))
 vi.mock('@/services/inputs', () => ({
   getInputFiles: vi.fn().mockResolvedValue({}),
@@ -406,6 +407,21 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
+  it('offers the open run\'s input files as a zip, right after the data check', async () => {
+    getCheckpoints.mockResolvedValue(forecastState('CSB/Malaria', {}))
+    const wrapper = await mountPage()
+
+    const csb = wrapper.find('#forecast-Malaria').findAll('[data-test="level-column"]')[2]
+    await csb.find('[data-test="card-steps"]').trigger('click')
+    await flushPromises()
+    const block = csb.find('[data-test="data-check"]').element.parentElement!.nextElementSibling! // the list ending with the data check, then the download
+    expect(block.getAttribute('data-test')).toBe('input-archive')
+    const link = csb.find('[data-test="input-archive"] a[download]')
+    expect(link.attributes('href')).toBe('http://api.test/output/archive?folder=input')
+    expect(link.text()).toBe('Download the input files')
+    wrapper.unmount()
+  })
+
   it('opens the import availability report from the Details button of Data Import, with a loader first', async () => {
     let answer!: (v: unknown) => void
     getImportAvailability.mockReturnValue(new Promise(resolve => (answer = resolve)))
@@ -581,15 +597,14 @@ describe('Dashboard', () => {
     await flushPromises()
     expect(applyDefaultFile).toHaveBeenCalledWith('config', false)
     expect(adj.text()).toContain('Published')
-    expect(com.findAll('[data-test="item"]')).toHaveLength(8) // 2 input files + 6 jobs: the data check is a button
-    // All shown at once, in 4 columns; the data check button waits for the 5 items before it.
+    expect(com.findAll('[data-test="item"]')).toHaveLength(8) // 2 input files + 6 jobs; the data check has its own data-test
+    // All shown at once, in 4 columns; the data check, a row like the fetches, waits for the 5 items before it.
     const columns = com.findAll('[data-test="steps-column"]')
     expect(columns.map(c => c.findAll('[data-test="item-tech"]').map(t => t.text()))).toEqual([
-      ['config/Malaria', 'external_data/fkt'], ['fetch_disease', 'fetch_climate', 'fetch_geojson'],
+      ['config/Malaria', 'external_data/fkt'], ['fetch_disease', 'fetch_climate', 'fetch_geojson', 'validate_inputs'],
       ['forecast', 'approve'], ['post_forecast']])
     expect(columns[1].find('[data-test="data-check"]').text()).toContain('Available once the input files and the 3 fetches are done')
-    expect(columns[1].findAll('[data-test="data-check"] button').map(b => [b.text(), b.attributes('disabled') !== undefined]))
-      .toEqual([['Run the data check', true]])
+    expect(columns[1].find('[data-test="data-check"] button').exists()).toBe(false) // like an item: no button before it can start
     // The stepper: a column's step is done once all its items succeed (here, the 2 input files).
     expect(columns.map(c => c.find('[data-test="step"]').text())).toEqual(
       ['✓Input files (done)', '2Prepare the data', '3Forecast and approval', '4Publication'])
@@ -620,7 +635,7 @@ describe('Dashboard', () => {
     expect(com.text()).toContain('To approve')
     await com.find('[data-test="card-steps"]').trigger('click')
     // The data check succeeded: it can be relaunched, next to the approval waiting.
-    expect(com.find('[data-test="data-check"] button').text()).toBe('Relaunch the data check')
+    expect(com.find('[data-test="data-check"] button').text()).toBe('Relaunch')
     expect(com.text()).toContain('Waiting for your decision')
     // Read and approve: on the card, and on the approval item of the dialog.
     const approveItem = com.find('[data-test="steps-dialog"] [data-job="approve"]')

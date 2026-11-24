@@ -128,5 +128,8 @@ export async function getJournal(passId: string): Promise<JournalEvent[]> {
   return response.data
 }
 
+// GET /output/archive?folder=input: the open run's input/ as a zip, for a native <a download> (it sends the session cookie).
+export const inputArchiveUrl = (): string => api.getUri({ url: '/output/archive?folder=input' })
+
 // GET /pipeline/passes/{id}/journal.csv (administrators): for a native <a download>, which sends the session cookie.
 export const journalCsvUrl = (passId: string): string => api.getUri({ url: `/pipeline/passes/${passId}/journal.csv` })

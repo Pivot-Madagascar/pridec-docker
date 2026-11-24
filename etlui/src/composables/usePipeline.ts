@@ -124,6 +124,7 @@ export function usePipeline(addActivity: AddActivity) {
     abandonPass: (passId: string) => act('Abandon the cycle', () => pipeline.abandonPass(passId)),
     upload: (name: InputName, file: File) => act(`Upload ${name}`, c => uploadInputFile(name, file, c)),
     remove: (name: InputName) => act(`Delete ${name}`, c => deleteInputFile(name, c)),
-    useDefault: (name: InputName) => act(`Use the default ${name}`, c => applyDefaultFile(name, c))
+    useDefault: (name: InputName) => act(`Use the default ${name}`, c => applyDefaultFile(name, c)),
+    inputArchiveUrl: () => pipeline.inputArchiveUrl() // the open run's input/ as a zip (a link, not an action)
   }
 }

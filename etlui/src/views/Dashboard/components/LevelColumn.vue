@@ -89,17 +89,31 @@
               Read and approve
             </Button>
           </li>
-        </ol>
-        <!-- The data check is a button, not a card: it closes the data preparation. -->
-        <div v-if="column.check" class="data-check" data-test="data-check" :data-item="column.check.item" :class="`item-${column.check.look}`">
-          <span class="item-text">
-            <span class="item-label">{{ column.check.label }}</span>
-            <span class="item-state">
-              {{ column.check.look === 'pending' && !column.check.launch ? 'Available once the input files and the 3 fetches are done' : LOOK_TEXT[column.check.look] }}
+          <!-- The data check, after the 3 fetches, in the same look as them; it closes the data preparation. -->
+          <li v-if="column.check" class="item" :class="`item-${column.check.look}`" data-test="data-check" :data-item="column.check.item">
+            <span class="item-dot" aria-hidden="true"></span>
+            <span class="item-text">
+              <span class="item-label">{{ column.check.label }}</span>
+              <code class="item-tech" data-test="item-tech">{{ column.check.job }}</code>
+              <span class="item-state">
+                {{ column.check.look === 'pending' && !column.check.launch ? 'Available once the input files and the 3 fetches are done' : LOOK_TEXT[column.check.look] }}
+              </span>
+              <span v-if="column.check.updated" class="item-state item-time" data-test="item-time">{{ column.check.updated }}</span>
             </span>
+            <Button v-if="column.check.launch" variant="outline" size="sm" :disabled="blocked"
+              :aria-label="`${column.check.launch} : ${column.check.label}`" @click="emit('launch', column.check.item)">
+              {{ column.check.launch }}
+            </Button>
+          </li>
+        </ol>
+        <!-- After the data check: what input/ holds, i.e. what the forecast computation will read. Not an item: no state. -->
+        <div v-if="column.check" class="input-archive" data-test="input-archive">
+          <span class="item-text">
+            <span class="item-label">Input files</span>
+            <span class="item-state">The files the forecast computation will use, as a zip</span>
           </span>
-          <Button :disabled="blocked || !column.check.launch" @click="emit('launch', column.check.item)">
-            {{ column.check.look === 'pending' ? 'Run the data check' : 'Relaunch the data check' }}
+          <Button as="a" variant="outline" :href="runs.inputArchiveUrl" target="_blank" rel="noopener" download>
+            <Download aria-hidden="true" /> Download the input files
           </Button>
         </div>
         </li>
@@ -126,6 +140,7 @@ import { computed, inject, reactive, ref, useId, watch } from 'vue'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
+import { Download } from '@lucide/vue'
 import FileDropzone from '@/views/Dashboard/components/FileDropzone.vue'
 import { CONFIG_FILES, DISEASE_NAMES, FILE_STATUS, ITEM_NAMES, LEVEL_NAMES, jobOf, lastUpdate, step } from '@/config/pipeline'
 import { pointTo } from '@/utils/attention'

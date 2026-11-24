@@ -313,7 +313,7 @@ const todo = computed(() => {
   border: 1px solid var(--border);
 }
 
-.forecast-runs .data-check {
+.forecast-runs .input-archive {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -322,8 +322,8 @@ const todo = computed(() => {
   border-top: 1px solid var(--border);
 }
 
-/* The text on the left, the data check button on the right. */
-.forecast-runs .data-check .item-text {
+/* The text on the left, the download button on the right. */
+.forecast-runs .input-archive .item-text {
   margin-right: auto;
 }
 
