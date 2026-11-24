@@ -43,6 +43,14 @@
     <SidebarFooter>
       <SidebarMenu>
         <SidebarMenuItem>
+          <SidebarMenuButton as-child tooltip="Help" :is-active="isActive('/help')">
+            <router-link to="/help" data-test="help-link" @click="setOpenMobile(false)">
+              <CircleHelp />
+              <span>Help</span>
+            </router-link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
           <SidebarMenuButton as-child tooltip="API Docs">
             <a :href="`${apiBaseUrl}/docs`" target="_blank">
               <FileCode />
@@ -65,7 +73,7 @@
 
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
-import { Activity, BookOpen, ChartLine, Database, FileCode, LogOut, Play, ScrollText, Settings } from '@lucide/vue'
+import { Activity, BookOpen, ChartLine, CircleHelp, Database, FileCode, LogOut, Play, ScrollText, Settings } from '@lucide/vue'
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
   SidebarRail, useSidebar

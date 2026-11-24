@@ -53,6 +53,13 @@ describe('App', () => {
     wrapper.unmount()
   })
 
+  it('links to the help page from the bottom of the side menu', async () => {
+    const wrapper = await mountAt('/')
+
+    expect(wrapper.find('[data-sidebar="footer"] [data-test="help-link"]').attributes('href')).toBe('/help')
+    wrapper.unmount()
+  })
+
   it('shows the login page alone, without the menu', async () => {
     useAuthStore().setUser(null)
     const wrapper = await mountAt('/login')
