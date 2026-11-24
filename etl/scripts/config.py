@@ -6,7 +6,7 @@ load_dotenv(override=False)
 
 
 #run configurations
-dryRun = os.getenv('DRYRUN', 'true').lower() == 'true'
+dryRun = os.getenv('DRYRUN', 'true').lower() != 'false'
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
 
 #dhis api info
@@ -24,6 +24,9 @@ PIVOT_TOKEN = os.environ.get('PIVOT_TOKEN')
 PARENT_OU = os.environ.get('PARENT_OU')
 OU_LEVEL = os.environ.get('OU_LEVEL')
 DISEASE_CODE = os.environ.get('DISEASE_CODE')
+
+ALERT_NAME = os.environ.get('ALERT_NAME')
+ALERT_FOCAL_DATE = os.environ.get('ALERT_FOCAL_DATE')
 
 #gee info
 GEE_PROJECT = os.environ.get('GEE_PROJECT')
