@@ -27,6 +27,13 @@
       <p class="text-sm text-muted-foreground">{{ t.rules }}</p>
     </Card>
 
+    <Card id="pass" class="p-6" data-test="pass-help">
+      <h3 class="text-lg font-semibold">{{ t.passTitle }}</h3>
+      <ul class="list-disc space-y-2 pl-5 text-sm">
+        <li v-for="(line, i) in t.pass" :key="i" v-html="line" />
+      </ul>
+    </Card>
+
     <Card class="p-6" data-test="glossary">
       <h3 class="text-lg font-semibold">{{ t.glossaryTitle }}</h3>
       <dl class="divide-y text-sm">

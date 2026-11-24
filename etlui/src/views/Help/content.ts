@@ -4,7 +4,8 @@ export type Lang = 'en' | 'fr'
 type Term = { id: string; term: string; def: string } // id: same anchor (#term-<id>) in both languages
 
 export const HELP: Record<Lang, {
-  description: string; howTitle: string; how: string[]; steps: string[]; rules: string; glossaryTitle: string; glossary: Term[]
+  description: string; howTitle: string; how: string[]; steps: string[]; rules: string
+  passTitle: string; pass: string[]; glossaryTitle: string; glossary: Term[]
 }> = {
   en: {
     description: 'How the application works, and the words it uses.',
@@ -22,6 +23,14 @@ export const HELP: Record<Lang, {
       '③ <strong>System Update</strong>: Build Analytics, then Update Key.'
     ],
     rules: 'etlhub enforces the order: an action stays unavailable, or is refused with a message, until what it needs has succeeded. Only one job runs at a time. Undoing something that already succeeded asks for a confirmation first.',
+    passTitle: 'Pause, abandon or resume a pass',
+    pass: [
+      '<strong>Pause the cycle</strong> (header of the Forecast page, after a confirmation) stops the active pass to continue it later. Everything done is kept, the open run included. You are then taken back to Start a pass.',
+      '<strong>Abandon the cycle</strong> (header of the Forecast page, or <strong>Abandon</strong> in the Journal for a paused pass, after a confirmation) stops the pass for good: it cannot be resumed. Its open run is abandoned and its working files are deleted, except the reports of its closed runs; its journal stays readable. To redo the month, start a new pass.',
+      '<strong>Resume a paused pass</strong>: on <strong>Start a pass</strong>, choose its month, select <strong>Resume paused pass</strong> (its id), then Start. Or in the <strong>Journal</strong>, select the paused pass, click <strong>Resume</strong>, then open Forecast. The pass goes on where it stopped, with the settings it started with.',
+      'None of this is possible while a job runs (the buttons are disabled). A pass is resumed in the mode it was started in (Test or Production), and only when no other pass is active in that mode: pause or abandon that one first.',
+      'Starting a new pass on a month that has a paused pass asks for a confirmation; the paused pass stays paused. Switching mode while a pass is active asks you to pause or abandon it first.'
+    ],
     glossaryTitle: 'Glossary',
     glossary: [
       { id: 'abandon', term: 'Abandon', def: 'Stops a pass or a run for good. An abandoned pass cannot be resumed; the month can be redone in a new pass. An abandoned run starts again from zero, the pass goes on.' },
@@ -66,6 +75,14 @@ export const HELP: Record<Lang, {
       '③ <strong>System Update</strong> : Build Analytics, puis Update Key.'
     ],
     rules: 'etlhub impose l\'ordre : une action reste indisponible, ou est refusée avec un message, tant que ce dont elle dépend n\'a pas réussi. Un seul job tourne à la fois. Défaire ce qui a déjà réussi demande d\'abord une confirmation.',
+    passTitle: 'Mettre en pause, abandonner ou reprendre une pass',
+    pass: [
+      '<strong>Pause the cycle</strong> (en-tête de la page Forecast, après confirmation) arrête la pass active pour la continuer plus tard. Tout ce qui est fait est conservé, y compris le run ouvert. Vous revenez ensuite sur Start a pass.',
+      '<strong>Abandon the cycle</strong> (en-tête de la page Forecast, ou <strong>Abandon</strong> dans le Journal pour une pass en pause, après confirmation) arrête la pass définitivement : elle ne peut plus être reprise. Son run ouvert est abandonné et ses fichiers de travail sont supprimés, sauf les rapports de ses runs fermés ; son journal reste consultable. Pour refaire le mois, démarrez une nouvelle pass.',
+      '<strong>Reprendre une pass en pause</strong> : sur <strong>Start a pass</strong>, choisissez son mois, sélectionnez <strong>Resume paused pass</strong> (son identifiant), puis Start. Ou dans le <strong>Journal</strong>, sélectionnez la pass en pause, cliquez sur <strong>Resume</strong>, puis ouvrez Forecast. La pass reprend là où elle s\'était arrêtée, avec les paramètres de son démarrage.',
+      'Rien de cela n\'est possible pendant qu\'un job tourne (les boutons sont désactivés). Une pass se reprend dans le mode où elle a été démarrée (Test ou Production), et seulement si aucune autre pass n\'est active dans ce mode : mettez celle-ci en pause ou abandonnez-la d\'abord.',
+      'Démarrer une nouvelle pass sur un mois qui a une pass en pause demande une confirmation ; la pass en pause reste en pause. Changer de mode pendant qu\'une pass est active vous demande d\'abord de la mettre en pause ou de l\'abandonner.'
+    ],
     glossaryTitle: 'Glossaire',
     glossary: [
       { id: 'abandon', term: 'Abandon (abandonner)', def: 'Arrête une pass ou un run définitivement. Une pass abandonnée ne peut pas être reprise ; le mois peut être refait dans une nouvelle pass. Un run abandonné repart de zéro, la pass continue.' },
