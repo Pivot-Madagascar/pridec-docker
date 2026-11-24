@@ -66,6 +66,20 @@ describe('TrackerView', () => {
     expect(wrapper.text()).toContain('/import_gee')
   })
 
+  it('shows each request with its method, endpoint, id and job id, the columns of the reference table', async () => {
+    listRequests.mockResolvedValue({ data: [row('a1b2', '/import_gee', 'import_gee_1234abcd'), row('c3d4', '/auth/login')] })
+    const wrapper = mount(TrackerView)
+    await flushPromises()
+
+    expect(wrapper.findAll('thead th').map(th => th.text())).toEqual(['Request', 'Time', 'Status', 'Duration (ms)', 'Job ID', ''])
+    const [launch, login] = wrapper.findAll('tbody tr').map(tr => tr.findAll('td').map(td => td.text()))
+    expect(launch[0]).toContain('POST')
+    expect(launch[0]).toContain('/import_gee')
+    expect(launch[0]).toContain('a1b2')
+    expect(launch[4]).toBe('import_gee_1234abcd')
+    expect(login[4]).toBe('-')
+  })
+
   it('reloads with the filter on Refresh', async () => {
     listRequests.mockResolvedValue({ data: [] })
     const wrapper = mount(TrackerView)

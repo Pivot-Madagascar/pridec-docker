@@ -1,14 +1,14 @@
 <template>
-  <div class="overflow-hidden rounded-lg border">
+  <!-- The reference's table: tinted header, the request (method, endpoint, id) first, the Detail at the end of the row. -->
+  <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
     <Table class="min-w-full">
       <TableHeader class="bg-muted/50">
         <TableRow>
-          <TableHead class="px-4 py-2 text-left">Request ID</TableHead>
+          <TableHead class="px-4 py-2 text-left">Request</TableHead>
           <TableHead class="px-4 py-2 text-left">Time</TableHead>
-          <TableHead class="px-4 py-2 text-left">Method</TableHead>
-          <TableHead class="px-4 py-2 text-left">Endpoint</TableHead>
           <TableHead class="px-4 py-2 text-left">Status</TableHead>
           <TableHead class="px-4 py-2 text-right">Duration (ms)</TableHead>
+          <TableHead class="px-4 py-2 text-left">Job ID</TableHead>
           <TableHead class="px-4 py-2"></TableHead>
         </TableRow>
       </TableHeader>
@@ -20,34 +20,24 @@
           :style="hasDetail(req) ? 'cursor: pointer' : undefined"
           @click="hasDetail(req) && $emit('select', req.request_id)"
         >
-          <TableCell class="px-4 py-2 font-mono text-xs text-foreground">
-            {{ shortRequestId(req.request_id) }}
+          <TableCell class="px-4 py-2">
+            <div class="flex items-center gap-2">
+              <Badge variant="outline" class="font-semibold">{{ req.method }}</Badge>
+              <span class="font-mono text-xs whitespace-nowrap text-foreground">{{ endpointOf(req.url) }}</span>
+            </div>
+            <div class="mt-0.5 font-mono text-xs text-muted-foreground">{{ shortRequestId(req.request_id) }}</div>
           </TableCell>
           <TableCell class="px-4 py-2 text-xs text-muted-foreground">
             {{ formatTime(req.timestamp) }}
           </TableCell>
           <TableCell class="px-4 py-2">
-            <span
-              class="inline-block rounded bg-muted px-2 py-0.5 text-xs font-semibold"
-            >
-              {{ req.method }}
-            </span>
-          </TableCell>
-          <TableCell class="px-4 py-2 font-mono text-xs text-foreground break-all">
-            {{ endpointOf(req.url) }}
-          </TableCell>
-          <TableCell class="px-4 py-2">
-            <span
-              class="inline-block rounded px-2 py-0.5 text-xs font-semibold"
-              :class="statusColor(req.job_status ?? req.status_code)"
-            >
-              <!-- A job launch shows its job's end, not its 202 -->
-              {{ req.job_status ?? req.status_code }}
-            </span>
+            <!-- A job launch shows its job's end, not its 202 -->
+            <Badge class="font-semibold" :class="statusColor(req.job_status ?? req.status_code)">{{ req.job_status ?? req.status_code }}</Badge>
           </TableCell>
           <TableCell class="px-4 py-2 text-right font-mono text-xs text-foreground">
             {{ req.duration_ms.toFixed(2) }}
           </TableCell>
+          <TableCell class="px-4 py-2 font-mono text-xs text-muted-foreground">{{ req.job_id ?? '-' }}</TableCell>
           <TableCell class="px-4 py-2 text-right">
             <!-- Only requests that started a job (their logs) or were refused by the pipeline (the reason) have something to show -->
             <Button v-if="hasDetail(req)" variant="link" size="xs" data-test="detail-btn" @click.stop="$emit('select', req.request_id)">
@@ -56,7 +46,7 @@
           </TableCell>
         </TableRow>
         <TableRow v-if="!requests.length">
-          <TableCell colspan="7" class="px-4 py-6 text-center text-muted-foreground">
+          <TableCell colspan="6" class="px-4 py-6 text-center text-muted-foreground">
             No requests recorded yet.
           </TableCell>
         </TableRow>
@@ -69,6 +59,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { RequestLog } from '@/services/api'
 import { statusColor } from '@/utils/status'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
 defineProps<{

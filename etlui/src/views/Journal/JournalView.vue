@@ -1,9 +1,11 @@
 <template>
-  <SideLayout>
-    <!-- The months and their passes, newest first: one click shows a pass's journal. In the side panel (SideLayout),
-         like Recent Activity on the forecast page. -->
-    <template #side>
-      <nav aria-label="Cycles" class="space-y-2 rounded-lg border bg-card p-3 shadow-lg">
+  <!-- The months and their passes, newest first: one click shows a pass's journal. In the side column, like Recent
+       Activity on the forecast page. -->
+  <!-- @container: two columns once the page (not the screen) is wide enough, the side menu open or folded. -->
+  <div class="@container">
+  <div class="grid grid-cols-[minmax(0,1fr)] items-start gap-6 @3xl:grid-cols-[clamp(12rem,24cqw,18rem)_minmax(0,1fr)]">
+    <aside>
+      <nav aria-label="Cycles" class="space-y-2 rounded-xl border bg-card p-3 shadow-sm">
         <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Cycles</h2>
         <!-- A tree like shadcn's file tree (block sidebar-11: Collapsible, chevron, folder, sub-level with a left rule):
              years, then months, then passes. The newest year, the target month and those of the selected pass start open;
@@ -72,38 +74,33 @@
         </Collapsible>
         <p v-if="!cycles.length && !loading" class="text-sm text-muted-foreground">No cycle yet.</p>
       </nav>
-    </template>
+    </aside>
 
     <div class="min-w-0 space-y-6">
-      <div class="flex flex-wrap items-center justify-between gap-4">
-        <h1 class="text-2xl font-bold text-foreground">{{ current ? `Journal · ${monthName(current.cycle)} · ${current.state}` : 'Cycle journal' }}</h1>
-        <div class="flex flex-wrap items-center gap-2 text-sm">
+      <!-- Page header (shadcn Item): the selected pass, its details, then its actions on the right. -->
+      <Item class="p-0" data-test="page-header">
+        <ItemContent>
+          <ItemTitle><h2 class="text-2xl font-bold">{{ current ? `${monthName(current.cycle)} · ${current.state}` : 'Cycle journal' }}</h2></ItemTitle>
+          <ItemDescription v-if="current" class="line-clamp-none" data-test="pass-details">
+            Pass <span class="font-mono">{{ current.id }}</span>
+            <template v-for="row in passDetails(current)" :key="row.label"> · {{ row.label }} {{ row.value }}</template>
+          </ItemDescription>
+        </ItemContent>
+        <ItemActions class="flex-wrap">
           <!-- A paused pass: resume it (the Dashboard continues it) or abandon it for good. The server has the last word. -->
           <template v-if="current?.state === 'paused'">
             <Button title="Continue this cycle on the Dashboard" @click="resume(current.id)">Resume</Button>
             <Button variant="destructive" @click="abandoning = true">Abandon</Button>
           </template>
-          <!-- Reka refuses '' as an item value: 'all' stands for no filter. -->
-          <Select :model-value="step || 'all'" @update:model-value="v => (step = v === 'all' ? '' : String(v))">
-            <SelectTrigger aria-label="Step" class="w-40"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All steps</SelectItem>
-              <SelectItem v-for="s in STEPS" :key="s" :value="s">{{ s }}</SelectItem>
-            </SelectContent>
-          </Select>
           <Button variant="secondary" :disabled="loading" @click="refresh">
             {{ loading ? 'Loading...' : 'Refresh' }}
           </Button>
-          <a
-            class="rounded-md bg-secondary px-4 py-1.5 text-primary hover:bg-secondary/80"
-            :href="csvUrl(passId)"
-            :class="{ 'pointer-events-none opacity-50': !passId }"
-            download
-          >
-            Export CSV
-          </a>
-        </div>
-      </div>
+          <Button as="a" variant="outline" :href="csvUrl(passId)" :class="{ 'pointer-events-none opacity-50': !passId }"
+            :aria-disabled="!passId || undefined" download>
+            <Download />Export CSV
+          </Button>
+        </ItemActions>
+      </Item>
 
       <p class="text-xs text-muted-foreground">
         Every change of the pass (one run of the cycle), newest first unless you reverse it. Refused actions (409) are not events: see Tracking.
@@ -113,15 +110,26 @@
 
       <div v-if="error" class="rounded-lg border border-destructive/40 bg-destructive/15 p-3 text-sm text-destructive">{{ error }}</div>
 
-      <TablePager
-        :sizes="PAGE_SIZES"
-        v-model:page-size="settings.pageSize"
-        v-model:newest-first="settings.newestFirst"
-        v-model:page="page"
-        :total-pages="totalPages"
-      />
+      <!-- The table's own tools: its step filter, then its paging. -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <!-- Reka refuses '' as an item value: 'all' stands for no filter. -->
+        <Select :model-value="step || 'all'" @update:model-value="v => (step = v === 'all' ? '' : String(v))">
+          <SelectTrigger aria-label="Step" class="w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All steps</SelectItem>
+            <SelectItem v-for="s in STEPS" :key="s" :value="s">{{ s }}</SelectItem>
+          </SelectContent>
+        </Select>
+        <TablePager
+          :sizes="PAGE_SIZES"
+          v-model:page-size="settings.pageSize"
+          v-model:newest-first="settings.newestFirst"
+          v-model:page="page"
+          :total-pages="totalPages"
+        />
+      </div>
 
-      <div class="overflow-hidden rounded-lg border">
+      <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
         <Table class="min-w-full">
           <TableHeader class="bg-muted/50">
             <TableRow>
@@ -174,14 +182,18 @@
 
       <!-- The lock never expires: etlhub asks the workers, frees it at once when none runs the job, and otherwise sends a
            409 confirmation_required, shown below (rule R5). Any user, no roles since 2026-11-17. -->
-      <section class="space-y-3 rounded-lg border p-4" data-test="lock-zone" aria-labelledby="lock-title">
-        <h2 id="lock-title" class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Job lock</h2>
-        <p class="text-sm">
-          <template v-if="lock">Held by <strong>{{ lock.task }}<template v-if="lock.job_id"> ({{ lock.job_id }})</template></strong> since {{ formatTime(lock.acquired_at) }}.</template>
-          <template v-else>No job holds the lock.</template>
-        </p>
-        <Button variant="destructive" :disabled="!lock || releasing" @click="release()">Release the lock</Button>
-      </section>
+      <Card class="gap-3 py-4" role="region" data-test="lock-zone" aria-labelledby="lock-title">
+        <CardHeader class="px-4">
+          <CardTitle id="lock-title">Job lock</CardTitle>
+          <CardDescription>
+            <template v-if="lock">Held by <strong class="text-foreground">{{ lock.task }}<template v-if="lock.job_id"> ({{ lock.job_id }})</template></strong> since {{ formatTime(lock.acquired_at) }}.</template>
+            <template v-else>No job holds the lock.</template>
+          </CardDescription>
+          <CardAction>
+            <Button variant="destructive" :disabled="!lock || releasing" @click="release()">Release the lock</Button>
+          </CardAction>
+        </CardHeader>
+      </Card>
 
       <ConfirmDialog
         :open="!!pendingRelease"
@@ -198,11 +210,11 @@
         open forecast run is abandoned. Its journal stays readable. The month can be run again in a new pass.
       </ConfirmDialog>
     </div>
-  </SideLayout>
+  </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import SideLayout from '@/components/SideLayout.vue'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { computed, onMounted, ref } from 'vue'
 import TablePager from '@/components/TablePager.vue'
@@ -213,8 +225,10 @@ import type { JournalEvent, JournalPass, PassState } from '@/types/pipeline'
 import RequestDialog from '@/views/TrackerView/components/RequestDialog.vue'
 import ConfirmDialog from '@/views/Dashboard/components/ConfirmDialog.vue'
 import { Button } from '@/components/ui/button'
+import { Card, CardAction, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { ChevronRight, CircleCheck, CirclePause, CirclePlay, CircleX, Folder } from '@lucide/vue'
+import { ChevronRight, CircleCheck, CirclePause, CirclePlay, CircleX, Download, Folder } from '@lucide/vue'
 import {
   Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle
 } from '@/components/ui/trace'

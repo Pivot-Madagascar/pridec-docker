@@ -87,6 +87,19 @@ describe('JournalView', () => {
     expect(replace).toHaveBeenCalledWith({ query: { pass: 'bbbb2222' } })
   })
 
+  it('shows the selected pass in the page header: its month, state and details, Export CSV in its actions', async () => {
+    getJournal.mockResolvedValue([])
+    const wrapper = mount(JournalView)
+    await flushPromises()
+
+    const header = wrapper.find('[data-test="page-header"]')
+    expect(header.find('h2').text()).toContain('complete')
+    expect(header.find('[data-test="pass-details"]').text()).toContain('cccc3333')
+    expect(header.find('[data-test="pass-details"]').text()).toContain('Started by jdoe')
+    expect(header.find('[data-test="pass-details"]').text()).toContain('Events 42')
+    expect(header.find('a[download]').attributes('href')).toBe('http://localhost:8111/pipeline/passes/cccc3333/journal.csv')
+  })
+
   it('opens the newest pass of the target month without ?pass=', async () => {
     delete query.pass
     getJournal.mockResolvedValue([])

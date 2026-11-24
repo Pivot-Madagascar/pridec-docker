@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { START_LOCATION, type RouteLocationNormalized } from 'vue-router'
 
-export const ROUTE_LOADING_MS = 1000
+export const ROUTE_LOADING_MS = 500
 
 const waiting = ref(0) // a counter: a navigation cancelled by a newer one must not hide the newer one's screen
 export const routeLoading = computed(() => waiting.value > 0)

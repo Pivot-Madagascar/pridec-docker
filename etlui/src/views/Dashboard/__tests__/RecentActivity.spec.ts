@@ -51,12 +51,15 @@ describe('RecentActivity', () => {
     expect(wrapper.find('[data-test="job-logs-section"]').exists()).toBe(false)
   })
 
-  it('is shown even with no activity, open, with a hint', () => {
-    const wrapper = mount(RecentActivity, { props: { activityLog: [] } })
+  it('is shown even with no activity, with a hint and a link to all the requests', () => {
+    const wrapper = mount(RecentActivity, {
+      props: { activityLog: [] },
+      global: { stubs: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } } }
+    })
 
-    expect(wrapper.find('details[open]').exists()).toBe(true)
-    expect(wrapper.find('summary').text()).toContain('Recent Activity')
+    expect(wrapper.find('[data-slot="card-title"]').text()).toBe('Recent Activity')
     expect(wrapper.text()).toContain('No activity yet')
+    expect(wrapper.find('[data-slot="card-action"] a').attributes('href')).toBe('/tracking') // "View all"
   })
 
   it('shows each entry with the colour and icon of its status, and its message once unfolded', async () => {

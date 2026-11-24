@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
+import { Item, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LOG_LEVELS, type ConfigUpdate } from '@/types/config'
 
@@ -90,7 +91,13 @@ const profile = computed(() => [
 
 <template>
   <div class="parameters">
-    <h2 class="page-title">Parameters</h2>
+    <!-- Page header (shadcn Item). -->
+    <Item class="p-0" data-test="page-header">
+      <ItemContent>
+        <ItemTitle><h2 class="text-2xl font-bold">Parameters</h2></ItemTitle>
+        <ItemDescription class="line-clamp-none">Your DHIS2 profile and session, then etlhub's configuration and GEE variables.</ItemDescription>
+      </ItemContent>
+    </Item>
     <!-- Side menu as vertical tabs (reka: arrow keys move between them); stacked above the section on narrow screens. -->
     <Tabs v-model="section" orientation="vertical" class="gap-6 md:flex-row md:items-start">
       <TabsList data-test="parameters-menu" aria-label="Parameters sections"
@@ -202,11 +209,7 @@ const profile = computed(() => [
 @reference "../../styles/base.css";
 
 .parameters {
-  @apply mx-auto max-w-4xl py-6 text-foreground;
-}
-
-.page-title {
-  @apply mb-6 text-2xl font-bold;
+  @apply space-y-6 text-foreground;
 }
 
 .section {

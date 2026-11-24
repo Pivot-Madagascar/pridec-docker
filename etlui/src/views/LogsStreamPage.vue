@@ -1,19 +1,21 @@
 <template>
   <div class="space-y-6">
-    <div class="flex-row-center-between">
-      <h1 class="heading-primary">ETL Logs Live</h1>
-      <div class="flex-row-center space-x-3">
+    <!-- Page header (shadcn Item): the job's status and Reset on the right. -->
+    <Item class="p-0" data-test="page-header">
+      <ItemContent>
+        <ItemTitle><h2 class="text-2xl font-bold">ETL Logs Live</h2></ItemTitle>
+        <ItemDescription class="line-clamp-none">
+          Connect to an ETL job via WebSocket to stream logs in real time. Enter a job ID below to start tracking.
+        </ItemDescription>
+      </ItemContent>
+      <ItemActions>
         <Badge v-if="currentJobId" variant="outline" class="px-3 py-1" :class="statusBadgeClass">
           <span class="size-2 rounded-full" :class="statusDotClass"></span>
           {{ status || 'Idle' }}
         </Badge>
         <Button variant="secondary" @click="reset">Reset</Button>
-      </div>
-    </div>
-
-    <p class="text-sm text-muted-foreground max-w-3xl">
-      Connect to an ETL job via WebSocket to stream logs in real time. Enter a job ID below to start tracking.
-    </p>
+      </ItemActions>
+    </Item>
 
     <Card>
       <CardContent>
@@ -88,6 +90,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import { useWebSocketLogger } from '@/composables/useWebSocketLogger'
 
 const route = useRoute()

@@ -22,57 +22,71 @@
     </fieldset>
   </DefinePassChoice>
 
-  <Card class="mx-auto max-w-3xl gap-0 space-y-6 p-8">
-    <div>
-      <h1 class="text-2xl font-bold text-foreground">Start a pass</h1>
-      <p class="text-sm text-muted-foreground">Choose the cycle, then start a new pass or resume a paused one. The forecast page follows.</p>
-    </div>
+  <!-- @container: the cards side by side once the page (not the screen) is wide enough. -->
+  <div class="@container space-y-6">
+    <!-- Page header (shadcn Item): Start on the right, once the state is known. -->
+    <Item class="p-0" data-test="page-header">
+      <ItemContent>
+        <ItemTitle><h2 class="text-2xl font-bold">Start a pass</h2></ItemTitle>
+        <ItemDescription class="line-clamp-none">Choose the cycle, then start a new pass or resume a paused one. The forecast page follows.</ItemDescription>
+      </ItemContent>
+      <ItemActions v-if="state">
+        <Button size="lg" :disabled="busy || (choice === 'new' && !geeChosen.length)" @click="start">Start</Button>
+      </ItemActions>
+    </Item>
 
-    <!-- The mode first: it decides which passes exist (a pass lives in one mode). -->
-    <!-- DRYRUN follows the mode (DRYRUN = TEST MODE): never chosen here. -->
-    <ModeToggle :test-mode="state?.test_mode" :dry-run="state?.dry_run" :disabled="busy" @change="changeMode" />
+    <div class="grid grid-cols-[minmax(0,1fr)] items-start gap-6 @4xl:grid-cols-2">
+      <div class="space-y-6">
+        <!-- The mode first: it decides which passes exist (a pass lives in one mode). -->
+        <!-- DRYRUN follows the mode (DRYRUN = TEST MODE): never chosen here. -->
+        <ModeToggle :test-mode="state?.test_mode" :dry-run="state?.dry_run" :disabled="busy" @change="changeMode" />
 
-    <div v-if="chosen" class="flex items-center gap-2 text-sm font-medium text-foreground">
-      Cycle
-      <CyclePicker v-model="month" :disabled="busy" />
-    </div>
+        <Card class="gap-4 py-4" data-test="pass-card">
+          <CardHeader class="px-4"><CardTitle>The pass</CardTitle></CardHeader>
+          <CardContent class="space-y-6 px-4">
+            <div v-if="chosen" class="flex items-center gap-2 text-sm font-medium text-foreground">
+              Cycle
+              <CyclePicker v-model="month" :disabled="busy" />
+            </div>
 
-    <p v-if="!state" class="text-sm text-muted-foreground">Loading the pipeline state…</p>
-    <form v-else class="space-y-6" @submit.prevent="start">
-      <ReusePassChoice />
+            <p v-if="!state" class="text-sm text-muted-foreground">Loading the pipeline state…</p>
+            <template v-else>
+              <ReusePassChoice />
 
-      <!-- A new pass chooses the GEE variables its Import GEE imports, fixed for the pass; a resumed one keeps its own. -->
-      <fieldset v-if="choice === 'new'" class="space-y-2 text-sm text-foreground" data-test="gee-choice">
-        <legend class="mb-2 font-semibold">GEE variables of this pass</legend>
-        <div class="grid gap-1 sm:grid-cols-2">
-          <Label v-for="name in available" :key="name" class="font-mono text-xs font-normal">
-            <Checkbox :model-value="geeChosen.includes(name)" @update:model-value="toggleGee(name, $event === true)" />
-            {{ name }}
-          </Label>
-        </div>
-        <p v-if="!geeChosen.length" class="text-xs text-destructive">Choose at least one variable.</p>
-      </fieldset>
-
-      <div>
-        <h2 class="mb-2 text-sm font-semibold text-foreground">Parameters of this pass</h2>
-        <p v-if="configStore.error" class="mb-2 text-sm text-destructive">{{ configStore.error }}</p>
-        <dl class="grid grid-cols-[12rem_1fr] gap-x-4 gap-y-1 text-sm">
-          <template v-for="[name, value] in parameters" :key="name">
-            <dt class="text-muted-foreground">{{ name }}</dt>
-            <dd class="break-all text-foreground">{{ value }}</dd>
-          </template>
-        </dl>
-        <p class="mt-2 text-xs text-muted-foreground">
-          Fixed for the whole pass when it starts: a later change in Admin Config or of the DHIS2 login applies to the
-          next pass only (a launch from a session on another DHIS2 is refused). A resumed pass keeps its own values.
-          DHIS2 writes follow the mode: test mode is always a dry run, production always writes.
-        </p>
+              <!-- A new pass chooses the GEE variables its Import GEE imports, fixed for the pass; a resumed one keeps its own. -->
+              <fieldset v-if="choice === 'new'" class="space-y-2 text-sm text-foreground" data-test="gee-choice">
+                <legend class="mb-2 font-semibold">GEE variables of this pass</legend>
+                <div class="grid gap-1 sm:grid-cols-2">
+                  <Label v-for="name in available" :key="name" class="font-mono text-xs font-normal">
+                    <Checkbox :model-value="geeChosen.includes(name)" @update:model-value="toggleGee(name, $event === true)" />
+                    {{ name }}
+                  </Label>
+                </div>
+                <p v-if="!geeChosen.length" class="text-xs text-destructive">Choose at least one variable.</p>
+              </fieldset>
+            </template>
+          </CardContent>
+        </Card>
       </div>
 
-      <div class="flex justify-end">
-        <Button type="submit" size="lg" :disabled="busy || (choice === 'new' && !geeChosen.length)">Start</Button>
-      </div>
-    </form>
+      <Card v-if="state" class="gap-4 py-4" data-test="parameters-card">
+        <CardHeader class="px-4"><CardTitle>Parameters of this pass</CardTitle></CardHeader>
+        <CardContent class="px-4">
+          <p v-if="configStore.error" class="mb-2 text-sm text-destructive">{{ configStore.error }}</p>
+          <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+            <template v-for="[name, value] in parameters" :key="name">
+              <dt class="text-muted-foreground">{{ name }}</dt>
+              <dd class="wrap-anywhere text-foreground">{{ value }}</dd>
+            </template>
+          </dl>
+          <p class="mt-2 text-xs text-muted-foreground">
+            Fixed for the whole pass when it starts: a later change in Admin Config or of the DHIS2 login applies to the
+            next pass only (a launch from a session on another DHIS2 is refused). A resumed pass keeps its own values.
+            DHIS2 writes follow the mode: test mode is always a dry run, production always writes.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
     <!-- Closing it any way keeps the month shown: it stays editable at the top of the page. -->
     <Dialog :open="askCycle" @update:open="chosen = true">
       <DialogContent data-test="cycle-dialog">
@@ -94,7 +108,7 @@
       </DialogContent>
     </Dialog>
     <ImpactDialog :pending="pending" :busy="busy" @confirm="confirmNew" @cancel="cancel" />
-  </Card>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -107,7 +121,8 @@ import CyclePicker from './CyclePicker.vue'
 import { useJournal } from '@/composables/useJournal'
 import { usePipeline } from '@/composables/usePipeline'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'

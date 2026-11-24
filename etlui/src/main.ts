@@ -9,4 +9,5 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 
-app.mount('#app')
+// After the first route is known: App shows the menu or not from its meta (Login has none).
+router.isReady().then(() => app.mount('#app'))

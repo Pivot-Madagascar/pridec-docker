@@ -1,11 +1,16 @@
 <template>
-  <!-- Always shown (the Dashboard fixes it on the left); <details>: the whole panel folds natively. -->
-  <details open class="activity-section">
-    <summary class="activity-summary">Recent Activity</summary>
-    <p v-if="activityLog.length === 0" class="activity-empty">No activity yet: launches and decisions show here.</p>
+  <!-- Always shown, a shadcn Card (the Forecast page's right column, like the reference's "Recent Jobs"). -->
+  <Card class="gap-3 py-4">
+    <CardHeader class="px-4">
+      <CardTitle>Recent Activity</CardTitle>
+      <CardAction>
+        <Button variant="link" size="sm" class="h-auto p-0" as-child><RouterLink to="/tracking">View all</RouterLink></Button>
+      </CardAction>
+    </CardHeader>
+    <p v-if="activityLog.length === 0" class="px-4 text-sm text-muted-foreground">No activity yet: launches and decisions show here.</p>
     <!-- shadcn Trace: one line per entry, the icon and colour of its status (success, error: Trace's own red);
          unfolding shows the message and, for a job, its request and logs. -->
-    <Trace v-if="activityLog.length" class="px-4 pb-3">
+    <Trace v-if="activityLog.length" class="px-4">
       <TraceCollapsible v-for="entry in activityLog" :key="entry.id" data-test="activity-entry">
         <TraceCollapsibleTrigger>
           <TraceLine :status="entry.success ? undefined : 'error'">
@@ -30,7 +35,7 @@
     <!-- Same dialog as the tracking page: the tracked request (found by its X-Request-ID), then the job logs.
          Not tracked (TRACKED_ENDPOINTS) or not found: the logs still load from the job_id. -->
     <RequestDialog :open="!!logsJobId" :request="request" :job-id="logsJobId" :error="error" @close="logsJobId = null" />
-  </details>
+  </Card>
 </template>
 
 <script setup lang="ts">
@@ -41,6 +46,7 @@ import type { RequestLog } from '@/services/api'
 import { useTrackingStore } from '@/stores/useTrackingStore'
 import RequestDialog from '@/views/TrackerView/components/RequestDialog.vue'
 import { Button } from '@/components/ui/button'
+import { Card, CardAction, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle
 } from '@/components/ui/trace'

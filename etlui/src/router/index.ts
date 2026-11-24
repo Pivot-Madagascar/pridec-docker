@@ -10,7 +10,8 @@ const router = createRouter({
       path: '/',
       name: 'Home',
       component: () => import('@/views/Home/HomeView.vue'),
-      meta: { title: 'ETL UI - Start a pass' },
+      // label: the page title in App's top bar; title: the browser tab's.
+      meta: { title: 'ETL UI - Start a pass', label: 'Start a pass' },
       // Home starts a pass: with one active in the user's mode, straight to the forecast page, Home never shown.
       // etlhub is asked each time (another user or tab may have started one); unknown (an error): Home, which says it.
       beforeEnter: async () => {
@@ -23,25 +24,25 @@ const router = createRouter({
       path: '/forecast',
       name: 'Dashboard',
       component: () => import('@/views/Dashboard/Dashboard.vue'),
-      meta: { title: 'ETL UI - Dashboard' }
+      meta: { title: 'ETL UI - Dashboard', label: 'Forecast' }
     },
     {
       path: '/tracking',
       name: 'Tracking',
       component: () => import('@/views/TrackerView/TrackerView.vue'),
-      meta: { title: 'Request Tracking' }
+      meta: { title: 'Request Tracking', label: 'Tracking' }
     },
     {
       path: '/journal',
       name: 'Journal',
       component: () => import('@/views/Journal/JournalView.vue'),
-      meta: { title: 'Cycle journal' }
+      meta: { title: 'Cycle journal', label: 'Journal' }
     },
     {
       path: '/logs',
       name: 'ETLLogs',
       component: () => import('@/views/LogsStreamPage.vue'),
-      meta: { title: 'ETL Logs Stream' }
+      meta: { title: 'ETL Logs Stream', label: 'Logs' }
     },
     {
       path: '/login',
@@ -53,7 +54,7 @@ const router = createRouter({
       path: '/parameters',
       name: 'Parameters',
       component: () => import('@/views/Parameters/ParametersView.vue'),
-      meta: { title: 'Parameters' }
+      meta: { title: 'Parameters', label: 'Parameters' }
     },
     // Merged into /parameters on 2026-11-23: old links open its Configuration section.
     { path: '/admin/config', redirect: { path: '/parameters', query: { section: 'configuration' } } }
@@ -76,6 +77,6 @@ router.beforeEach((to, _from, next) => {
   }
 })
 
-router.beforeResolve(waitBetweenRoutes) // 1 s loading screen between two pages (App.vue)
+router.beforeResolve(waitBetweenRoutes) // ROUTE_LOADING_MS (500 ms) loading screen between two pages (App.vue)
 
 export default router

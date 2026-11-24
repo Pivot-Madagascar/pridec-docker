@@ -210,7 +210,7 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
-  it('while a pass is active, pauses or abandons it from the left panel, under Recent Activity', async () => {
+  it('while a pass is active, pauses or abandons it from the page header', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout'] }) // the 2 s screen before Home; flushPromises keeps its real setImmediate
     pausePass.mockResolvedValue({})
     abandonPass.mockResolvedValue({})
@@ -221,9 +221,10 @@ describe('Dashboard', () => {
     const crumbs = wrapper.find('[data-test="position"]')
     expect(crumbs.findAll('li[data-slot="breadcrumb-item"]').map(li => li.text())).toEqual(['Data Import', 'Imports approval'])
     expect(crumbs.find('[aria-current="page"]').text()).toBe('Imports approval')
-    const aside = wrapper.find('[data-test="activity-aside"]')
-    expect(aside.text().indexOf('Pause the cycle')).toBeGreaterThan(aside.text().indexOf('Recent Activity'))
-    expect(aside.text()).toContain('Abandon the cycle')
+    const header = wrapper.find('[data-test="page-header"]')
+    expect(header.text()).toContain('Pause the cycle')
+    expect(header.text()).toContain('Abandon the cycle')
+    expect(wrapper.find('[data-test="activity-aside"]').text()).not.toContain('Pause the cycle')
 
     await wrapper.findAll('button').find(b => b.text() === 'Pause the cycle')!.trigger('click')
     await flushPromises()
@@ -248,6 +249,24 @@ describe('Dashboard', () => {
     expect(push).toHaveBeenLastCalledWith({ name: 'Home' })
     wrapper.unmount()
     vi.useRealTimers()
+  })
+
+  it('shows the fact cards and the progress of each step from the state of etlhub', async () => {
+    getCheckpoints.mockResolvedValue(forecastState(null, {}))
+    const wrapper = await mountPage()
+
+    expect(wrapper.find('[data-test="lock-card"]').attributes('role')).toBeUndefined()
+    expect(wrapper.find('[data-test="lock-card"]').text()).toContain('None')
+    expect(wrapper.findAll('[data-test="step-progress"]').map(p => p.text())).toEqual(['Done', 'In progress', 'Not open yet'])
+    wrapper.unmount()
+
+    getCheckpoints.mockResolvedValue(state({ lock: { job_id: null, task: 'a job of the other mode', acquired_at: 't' } }))
+    const locked = await mountPage()
+    const card = locked.find('[data-test="lock-card"]')
+    expect(card.attributes('role')).toBe('status')
+    expect(card.text()).toContain('a job of the other mode')
+    expect(card.text()).toContain('since t')
+    locked.unmount()
   })
 
   it('stays on the page when the pause fails', async () => {

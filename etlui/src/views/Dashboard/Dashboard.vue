@@ -1,81 +1,105 @@
 <template>
-  <SideLayout>
-    <!-- The side panel (SideLayout: fixed on the left, like the Journal's cycles). -->
-    <template #side>
-      <div data-test="activity-aside">
-        <RecentActivity :activityLog="activityLog" class="shadow-lg" />
-        <!-- Under Recent Activity: stop the cycle for now (resumed from the Journal), or for good. -->
-        <div v-if="active" class="pass-actions">
-          <Button variant="outline" :disabled="busy || state?.lock != null" @click="pendingPause = true">Pause the cycle</Button>
-          <Button variant="destructive" :disabled="busy || state?.lock != null" @click="pendingAbandon = true">
-            Abandon the cycle
-          </Button>
-        </div>
-      </div>
-    </template>
-
-    <section class="dashboard-section">
-      <h2 class="section-header">ETL Pipeline</h2>
-      <div class="section-subtitle flex flex-wrap items-center gap-x-1">
-        <template v-if="state">
-          <!-- The month is chosen on Home (/), with the pass to start or resume. -->
-          Cycle <strong class="cycle-value">{{ state.cycle }}</strong>
-          <template v-if="state.pass">
-            ·
-            <!-- Where the active pass stands: step / (open run /) item, read from etlhub's statuses (position()). -->
-            <Breadcrumb v-if="state.pass.state === 'active'" data-test="position">
-              <BreadcrumbList class="text-sm">
-                <template v-for="(crumb, i) in crumbs" :key="i">
-                  <BreadcrumbSeparator v-if="i" />
-                  <BreadcrumbItem>
-                    <!-- The last one leads to the current item: its card, or the open run's steps (goToPosition). -->
-                    <BreadcrumbLink
-                      v-if="i === crumbs.length - 1 && target"
-                      as="button"
-                      type="button"
-                      aria-current="page"
-                      class="font-medium text-foreground underline-offset-4 hover:underline"
-                      data-test="position-link"
-                      @click="goToPosition"
-                    >
-                      {{ crumb }}
-                    </BreadcrumbLink>
-                    <BreadcrumbPage v-else-if="i === crumbs.length - 1">{{ crumb }}</BreadcrumbPage>
-                    <template v-else>{{ crumb }}</template>
-                  </BreadcrumbItem>
-                </template>
-              </BreadcrumbList>
-            </Breadcrumb>
-            <template v-else>{{ state.pass.state }}</template>
-            · started by {{ state.pass.started_by ?? '-' }}
+  <!-- @container: the fact cards and the two columns follow the page's width (the side menu open or folded). -->
+  <div class="@container space-y-6">
+    <!-- Page header (shadcn Item): the cycle and its pass, then the pass's actions on the right. -->
+    <Item class="p-0" data-test="page-header">
+      <ItemContent>
+        <ItemTitle><h2 class="text-2xl font-bold">{{ state ? `Cycle ${state.cycle}` : 'Forecast' }}</h2></ItemTitle>
+        <!-- The month is chosen on Home (/), with the pass to start or resume. -->
+        <ItemDescription class="line-clamp-none">
+          <template v-if="state">
+            <template v-if="state.pass">
+              Pass <span class="font-mono">{{ state.pass.id }}</span> · {{ state.pass.state }} · started by {{ state.pass.started_by ?? '-' }}
+            </template>
+            <template v-else>not started: the first launch starts it</template>
+            · <RouterLink :to="{ name: 'Journal', query: state.pass ? { pass: state.pass.id } : {} }" class="text-primary">Journal</RouterLink>
+            <span v-if="state.pass?.state === 'paused'" class="text-warning"> · paused: resume it from <RouterLink :to="{ name: 'Home' }" class="text-primary">Home</RouterLink> or the Journal</span>
           </template>
-          <template v-else> · not started: the first launch starts it</template>
-          · <RouterLink :to="{ name: 'Journal', query: state.pass ? { pass: state.pass.id } : {} }" class="journal-link">Journal</RouterLink>
-          <span v-if="state.pass?.state === 'paused'" class="paused-note"> · paused: resume it from <RouterLink :to="{ name: 'Home' }" class="journal-link">Home</RouterLink> or the Journal</span>
-        </template>
-        <template v-else>Loading the pipeline state…</template>
-      </div>
+          <template v-else>Loading the pipeline state…</template>
+        </ItemDescription>
+      </ItemContent>
+      <!-- Stop the cycle for now (resumed from the Journal), or for good. -->
+      <ItemActions v-if="active">
+        <Button variant="outline" :disabled="busy || state?.lock != null" @click="pendingPause = true">Pause the cycle</Button>
+        <Button variant="destructive" :disabled="busy || state?.lock != null" @click="pendingAbandon = true">Abandon the cycle</Button>
+      </ItemActions>
+    </Item>
 
-      <!-- Before step 1: the mode applies to the whole cycle. -->
-      <!-- DRYRUN is the pass's, fixed when it started on Home: read only here. -->
-      <!-- Frozen while the pass is active: the mode is chosen on Home with the pass; pausing or abandoning frees it. -->
+    <!-- Where the active pass stands: step / (open run /) item, read from etlhub's statuses (position()), in App's top bar. -->
+    <Teleport v-if="active" defer to="#app-crumbs">
+      <Breadcrumb data-test="position">
+        <BreadcrumbList class="text-sm">
+          <template v-for="(crumb, i) in crumbs" :key="i">
+            <BreadcrumbSeparator v-if="i" />
+            <BreadcrumbItem>
+              <!-- The last one leads to the current item: its card, or the open run's steps (goToPosition). -->
+              <BreadcrumbLink
+                v-if="i === crumbs.length - 1 && target"
+                as="button"
+                type="button"
+                aria-current="page"
+                class="font-medium text-foreground underline-offset-4 hover:underline"
+                data-test="position-link"
+                @click="goToPosition"
+              >
+                {{ crumb }}
+              </BreadcrumbLink>
+              <BreadcrumbPage v-else-if="i === crumbs.length - 1">{{ crumb }}</BreadcrumbPage>
+              <template v-else>{{ crumb }}</template>
+            </BreadcrumbItem>
+          </template>
+        </BreadcrumbList>
+      </Breadcrumb>
+    </Teleport>
+
+    <!-- Fact cards (shadcn Card), from etlhub's state only: mode, position, running job, GEE variables of the pass. -->
+    <div class="grid items-start gap-4 @xl:grid-cols-2 @5xl:grid-cols-4" data-test="facts">
+      <!-- The mode: frozen while the pass is active (chosen on Home with the pass; pausing or abandoning frees it). -->
       <ModeToggle :test-mode="state?.test_mode" :dry-run="state?.dry_run" :disabled="busy || active"
         :frozen="active" @change="setMode" />
 
-      <div v-if="state?.lock" class="lock-banner" role="status">
-        <span>Running: <strong>{{ state.lock.task }}</strong><template v-if="state.lock.job_id"> ({{ state.lock.job_id }})</template> since {{ state.lock.acquired_at }}. One job at a time, both modes.</span>
-      </div>
+      <Card class="gap-3 py-4">
+        <CardHeader class="px-4">
+          <CardDescription>Where you are</CardDescription>
+          <CardTitle class="text-xl">{{ active ? crumbs.at(-1) : state?.pass?.state ?? (state ? 'Not started' : '…') }}</CardTitle>
+          <CardAction><span class="fact-icon"><MapPin /></span></CardAction>
+        </CardHeader>
+        <CardContent v-if="active" class="px-4 text-xs text-muted-foreground">{{ crumbs.slice(0, -1).join(' / ') }}</CardContent>
+      </Card>
 
+      <Card class="gap-3 py-4" :class="{ 'border-warning/50 bg-warning/8': state?.lock }" :role="state?.lock ? 'status' : undefined" data-test="lock-card">
+        <CardHeader class="px-4">
+          <CardDescription>Job running</CardDescription>
+          <CardTitle class="text-xl" :class="{ 'text-warning': state?.lock }">{{ state?.lock?.task ?? 'None' }}</CardTitle>
+          <CardAction><span class="fact-icon"><Cog :class="{ 'animate-spin': state?.lock }" /></span></CardAction>
+        </CardHeader>
+        <CardContent class="px-4 text-xs text-muted-foreground">
+          <template v-if="state?.lock"><template v-if="state.lock.job_id">{{ state.lock.job_id }} · </template>since {{ state.lock.acquired_at }}. </template>One job at a time, both modes.
+        </CardContent>
+      </Card>
+
+      <Card class="gap-3 py-4">
+        <CardHeader class="px-4">
+          <CardDescription>GEE variables</CardDescription>
+          <CardTitle class="text-xl">{{ !state?.pass ? '-' : state.pass.gee_variables ? state.pass.gee_variables.split(',').length : 'All' }}</CardTitle>
+          <CardAction><span class="fact-icon"><CloudSun /></span></CardAction>
+        </CardHeader>
+        <CardContent class="px-4 text-xs text-muted-foreground">
+          <!-- Chosen on Home when the pass started, fixed for it: what Import GEE imports. -->
+          <p v-if="state?.pass" data-test="pass-gee">Import GEE: {{ state.pass.gee_variables?.split(',').join(', ') ?? 'all available variables' }}</p>
+          <p v-else>Chosen on Home when the pass starts.</p>
+        </CardContent>
+      </Card>
+    </div>
+
+    <!-- The steps, then Recent Activity in a right column (under them on a narrow page). -->
+    <div class="grid grid-cols-[minmax(0,1fr)] items-start gap-6 @5xl:grid-cols-[minmax(0,1fr)_clamp(16rem,22cqw,22rem)]">
       <Accordion v-model:open="openSteps" :items="accordionItems">
         <template #content-dataImport>
           <div class="action-grid">
             <ActionCard v-for="card in cards('data_import')" :key="card.key" :action="card" @action-click="launchItem" />
             <ActionCard v-if="reviewCard" :action="reviewCard" @action-click="openApproval" />
           </div>
-          <!-- Chosen on Home when the pass started, fixed for it: what Import GEE imports. -->
-          <p v-if="state?.pass" class="gee-note" data-test="pass-gee">
-            Import GEE: {{ state.pass.gee_variables?.split(',').join(', ') ?? 'all available variables' }}
-          </p>
           <div class="imports-approval" data-test="imports-approval">
             <span class="approval-text">
               Imports approval: <strong :class="`status-${approveImports?.status ?? 'pending'}`">{{ approveImports?.status ?? 'pending' }}</strong>
@@ -110,7 +134,11 @@
           </div>
         </template>
       </Accordion>
-    </section>
+
+      <aside data-test="activity-aside">
+        <RecentActivity :activityLog="activityLog" />
+      </aside>
+    </div>
 
     <ForecastReportModal v-model="showReportModal" :run="reportRun">
       <template v-if="validating" #footer>
@@ -207,14 +235,13 @@
 
     <!-- After a pause or an abandon: a short screen before Home (leaveForHome). -->
     <LoadingScreen v-if="leaving" data-test="leaving-screen">{{ leaving }} Back to Home…</LoadingScreen>
-  </SideLayout>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 import { pointTo } from '@/utils/attention'
 import type { RunFocus } from '@/views/Dashboard/components/runs'
-import SideLayout from '@/components/SideLayout.vue'
 import { computed, nextTick, ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import LoadingScreen from '@/components/LoadingScreen.vue'
@@ -223,6 +250,8 @@ import { skipNextRouteLoading } from '@/router/loading'
 import Accordion from '@/views/Dashboard/components/Accordion.vue'
 import ActionCard from '@/views/Dashboard/components/ActionCard.vue'
 import { Button } from '@/components/ui/button'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import ConfigPreview from '@/views/Dashboard/components/ConfigPreview.vue'
 import ConfirmDialog from '@/views/Dashboard/components/ConfirmDialog.vue'
 import CsvPreview from '@/views/Dashboard/components/CsvPreview.vue'
@@ -241,17 +270,12 @@ import { useFetchedImports } from '@/composables/useFetchedImports'
 import { useInputPreview } from '@/composables/useInputPreview'
 import { usePipeline } from '@/composables/usePipeline'
 import { jobOf, labelOf, position, positionItem, step, toCard } from '@/config/pipeline'
-import { ClipboardCheck } from '@lucide/vue'
+import { ClipboardCheck, CloudSun, Cog, MapPin } from '@lucide/vue'
 import type { InputName } from '@/types/inputs'
 import type { StepName } from '@/types/pipeline'
 
 const FILE_LABELS: Record<InputName, string> = { config: 'config.json', external_data: 'external_data.csv' }
 
-const accordionItems = [
-  { id: 'dataImport', title: 'Data Import' },
-  { id: 'forecast', title: 'Forecasts' },
-  { id: 'systemUpdate', title: 'System Update' }
-]
 
 const { activityLog, addActivity } = useActivityLog()
 const {
@@ -269,6 +293,13 @@ const target = computed(() => (state.value ? positionItem(state.value) : null))
 const openSteps = ref(['dataImport', 'forecast', 'systemUpdate'])
 const SECTIONS: Record<StepName, string> = { data_import: 'dataImport', forecast: 'forecast', system_update: 'systemUpdate' }
 const runFocus = ref<RunFocus | null>(null)
+// The steps' cards: their progress is etlhub's `done` and `accessible`, nothing decided here.
+const STEP_TITLES: Record<StepName, string> = { data_import: 'Data Import', forecast: 'Forecasts', system_update: 'System Update' }
+const accordionItems = computed(() => (Object.keys(SECTIONS) as StepName[]).map(name => {
+  const s = step(state.value, name)
+  const progress = !s ? undefined : s.done ? 'Done' : s.accessible ? 'In progress' : 'Not open yet'
+  return { id: SECTIONS[name], title: STEP_TITLES[name], progress }
+}))
 
 // Goes to the current item; it blinks orange only when no job runs (something to click now).
 async function goToPosition() {
@@ -371,7 +402,7 @@ const leaving = ref<string | null>(null)
 const leaveForHome = async (message: string) => {
   leaving.value = message
   await new Promise(resolve => setTimeout(resolve, LEAVE_MS))
-  skipNextRouteLoading() // its own 2 s screen replaces the 1 s between pages
+  skipNextRouteLoading() // its own 2 s screen replaces the short one between pages
   await router.push({ name: 'Home' })
 }
 
@@ -396,33 +427,9 @@ onMounted(refresh)
 <style scoped>
 @reference "../../styles/base.css";
 
-.dashboard-section {
-  background: var(--card);
-  border-radius: 1rem;
-  padding: 2rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  border: 1px solid var(--border);
-}
-
-.section-header {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--foreground);
-  margin-bottom: 0.25rem;
-}
-
-.section-subtitle {
-  color: var(--muted-foreground);
-  font-size: 0.875rem;
-  margin-bottom: 1.5rem;
-}
-
-.cycle-value {
-  color: var(--foreground);
-}
-
-.journal-link {
-  color: var(--primary);
+/* The fact cards' tinted icon square (the reference's). */
+.fact-icon {
+  @apply flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary [&_svg]:size-4;
 }
 
 .imports-approval {
@@ -438,42 +445,12 @@ onMounted(refresh)
   color: var(--muted-foreground);
 }
 
-
-.pass-actions {
-  @apply mt-3 flex flex-col gap-2;
-}
-
-.gee-note {
-  margin-top: 0.75rem;
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
-}
-
-.paused-note {
-  color: var(--warning);
-}
-
-
 .status-success {
   color: var(--success);
 }
 
 .status-error {
   color: var(--destructive);
-}
-
-.lock-banner {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.75rem 1rem;
-  margin-bottom: 1.5rem;
-  border-radius: 0.75rem;
-  background: color-mix(in oklab, var(--warning) 10%, transparent);
-  border: 1px solid color-mix(in oklab, var(--warning) 40%, transparent);
-  color: var(--warning);
-  font-size: 0.875rem;
 }
 
 .action-grid {

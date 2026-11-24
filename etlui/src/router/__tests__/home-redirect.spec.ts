@@ -11,7 +11,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const pass = (state: string) => ({ test_mode: false, dry_run: false, pass: { id: 'p1', state } })
 const go = async (path: string) => {
-  skipNextRouteLoading() // not the 1 s screen between pages
+  skipNextRouteLoading() // not the short screen between pages
   await router.push(path)
   return router.currentRoute.value.name
 }

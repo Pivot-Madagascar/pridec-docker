@@ -1,9 +1,12 @@
 <template>
-  <!-- No side panel: SideLayout keeps the page where Forecast and Journal have theirs. -->
-  <SideLayout class="space-y-6">
-    <div class="flex items-center justify-between gap-4">
-      <h1 class="text-2xl font-bold text-foreground">Request Tracking</h1>
-      <div class="flex items-center gap-2">
+  <div class="space-y-6">
+    <!-- Page header (shadcn Item): the endpoint filter (sent to etlhub) and Refresh on the right. -->
+    <Item class="p-0" data-test="page-header">
+      <ItemContent>
+        <ItemTitle><h2 class="text-2xl font-bold">Request Tracking</h2></ItemTitle>
+        <ItemDescription class="line-clamp-none">The last {{ MAX_REQUESTS }} requests to etlhub, loaded on Refresh only.</ItemDescription>
+      </ItemContent>
+      <ItemActions class="flex-wrap">
         <Input
           v-model="endpointFilter"
           type="text"
@@ -15,8 +18,8 @@
         <Button variant="secondary" @click="refresh" :disabled="loading">
           {{ loading ? 'Loading...' : 'Refresh' }}
         </Button>
-      </div>
-    </div>
+      </ItemActions>
+    </Item>
 
     <div v-if="error" class="rounded-lg border border-destructive/40 bg-destructive/15 p-3 text-sm text-destructive">
       {{ error }}
@@ -34,11 +37,10 @@
     </div>
 
     <RequestDialog :open="showModal && !!selected" :request="selected" :job-id="selected?.job_id" @close="showModal = false" />
-  </SideLayout>
+  </div>
 </template>
 
 <script setup lang="ts">
-import SideLayout from '@/components/SideLayout.vue'
 import { onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useTrackingStore } from '@/stores/useTrackingStore'
@@ -46,6 +48,7 @@ import RequestTable from './components/RequestTable.vue'
 import RequestDialog from './components/RequestDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import TablePager from '@/components/TablePager.vue'
 import { useTablePaging } from '@/composables/useTablePaging'
 

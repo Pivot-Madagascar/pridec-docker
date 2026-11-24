@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { routeLoading, skipNextRouteLoading, waitBetweenRoutes } from '@/router/loading'
+import { ROUTE_LOADING_MS, routeLoading, skipNextRouteLoading, waitBetweenRoutes } from '@/router/loading'
 
 const page = { template: '<div />' }
 const makeRouter = () => {
@@ -15,14 +15,14 @@ const makeRouter = () => {
 describe('waitBetweenRoutes', () => {
   afterEach(() => vi.useRealTimers())
 
-  it('shows the loading screen 1 s between two pages, not on the first load nor on a query change', async () => {
+  it('shows the loading screen ROUTE_LOADING_MS between two pages, not on the first load nor on a query change', async () => {
     vi.useFakeTimers()
     const router = makeRouter()
     await router.push('/') // first load: no wait
     expect(router.currentRoute.value.name).toBe('Home')
 
     const going = router.push('/journal')
-    await vi.advanceTimersByTimeAsync(999)
+    await vi.advanceTimersByTimeAsync(ROUTE_LOADING_MS - 1)
     expect(routeLoading.value).toBe(true)
     expect(router.currentRoute.value.name).toBe('Home')
     await vi.advanceTimersByTimeAsync(1)

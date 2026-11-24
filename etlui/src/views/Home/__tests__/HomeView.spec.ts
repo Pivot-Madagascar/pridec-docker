@@ -41,7 +41,7 @@ const checkpoints = (over: object = {}) => ({
 
 let mounted: VueWrapper | null = null
 async function mountPage() {
-  const wrapper = (mounted = mount(HomeView, { attachTo: document.body })) // attached: the button submits the form
+  const wrapper = (mounted = mount(HomeView, { attachTo: document.body })) // attached to the document, like the page
   await flushPromises()
   return wrapper
 }
