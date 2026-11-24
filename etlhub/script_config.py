@@ -19,8 +19,10 @@ class DHIS2SessionError(RuntimeError):
 
 
 def _get(key: str, default=None) -> str | None:
-    """Editable keys (config_store.EDITABLE_KEYS): Redis only, loaded from .env at API start; absent = the default.
-    A Redis error fails the job instead of silently running on .env values. Other keys: the environment / .env."""
+    """Editable keys (config_store.EDITABLE_KEYS) and ALERT_NAME: Redis only; absent = the default. The editable keys
+    are loaded from .env at API start; DISEASE_CODE, OU_LEVEL and ALERT_NAME are rewritten at each launch of a run job
+    (pipeline.run_context, checkpoint_store.apply_to_config_store). A Redis error fails the job instead of silently
+    running on .env values. Other keys: the environment / .env."""
     # Imported here, not at module level: this module loads with the etlhub package, before tests mock redis.
     from etlhub.core.job_context import PASS_KEYS, current_test_mode, job_pass_config
     from etlhub.infrastructure.config_store import CONFIG_KEY, EDITABLE_KEYS
@@ -36,7 +38,7 @@ def _get(key: str, default=None) -> str | None:
             return value
         if key == "GEE_VARIABLES":  # never .env: every variable (no pass, or one from before 2026-11-20)
             return default
-    if key in EDITABLE_KEYS:
+    if key in EDITABLE_KEYS or key == "ALERT_NAME":  # ALERT_NAME: the open run's only (CSB), never editable
         value = get_redis().hget(CONFIG_KEY, key)
         return value.strip() if value is not None else default
     return os.getenv(key, default)

@@ -75,6 +75,20 @@ def test_the_scripts_read_the_active_pass_s_gee_variables_never_env_nor_redis(re
     assert config.get_gee_variables() == ["b_2", "c_3"]
 
 
+def test_the_scripts_read_the_open_run_s_context_written_at_its_launch(redis, monkeypatch):
+    """calc_orgunit_alerts failed with 'ALERT_NAME is missing' (2026-11-24): the launch wrote it to Redis, _get read the
+    environment for it (not an editable key)."""
+    from etlhub.domain.pipeline import run_context
+    from etlhub.infrastructure.checkpoint_store import apply_to_config_store
+    monkeypatch.setenv("ALERT_NAME", "from_env")  # never read under etlhub: the run's, in Redis
+
+    apply_to_config_store(run_context("CSB/Malaria"))
+    assert (config.get_disease_code(), config.get_ou_level(), config._get("ALERT_NAME")) == (
+        "pridec_historic_CSBMalaria", "5", "CSBMalariaVigilance")
+    apply_to_config_store(run_context("COM/Malaria"))  # no alert in a COM run: the key is removed
+    assert config._get("ALERT_NAME") is None
+
+
 def test_pivot_url_comes_from_the_config_and_the_token_never_leaves_the_environment(redis, client, monkeypatch):
     from etlhub.application.use_cases import fetch_pivot
     monkeypatch.setenv("PIVOT_URL", "https://from-env.test")  # ignored under etlhub: Redis only
