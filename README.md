@@ -50,8 +50,8 @@ which pridec
 You can also build the application directly via `docker compose`. This will take about 15 minutes the first time it is run.
 
 ```
-docker compose -f compose-prod.yaml build 
-docker compose -f compose-prod.yaml build  --no-cache #takes 15 minutes. ensures it is clean
+docker compose -f compose-build.yaml build 
+docker compose -f compose-build.yaml build  --no-cache #takes 15 minutes. ensures it is clean
 ```
 
 To access the PRIDE-C services for a manual install, you will need to use the `docker compose run` call to access the `etl` and `forecast` services.
