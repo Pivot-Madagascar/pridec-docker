@@ -82,3 +82,12 @@ def test_an_import_launch_records_its_parameters_and_a_failure_to_read_them_neve
         ("fetch_climate", None),  # not an import: nothing to record or carry over
         ("import_gee", None),  # launched anyway, without parameters
     ]
+
+
+def test_calc_orgunit_alerts_returns_202(override_dependencies):
+    from fastapi.testclient import TestClient
+    from etlhub.main import app
+
+    response = TestClient(app).post("/calc_orgunit_alerts")
+    assert response.status_code == 202
+    assert response.json()["job_id"].startswith("calc_orgunit_alerts_")

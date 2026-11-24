@@ -15,6 +15,7 @@ from etlhub.domain.interfaces.event_publisher import EventPublisher
 from etlhub.domain.interfaces.job_repository import JobRepository
 from etlhub.application.use_cases.validation_use_cases import validate_input_files
 from etlhub.application.use_cases.gee_import import import_gee  # one post per variable, its state kept
+from etlhub.application.use_cases.calc_alerts import calc_orgunit_alerts  # etlhub's copy of the CLI script
 from etlhub.application.use_cases.fetch_pivot import import_pivot_com, import_pivot_csb, post_pivot_imports
 from etl.scripts.fetch_pridec_climate import fetch_climate
 from etl.scripts.fetch_pridec_disease import fetch_disease
@@ -35,6 +36,7 @@ ETL_JOBS = {
     "fetch_geojson": (fetch_geojson, "GeoJSON fetch"),
     "build_analytics": (build_analytics, "analytics build"),
     "validate_inputs": (validate_input_files, "validate inputs"),
+    "calc_orgunit_alerts": (calc_orgunit_alerts, "org unit alerts calculation"),
 }
 # Run synchronously by the API (AnalyticsService).
 SYNC_JOBS = {"post_forecast": post_forecast, "update_key": update_key, "approve_imports": post_pivot_imports}

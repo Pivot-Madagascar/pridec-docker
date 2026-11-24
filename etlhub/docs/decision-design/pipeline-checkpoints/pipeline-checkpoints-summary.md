@@ -96,7 +96,7 @@ The etlui **"Test mode" (test = YES)** button switches etlhub to test mode (`PUT
 
 ## Current limits
 
-- **`calc_orgunit_alerts` still answers 501** (no script): CSB runs, and so the cycle, cannot complete.
+- **`calc_orgunit_alerts`** is a job since 2026-11-24 (`calc_alerts.py`, it writes `output/alerts.json`); `skip_alerts` stays beside it.
 - Test mode still acts on every script (global `DRYRUN`); test mode offers `assets/test/inputs/config.json` as the default `config.json` (decided 2026-10-15, replaces `forecast_assets/test_config.json`, which never existed). The `external_data.csv` check (`orgUnit` match in `validate_inputs`) is not implemented yet.
 - **Interface** (etlui): connected since 2026-10-09; it has not been tested against a real etlhub, only with a mocked API. The etlui dashboard no longer has a "reset output" button (`DELETE /output/reset` is still available in the API).
 - A cycle not finished by the end of the month stays unfinished: nothing finishes it for you.

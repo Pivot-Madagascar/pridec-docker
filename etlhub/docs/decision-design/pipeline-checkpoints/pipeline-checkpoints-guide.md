@@ -5,7 +5,7 @@ This guide briefly explains how etlhub tracks and controls the monthly pipeline 
 - The full design, and what is already implemented, are in [pipeline-checkpoints.md](pipeline-checkpoints.md).
 - The diagrams are in [pipeline-checkpoints-diagrams.md](pipeline-checkpoints-diagrams.md).
 
-> The code applies this revision, except `calc_orgunit_alerts` (still 501), the test-mode scope and the level check
+> The code applies this revision (`calc_orgunit_alerts` since 2026-11-24), except the test-mode scope and the level check
 > of `external_data`: see the status at the top of [pipeline-checkpoints.md](pipeline-checkpoints.md).
 
 ## In one sentence
@@ -169,7 +169,7 @@ The etlui **"Test mode" (test = YES)** button switches etlhub to test mode.
 | PUT | `/pipeline/cycle` | `{"cycle": "YYYYMM" \| null}`: the cycle launches go to (`null` = current month); 409 for a future month, a running job or an open run |
 | PUT | `/pipeline/mode` | `{"dry_run": true \| false}`: test or production mode (`confirm=true` to leave test mode with data) |
 | DELETE | `/pipeline/lock` | Frees the lock of a job whose worker was killed; the `running` item becomes `error` (any user since 2026-11-17). While the job may still run (a worker has it, or no worker answers): 409 `confirmation_required` until `?confirm=true` (2026-11-17) |
-| POST | `/calc_orgunit_alerts` | Job of the CSB runs, between `forecast` and `approve` (501 today: no script) |
+| POST | `/calc_orgunit_alerts` | Job of the CSB runs, between `forecast` and `approve`: writes `output/alerts.json` (since 2026-11-24) |
 
 All these routes require an etlui session.
 

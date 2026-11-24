@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Query, Depends
-from fastapi.responses import JSONResponse
 
 from etlhub.api.routers import BLOCKED, CONFIRM_RELAUNCH, WebhookUrl, error_doc
 from etlhub.api.routers.etl.ingest_router import add_launch_route
@@ -68,20 +67,12 @@ def api_update_key(  # def, not async: see api_post_forecast
     return service.update_key(webhook_url, confirm)
 
 
-@router.post(
-    "/calc_orgunit_alerts",
-    status_code=501,
-    summary="Calculate the org unit alerts of a CSB forecast run (not implemented)",
-    description=(
-        "Item {couple}:calc_orgunit_alerts of the CSB runs, between forecast and approve. "
-        "No script implements it yet (no etl/scripts module, nothing in pivot_dhis_tools): "
-        "CSB runs, and so the cycle, cannot complete until it exists. "
-        "POST /pipeline/runs/current/skip_alerts marks the item done meanwhile."
-    ),
-    responses={501: error_doc("Always: no script exists yet",
-                              {"message": "calc_orgunit_alerts is not implemented: no script exists for it yet"})},
-)
-async def api_calc_orgunit_alerts():
-    return JSONResponse(status_code=501, content={
-        "message": "calc_orgunit_alerts is not implemented: no script exists for it yet",
-    })
+add_launch_route(
+    router, "calc_orgunit_alerts", "Calculate the org unit alerts of a CSB forecast run",
+    "Item {couple}:calc_orgunit_alerts of the open CSB run, between forecast and approve: the number of orgUnits on "
+    "alert (forecast mean over 3 months above the mean of the same months over the 3 prior years), from the run's "
+    "disease_data.json and forecast.json, written to output/alerts.json, which POST /post_forecast posts with the "
+    "forecast. Writes nothing to DHIS2. Focal month: config.json's forecast_start. etlhub's copy of "
+    "etl/scripts/calc_orgUnit_alerts.py (application/use_cases/calc_alerts.py). "
+    "POST /pipeline/runs/current/skip_alerts still marks the item done without computing anything. ",
+    "Task accepted and queued in background.", "Org unit alerts calculation started in background")

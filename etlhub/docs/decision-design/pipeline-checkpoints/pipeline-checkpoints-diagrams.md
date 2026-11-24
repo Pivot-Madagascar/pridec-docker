@@ -5,7 +5,7 @@ The workflow (3 phases, `pridec` commands, step order) follows the **reference d
 this document only adds etlhub's control layer on top of it (lock, checkpoints, cycles, confirmations).
 The rules are summarized in [pipeline-checkpoints-guide.md](pipeline-checkpoints-guide.md), and the full design is in [pipeline-checkpoints.md](pipeline-checkpoints.md).
 
-> Implemented except `calc_orgunit_alerts` (still 501), the test-mode scope and the level check of `external_data`:
+> Implemented (`calc_orgunit_alerts` since 2026-11-24) except the test-mode scope and the level check of `external_data`:
 > see the status at the top of [pipeline-checkpoints.md](pipeline-checkpoints.md).
 
 | # | Diagram | Question |

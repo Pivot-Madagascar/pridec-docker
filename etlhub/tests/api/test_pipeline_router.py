@@ -213,11 +213,11 @@ def test_the_server_writes_the_chosen_cycle_as_forecast_start_into_config(upload
     assert written == {"forecast_start": "202001", "month_lag": 3}
 
 
-def test_calc_orgunit_alerts_is_not_implemented(client):
-    response = client.post("/calc_orgunit_alerts")
+def test_calc_orgunit_alerts_is_a_job_of_the_open_csb_run(client, queue):
+    response = client.post("/calc_orgunit_alerts")  # no run open: the gate refuses, nothing queued
 
-    assert response.status_code == 501
-    assert "not implemented" in response.json()["message"]
+    assert response.status_code == 409
+    assert queue == []
 
 
 class Liveness:

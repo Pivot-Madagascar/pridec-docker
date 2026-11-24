@@ -451,8 +451,10 @@ Limits:
     (existing databases keep the column, unused). ✅ Level check at `validate_inputs` (2026-11-17, §6), not at upload: no column distinguishes fkt and csb.
 18. ✅ **`forecast_start`**: written by the server when `config.json` is uploaded (end of the 422 refusal). Value: the cycle
     (current month by default), like the `validate_inputs` default; kept on 2026-11-17 (§6).
-19. ⬜ **`calc_orgunit_alerts`**: wire the command `pridec etl calc_orgUnit_alerts` (end of the 501). Blocked: no script
-    exists in `etl/scripts/`.
+19. ✅ **`calc_orgunit_alerts`** (2026-11-24): a Celery job, `application/use_cases/calc_alerts.py`, etlhub's copy of
+    `etl/scripts/calc_orgUnit_alerts.py` (the script cannot run as it is: it imports names `config` no longer has).
+    It writes `output/alerts.json` from the run's files (focal month: `config.json`'s `forecast_start`); `post_forecast`
+    posts it. `skip_alerts` stays beside it.
 20. ✅ **Test mode** (decided 2026-11-17, replaces the target "`DRYRUN=True` for `import_gee` and `post_forecast` only"):
     every job writing to DHIS2 takes an optional `dry_run` per launch; absent, true in test mode, else `DRYRUN` of `.env`;
     `update_key` in dry run is refused (409). etlui: one Dry run switch per pass on the Dashboard.

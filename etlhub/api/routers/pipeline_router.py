@@ -134,10 +134,10 @@ def decide(body: Decision, gate: PipelineGate = Depends(get_pipeline_gate)) -> d
 
 @router.post(
     "/runs/current/skip_alerts",
-    summary="Skip calc_orgunit_alerts of the open CSB run (temporary)",
+    summary="Skip calc_orgunit_alerts of the open CSB run (no alerts computed)",
     description=(
         "{couple}:calc_orgunit_alerts becomes success without running anything, which unlocks approve. "
-        "Temporary: no script implements calc_orgunit_alerts yet (POST /calc_orgunit_alerts answers 501)."
+        "Beside POST /calc_orgunit_alerts, which computes them (since 2026-11-24): no alerts.json is then posted."
     ),
     responses=BLOCKED,
 )
