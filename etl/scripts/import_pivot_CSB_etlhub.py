@@ -8,7 +8,7 @@ from pivot_dhis_tools import fetch_pivot_csb_etlhub
 
 from config import PIVOT_URL, PIVOT_TOKEN, PARENT_OU, check_envvars
 
-OUT_DIR = Path("inputs/temp_fetch")
+OUT_DIR = Path("input/temp_fetch")
 
 def save_etlhub_results(results, out_dir=OUT_DIR):
     """Save each item as <dataElement>_fetched.json and <dataElement>_flags.json."""
