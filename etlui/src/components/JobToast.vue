@@ -22,7 +22,11 @@
         />
         <span class="font-medium" :class="TEXT[step.key]">{{ TITLE[step.key] }}</span>
         <span class="text-muted-foreground"> · {{ step.at }}</span>
-        <span v-if="step.detail" class="block break-words text-muted-foreground">{{ step.detail }}</span>
+        <span v-if="step.detail" class="block break-words text-muted-foreground">
+          {{ step.detail }}<template v-if="step.key === 'accepted' && jobId"> · <RouterLink
+            :to="{ name: 'ETLLogs', query: { jobId } }" class="font-mono text-primary underline-offset-2 hover:underline"
+            data-test="toast-job-link" title="Follow its logs live">{{ jobId }}</RouterLink></template>
+        </span>
       </li>
     </ol>
   </div>
@@ -33,7 +37,8 @@ import { Pin, PinOff, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import type { JobStep } from '@/composables/useNotification'
 
-withDefaults(defineProps<{ label: string; steps?: JobStep[]; pinned?: boolean }>(), { steps: () => [], pinned: false })
+// jobId: a job's toast; its id links to the Logs page, which follows it at once (?jobId=).
+withDefaults(defineProps<{ label: string; steps?: JobStep[]; pinned?: boolean; jobId?: string }>(), { steps: () => [], pinned: false })
 const emit = defineEmits<{ pin: []; close: [] }>()
 
 const ENDS = new Set(['success', 'error'])

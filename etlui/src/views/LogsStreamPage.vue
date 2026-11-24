@@ -84,7 +84,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { LoaderCircle } from '@lucide/vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -94,6 +94,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/co
 import { useWebSocketLogger } from '@/composables/useWebSocketLogger'
 
 const route = useRoute()
+const router = useRouter()
 
 const {
   logs,
@@ -116,10 +117,12 @@ const connecting = ref(false)
 const logContainer = ref<HTMLElement | null>(null)
 const lineCount = computed(() => combinedLogs.value.split('\n').filter(l => l.trim()).length)
 
+// ?jobId= (a job toast's link): that job, followed at once; another job's link while here switches to it.
 watch(
   () => route.query.jobId,
   (jobId) => {
-    if (typeof jobId === 'string' && jobId && !connected.value) {
+    if (typeof jobId === 'string' && jobId && (jobId !== currentJobId.value || !connected.value)) {
+      if (jobId !== currentJobId.value) clearLogs()
       jobIdInput.value = jobId
       currentJobId.value = jobId
       connecting.value = true
@@ -160,6 +163,7 @@ async function start() {
 }
 
 function reset() {
+  if (route.query.jobId) void router.replace({ query: {} }) // the input is free again
   disconnect()
   jobIdInput.value = ''
   currentJobId.value = ''

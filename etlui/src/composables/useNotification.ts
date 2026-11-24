@@ -42,7 +42,7 @@ function closeAfter(id: string, ms: number) {
 }
 
 /** A toast's content (JobToast) with its pin and close buttons; `id()`: the toast's, known once it is shown. */
-function withActions(view: { label: string; steps?: JobStep[] }, id: () => string, onClose = () => {}) {
+function withActions(view: { label: string; steps?: JobStep[]; jobId?: string }, id: () => string, onClose = () => {}) {
   const close = () => {
     pinned.delete(id())
     toast.dismiss(id())
@@ -59,14 +59,14 @@ function withActions(view: { label: string; steps?: JobStep[] }, id: () => strin
  */
 async function followJob(label: string, jobId: string): Promise<JobEnd> {
   const started = Date.now()
-  const view = reactive({ label, steps: [] as JobStep[] })
+  const view = reactive({ label, jobId, steps: [] as JobStep[] })
   const add = (key: JobStep['key'], detail?: string) => view.steps.push({ key, at: new Date().toLocaleTimeString(), detail })
   let workerMessage = '' // the running step's first message: the elapsed time follows it
   let id = ''
   let closed = false // closed by the user: the job is still followed (its end is returned), the toast never comes back
   const content = withActions(view, () => id, () => (closed = true))
 
-  add('accepted', `Queued for a worker · ${jobId}`)
+  add('accepted', 'Queued for a worker') // JobToast adds the job id, a link to its logs
   id = toast.loading(content)
   for (;;) {
     let job: { status: string | null; message: string | null }

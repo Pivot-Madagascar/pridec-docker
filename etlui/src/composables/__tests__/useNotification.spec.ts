@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, RouterLinkStub } from '@vue/test-utils'
 import { nextTick, type Component } from 'vue'
 
 const { getJobLogs, toast } = vi.hoisted(() => ({
@@ -13,7 +13,7 @@ import { useNotification, formatElapsed, JOB_POLL_MS, JOB_END_MS, LEAVE_MS } fro
 
 const job = (status: string | null, message: string | null = null) => ({ data: { status, message } })
 // What the toast shows: the component followJob handed to toast.loading, rendered.
-const shown = () => mount(toast.loading.mock.calls[0][0] as unknown as Component)
+const shown = () => mount(toast.loading.mock.calls[0][0] as unknown as Component, { global: { stubs: { RouterLink: RouterLinkStub } } })
 
 describe('followJob', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -29,6 +29,8 @@ describe('followJob', () => {
     const wrapper = shown()
     expect(wrapper.text()).toContain('Import GEE')
     expect(wrapper.text()).toContain('Queued for a worker · import_gee_1')
+    // The job id is a link to the Logs page, which follows that job at once.
+    expect(wrapper.findComponent(RouterLinkStub).props('to')).toEqual({ name: 'ETLLogs', query: { jobId: 'import_gee_1' } })
 
     await vi.advanceTimersByTimeAsync(2 * JOB_POLL_MS)
     await nextTick()
