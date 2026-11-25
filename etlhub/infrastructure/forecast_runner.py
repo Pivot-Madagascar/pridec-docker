@@ -2,18 +2,20 @@ import subprocess
 import os
 import json
 import logging
-import tempfile
 from pathlib import Path
 from datetime import datetime
 
 from etlhub.core.config import get_settings
 from etlhub.core.job_context import current_test_mode, work_dir
 from etlhub.infrastructure.job_store import JobStore
-from etlhub.core.job_context import PASS_KEYS, job_pass_config
-from etlhub.infrastructure.config_store import ConfigStore
 from etlhub.infrastructure import etl_events
 
 logger = logging.getLogger(__name__)
+
+# Pinned by digest: a tag can be pushed again. The tag stays for reading (Docker checks the digest only).
+# A new version: `docker buildx imagetools inspect mvevans89/pridec_forecast:<tag>`, the top-level Digest.
+FORECAST_IMAGE = ('mvevans89/pridec_forecast:1.1.0'
+                  '@sha256:7dcf83ced71bd8f77e1cde82c0c64144f90a33b823318af0eee3e94009f893c8')
 
 
 def _container_user() -> list[str]:
@@ -28,41 +30,6 @@ def _container_user() -> list[str]:
     return ['--user', f'{os.getuid()}:{os.getgid()}', '-e', 'HOME=/tmp']
 
 
-def _build_dynamic_env_file(host_pwd: str, job_id: str) -> str:
-    """Merge the project's root .env file with Redis-based overrides into a
-    temporary file, to be used with `docker run --env-file`."""
-    base_env_path = os.path.join(host_pwd, '.env')
-    with open(base_env_path) as f:
-        base_lines = f.readlines()
-
-    # The R pipeline does not call DHIS2: never hand it the DHIS2 URL or token.
-    excluded = {"DHIS_URL", "DHIS_TOKEN"}
-    overrides = {k: v for k, v in ConfigStore().get_all().items() if k not in excluded}
-    fixed = job_pass_config.get() or {}  # PARENT_OU, LOG_LEVEL fixed when the pass started (pass-config.md)
-    overrides.update({k: fixed[c] for k, c in PASS_KEYS.items() if k != "GEE_VARIABLES" and fixed.get(c) is not None})
-
-    # Filter lines from the original .env that will be overridden or excluded
-    override_keys = set(overrides.keys()) | excluded
-    filtered_base = []
-    for line in base_lines:
-        stripped = line.strip()
-        if stripped and not stripped.startswith('#'):
-            key = stripped.split('=')[0].split(';')[0]  # handle KEY=value and KEY;export
-            if key not in override_keys:
-                filtered_base.append(line)
-        else:
-            filtered_base.append(line)
-
-    env_path = os.path.join(tempfile.gettempdir(), f"forecast_{job_id}.env")
-    with open(env_path, 'w') as f:
-        f.writelines(filtered_base)
-        if overrides:
-            f.write("\n")
-            for k, v in overrides.items():
-                f.write(f"{k}={v}\n")
-    return env_path
-
-
 def run_rscript(job_id, params, job_store: JobStore):
     status = {
         "status": "running",
@@ -72,7 +39,6 @@ def run_rscript(job_id, params, job_store: JobStore):
     job_store.set(job_id, status)
 
     host_pwd = get_settings().host_pwd
-    env_file = None
 
     # Host side of the mounts: the job's mode (test/input, test/output in test); the container keeps /app/input, /app/output.
     input_dir, output_dir = (work_dir(host_pwd, name, current_test_mode()) for name in ("input", "output"))
@@ -80,19 +46,21 @@ def run_rscript(job_id, params, job_store: JobStore):
     output_vol = f"{output_dir}:/app/output:rw"
 
     try:
-        env_file = _build_dynamic_env_file(host_pwd, job_id)
         # Create output/ ourselves: if it is missing, Docker creates the mount source as root
         # and the container, running as our user, could not write into it.
         os.makedirs(output_dir, exist_ok=True)
+        # Sandboxed: the R pipeline reads its input files and arguments only (no Sys.getenv in forecast/, no download
+        # at run time), so it gets no .env, no network (neither Redis nor the API nor DHIS2), and no capability but
+        # SYS_NICE. ponytail: no --memory / --pids-limit until a real run is measured (INLA threads count as pids).
         cmd = [
             'docker', 'run', '--rm',
-            '--env-file', env_file,
-            '--network', 'host',
-            '--cap-add', 'SYS_NICE',
+            '--network', 'none',
+            '--cap-drop', 'ALL', '--cap-add', 'SYS_NICE',
+            '--security-opt', 'no-new-privileges',
             *_container_user(),
             '-v', input_vol,
             '-v', output_vol,
-            'mvevans89/pridec_forecast:1.1.0',
+            FORECAST_IMAGE,
             'forecast',
             '--config_valid', params['config_valid_path'],
             '--input_valid', params['input_valid_path'],
@@ -125,24 +93,12 @@ def run_rscript(job_id, params, job_store: JobStore):
                 "message": "\n".join(output.splitlines()[-20:])
                            or f"Forecast container exited with code {proc.returncode}"
             })
-    except FileNotFoundError as e:
-        status.update({
-            "status": "error",
-            "completed": datetime.now().isoformat(),
-            "message": f".env file not found: {e.filename} (check HOST_PWD)"
-        })
     except Exception as e:
         status.update({
             "status": "error",
             "completed": datetime.now().isoformat(),
             "message": str(e)
         })
-    finally:
-        if env_file:
-            try:
-                os.remove(env_file)
-            except OSError as e:  # it holds the .env secrets: say it is left behind
-                logger.warning("Could not remove the forecast env file %s: %s", env_file, e)
 
     try:
         settings = get_settings()

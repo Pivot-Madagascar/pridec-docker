@@ -12,4 +12,6 @@ celery_app = Celery(
     include=["etlhub.infrastructure.tasks"],
 )
 
-celery_app.conf.update(task_track_started=True)
+# The forecast has its own queue: in production only its worker may run `docker run`.
+celery_app.conf.update(task_track_started=True,
+                       task_routes={"etlhub.infrastructure.tasks.task_forecast": {"queue": "forecast"}})

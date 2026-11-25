@@ -29,7 +29,7 @@ flowchart LR
 | Worker | `python -m etlhub.run_celery` (from the root) | default prefork pool, working directory not verified |
 | Redis | `redis-server` | external, `localhost:6379/0` by default |
 
-Deployment outside a development machine is **not documented**: no etlhub Dockerfile, neither etlhub nor Redis in `compose.yaml`, and `README.md` mentions a `compose-prod.yaml` that is not in the repository.
+The root `compose.yaml` is the CLI's (`etl`, `forecast`), and `README.md` mentions a `compose-prod.yaml` that is not in the repository.
 
 ## 3. Layers
 

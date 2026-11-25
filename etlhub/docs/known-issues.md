@@ -25,7 +25,7 @@ Priority scale: **P1** fix next (security or a broken feature), **P2** fix soon 
 7. *Fixed (2026-10-08):* a client `X-Request-ID` is kept only if it is a UUID (`api/middleware.py`, `_request_id`), so it can no longer overwrite another entry.
 8. **P3 — The DHIS2 token is in clear in Redis** (`dhis2:credential`) and in its AOF/RDB files. Accepted: `redis.conf` binds to localhost, requires a password, and the data directory must stay `chmod 700`. The token lives 24 h and is revoked at logout.
 9. **P3 — Public pages to decide**: `GET /`, `/docs`, `/redoc`, `/openapi.json` (the full API map).
-10. **P3 — Forecast temp env file** `/tmp/forecast_{id}.env` holds the other `.env` secrets (`PIVOT_TOKEN`, GEE…) for the whole run and survives a SIGKILL. It no longer contains `DHIS_URL` / `DHIS_TOKEN`.
+10. *Fixed (2026-11-25):* the forecast temp env file is gone: the container gets no `.env` at all, no network, no capability but `SYS_NICE`, and its image by digest (`decision-design/forecast-sandbox/`).
 
 Fixed (2026-10-08): every router except `auth_router` requires the session, the log WebSocket included (origin check, close `4401`), guarded by `tests/api/test_route_protection.py` · `GET /api/config/` no longer returns the DHIS2 token · OAuth routes, `/auth/validate-token` and `JWT_SECRET` removed · login sends credentials only to `DHIS2_ALLOWED_HOSTS` · failed login after revoking the previous token no longer leaves it active in Redis.
 

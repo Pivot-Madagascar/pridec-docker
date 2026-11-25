@@ -206,3 +206,10 @@ def test_a_job_is_queued_with_the_users_mode_and_served_in_it(monkeypatch, job_s
     tasks.task_etl.run("import_gee", "import_gee_1234abcd", test_mode=True)
     assert seen == [True]
     assert current_test_mode() is False  # reset after the job
+
+
+def test_only_the_forecast_goes_to_the_forecast_queue():
+    from etlhub.core.celery_app import celery_app
+    route = celery_app.amqp.router.route
+    assert route({}, tasks.task_forecast.name, (), {})["queue"].name == "forecast"
+    assert route({}, tasks.task_etl.name, (), {})["queue"].name == "celery"

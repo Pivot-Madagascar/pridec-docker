@@ -18,26 +18,37 @@ def _fake_popen(output, returncode, on_start=lambda cmd, kwargs: None):
 
 @pytest.fixture
 def runner_env(tmp_path, monkeypatch):
-    (tmp_path / ".env").write_text("OTHER=1\n")
+    (tmp_path / ".env").write_text("PIVOT_TOKEN=secret\n")
     settings = SimpleNamespace(host_pwd=str(tmp_path), data_dir=str(tmp_path), logs_dir=str(tmp_path / "logs"))
     monkeypatch.setattr(forecast_runner, "get_settings", lambda: settings)
-    monkeypatch.setattr(forecast_runner.ConfigStore, "get_all", lambda self: {})
     return tmp_path
 
 
-def test_missing_env_file_marks_job_as_error_without_running_docker(runner_env, monkeypatch, job_store):
-    (runner_env / ".env").unlink()
+def test_the_forecast_container_is_sandboxed(runner_env, monkeypatch, job_store):
+    seen = {}
+    monkeypatch.setattr(forecast_runner.subprocess, "Popen", _fake_popen("stop here", 1, lambda cmd, kw: seen.update(cmd=cmd)))
 
+    forecast_runner.run_rscript("forecast_sandbox", PARAMS, job_store)
+
+    cmd = seen["cmd"]
+    # No secret, no network, no capability but SYS_NICE, the image by digest.
+    assert not any(arg.startswith("--env-file") or arg == "--env" or "secret" in arg for arg in cmd)
+    assert cmd[cmd.index("--network") + 1] == "none"
+    assert cmd[cmd.index("--cap-drop") + 1] == "ALL" and cmd[cmd.index("--cap-add") + 1] == "SYS_NICE"
+    assert cmd.count("--cap-add") == 1 and "no-new-privileges" in cmd and "--privileged" not in cmd
+    assert "@sha256:" in forecast_runner.FORECAST_IMAGE and forecast_runner.FORECAST_IMAGE in cmd
+
+
+def test_a_docker_that_cannot_start_marks_the_job_as_error(runner_env, monkeypatch, job_store):
     def no_docker(*args, **kwargs):
-        raise AssertionError("docker must not run")
+        raise FileNotFoundError(2, "No such file or directory", "docker")
 
     monkeypatch.setattr(forecast_runner.subprocess, "Popen", no_docker)
 
-    status = forecast_runner.run_rscript("forecast_noenv", {}, job_store)
+    status = forecast_runner.run_rscript("forecast_nodocker", PARAMS, job_store)
 
-    assert status["status"] == "error"
-    assert ".env" in status["message"] and str(runner_env) in status["message"]
-    assert job_store.records["forecast_noenv"]["status"] == "error"
+    assert status["status"] == "error" and "docker" in status["message"]
+    assert job_store.records["forecast_nodocker"]["status"] == "error"
 
 
 def test_forecast_container_runs_as_the_worker_user_and_output_exists_first(runner_env, monkeypatch, job_store):
