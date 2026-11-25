@@ -61,6 +61,7 @@ Run from `etlui/`. Yarn 1 is the package manager (`yarn.lock`; the `Dockerfile` 
 - Tests: `yarn vitest run` (there is no `test` script). 37 files, 204 tests, all passing. Specs: `teleport` is stubbed in `src/test/setup.ts` so dialog content stays in the mounted wrapper; a dialog's content appears a tick after it opens (`await flushPromises()`), and a closed dialog renders nothing.
 - One file: `yarn vitest run src/composables/__tests__/usePipeline.spec.ts`
 - Type-check, linter, formatter, coverage: none installed (`vue-tsc`, ESLint, Prettier and `@vitest/coverage-*` are absent). Do not invent one.
+- `typescript` (devDependency since 2026-11-25, 5.9.3) is there for `vite build` only: `@vue/compiler-sfc` needs it to resolve imported types in `defineProps<T>()`. It used to come from a `node_modules` above the repo, so the Docker build failed. It runs no type check.
 - Docker: `docker build -t etlui --build-arg VITE_API_BASE_URL=… etlui/` → nginx on 3000 (`/hub/` needs etlhub on the host's `127.0.0.1:8111` and `--network host`).
 - Node 22 (`.nvmrc`, same as the `Dockerfile`): `nvm use` first. Add a shadcn-vue component: `npx shadcn-vue@2.8.2 add <name>` (the CLI needs Node ≥ 22). Add only what a lot uses; review the diff of `base.css` after each `add`.
 
