@@ -20,7 +20,11 @@
         </span>
         <span v-if="displayedLogs.message" class="text-foreground">{{ displayedLogs.message }}</span>
       </div>
-      <pre class="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-muted p-3 font-mono text-xs text-foreground">{{ displayedLogs.logs || 'No logs yet.' }}</pre>
+      <!-- The copy button floats over the box, outside its scrolling area. -->
+      <div class="relative">
+        <CopyLogsButton :text="displayedLogs.logs ?? ''" />
+        <pre class="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-muted p-3 pr-14 font-mono text-xs text-foreground">{{ displayedLogs.logs || 'No logs yet.' }}</pre>
+      </div>
     </template>
     <p v-else-if="jobLogsLoading" class="text-sm text-muted-foreground">Loading logs...</p>
   </section>
@@ -35,6 +39,7 @@ import { statusColor } from '@/utils/status'
 import { useWebSocketLogger } from '@/composables/useWebSocketLogger'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import CopyLogsButton from '@/components/CopyLogsButton.vue'
 
 const props = defineProps<{ jobId: string }>()
 

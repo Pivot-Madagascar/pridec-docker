@@ -61,21 +61,18 @@
         </div>
       </div>
 
-      <div
-        ref="logContainer"
-        class="log-container"
-      >
-        <template v-if="history && !logs.length && !connected">
-          <pre class="text-sm text-foreground font-mono whitespace-pre-wrap">{{ history }}</pre>
-        </template>
-        <template v-else-if="combinedLogs">
-          <pre class="text-sm text-foreground font-mono whitespace-pre-wrap">{{ combinedLogs }}</pre>
-        </template>
-        <template v-else>
-          <p class="text-sm text-muted-foreground text-center py-8">
+      <!-- The copy button floats over the box, outside its scrolling area. -->
+      <div class="relative">
+        <CopyLogsButton :text="shownLogs" />
+        <div
+          ref="logContainer"
+          class="log-container"
+        >
+          <pre v-if="shownLogs" class="text-sm text-foreground font-mono whitespace-pre-wrap">{{ shownLogs }}</pre>
+          <p v-else class="text-sm text-muted-foreground text-center py-8">
             Connect to a job to start streaming logs.
           </p>
-        </template>
+        </div>
       </div>
       </CardContent>
     </Card>
@@ -92,6 +89,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import { useWebSocketLogger } from '@/composables/useWebSocketLogger'
+import CopyLogsButton from '@/components/CopyLogsButton.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -116,6 +114,8 @@ const currentJobId = ref('')
 const connecting = ref(false)
 const logContainer = ref<HTMLElement | null>(null)
 const lineCount = computed(() => combinedLogs.value.split('\n').filter(l => l.trim()).length)
+// What the box shows, and what Copy takes: the history alone once disconnected, else the history and the live lines.
+const shownLogs = computed(() => (history.value && !logs.value.length && !connected.value ? history.value : combinedLogs.value))
 
 // ?jobId= (a job toast's link): that job, followed at once; another job's link while here switches to it.
 watch(
@@ -181,7 +181,7 @@ function scrollToBottom() {
 @reference "../styles/base.css";
 
 .log-container {
-  @apply bg-muted rounded-lg p-4 h-[500px] overflow-y-auto border border-border;
+  @apply bg-muted rounded-lg p-4 pr-14 h-[500px] overflow-y-auto border border-border;
 }
 
 .status-badge-success {

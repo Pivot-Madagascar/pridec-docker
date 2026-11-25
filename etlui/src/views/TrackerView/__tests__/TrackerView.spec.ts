@@ -13,6 +13,13 @@ vi.mock('@/services/api', () => ({
   },
 }))
 
+// The clipboard: none in happy-dom; the button's copy is checked by what it is handed.
+const copy = vi.fn()
+vi.mock('@vueuse/core', async (importOriginal) => {
+  const { ref } = await import('vue')
+  return { ...(await importOriginal<object>()), useClipboard: () => ({ copy, copied: ref(false) }) }
+})
+
 import TrackerView from '@/views/TrackerView/TrackerView.vue'
 
 class FakeWebSocket {
@@ -126,6 +133,9 @@ describe('TrackerView', () => {
     expect(getJobLogs).toHaveBeenCalledWith('import_gee_1234abcd')
     expect(wrapper.find('[data-test="job-logs-section"]').text()).toContain('step 1')
     expect(wrapper.text()).toContain('success')
+
+    await wrapper.find('[data-test="job-logs-section"] [data-test="copy-logs"]').trigger('click') // floats over the logs
+    expect(copy).toHaveBeenCalledWith('step 1\nstep 2')
   })
 
   it('offers no detail for a request that started no job', async () => {

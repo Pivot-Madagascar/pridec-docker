@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { ref } from 'vue'
 
-const { route, replace, connect, disconnect, clearLogs } = vi.hoisted(() => ({
+const { route, replace, connect, disconnect, clearLogs, copy, ws } = vi.hoisted(() => ({
   route: { query: {} as Record<string, string> },
   replace: vi.fn(),
   connect: vi.fn(),
   disconnect: vi.fn(),
-  clearLogs: vi.fn()
+  clearLogs: vi.fn(),
+  copy: vi.fn(),
+  ws: {} as { combinedLogs?: { value: string } } // the logger's refs, set by its mock
 }))
 vi.mock('vue-router', async () => {
   const { reactive } = await import('vue')
@@ -16,11 +18,16 @@ vi.mock('vue-router', async () => {
   return { useRoute: () => current, useRouter: () => ({ replace }) }
 })
 vi.mock('@/composables/useWebSocketLogger', () => ({
-  useWebSocketLogger: () => ({
-    logs: ref([]), history: ref(''), status: ref(''), statusMessage: ref(''), connected: ref(false), connectionError: ref(''),
-    connect, disconnect, clearLogs, isRunning: ref(false), isCompleted: ref(false), combinedLogs: ref('')
-  })
+  useWebSocketLogger: () => {
+    ws.combinedLogs = ref('')
+    return {
+      logs: ref([]), history: ref(''), status: ref(''), statusMessage: ref(''), connected: ref(false), connectionError: ref(''),
+      connect, disconnect, clearLogs, isRunning: ref(false), isCompleted: ref(false), combinedLogs: ws.combinedLogs
+    }
+  }
 }))
+// The clipboard: none in happy-dom; the button's copy is checked by what it is handed.
+vi.mock('@vueuse/core', async (importOriginal) => ({ ...(await importOriginal<object>()), useClipboard: () => ({ copy, copied: ref(false) }) }))
 
 import LogsStreamPage from '@/views/LogsStreamPage.vue'
 
@@ -43,5 +50,17 @@ describe('LogsStreamPage', () => {
     await flushPromises()
     expect(replace).toHaveBeenLastCalledWith({ query: {} })
     expect(wrapper.find('input').attributes('disabled')).toBeUndefined()
+  })
+
+  it('copies the logs shown with the button floating over them, disabled while there are none', async () => {
+    route.query = {}
+    const wrapper = mount(LogsStreamPage)
+    const button = () => wrapper.find('[data-test="copy-logs"]')
+    expect(button().attributes('disabled')).toBeDefined()
+
+    ws.combinedLogs!.value = 'line 1\nline 2'
+    await flushPromises()
+    await button().trigger('click')
+    expect(copy).toHaveBeenCalledWith('line 1\nline 2')
   })
 })
