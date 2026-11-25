@@ -92,7 +92,7 @@ def run_rscript(job_id, params, job_store: JobStore):
             *_container_user(),
             '-v', input_vol,
             '-v', output_vol,
-            'mvevans89/pridec_forecast:1.0.0',
+            'mvevans89/pridec_forecast:1.1.0',
             'forecast',
             '--config_valid', params['config_valid_path'],
             '--input_valid', params['input_valid_path'],

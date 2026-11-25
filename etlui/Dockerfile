@@ -6,6 +6,8 @@ COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile
 
 COPY . .
+# Baked into the bundle. Absolute: the log WebSocket URL is built from it (http → ws). Unset = http://localhost:8111.
+ARG VITE_API_BASE_URL
 RUN yarn build
 
 FROM nginx:alpine
@@ -13,6 +15,6 @@ FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 8111
+EXPOSE 3000
 
 CMD ["nginx", "-g", "daemon off;"]
