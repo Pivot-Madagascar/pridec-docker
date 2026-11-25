@@ -674,6 +674,20 @@ def test_test_mode_keeps_checkpoints_in_redis_only(checkpoint_store, tmp_path):
     assert rows == [("import_gee",)]  # nothing written to the SQLite file in test mode
 
 
+def test_test_mode_works_when_the_file_holds_the_request_log_only(checkpoint_store, tmp_path):
+    # A fresh install: the first request (the login) makes RequestTracker create etlhub.db with request_log alone,
+    # then the first pipeline read comes in test mode (a session starts there). It got "no such table: shared.pipeline_lock".
+    from etlhub.infrastructure.request_tracker import RequestTracker
+    RequestTracker(tmp_path / "etlhub.db")._connect().close()
+    checkpoint_store.mode["test_mode"] = True
+
+    state = checkpoint_store.progress()
+
+    assert state["test_mode"] is True and state["lock"] is None
+    tables = {r[0] for r in sqlite3.connect(tmp_path / "etlhub.db").execute("SELECT name FROM sqlite_master")}
+    assert {"request_log", "pipeline_lock", "checkpoints"} <= tables
+
+
 def test_each_mode_keeps_its_active_pass_a_switch_changes_nothing_shared(checkpoint_store):
     _pass(checkpoint_store, "import_gee")
     production_pass = checkpoint_store.progress()["pass"]

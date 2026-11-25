@@ -325,7 +325,8 @@ class CheckpointStore:
             conn.execute("PRAGMA foreign_keys = ON")  # off by default, per connection, ignored inside a transaction
             # The job lock of both modes is the file's: attached, and taken up front with it (IMMEDIATE covers every
             # attached db). Order Redis lock, then file; a production transaction never takes the Redis lock.
-            if not self._db_path.is_file():
+            # The file may exist without the schema: RequestTracker creates it with request_log alone at the first request.
+            if not self._db_path.is_file() or not self._file_has_schema():
                 with self._file_transaction():  # creates the file and its schema
                     pass
             conn.execute("ATTACH DATABASE ? AS shared", (str(self._db_path),))
@@ -337,6 +338,10 @@ class CheckpointStore:
                 conn.execute("ROLLBACK")
                 raise
             self._blob.set(conn.serialize())
+
+    def _file_has_schema(self) -> bool:
+        with closing(sqlite3.connect(self._db_path, timeout=5)) as conn:
+            return _schema_version(conn) is not None
 
     @contextmanager
     def _file_transaction(self) -> Iterator[sqlite3.Connection]:
