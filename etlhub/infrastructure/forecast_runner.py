@@ -14,8 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Pinned by digest: a tag can be pushed again. The tag stays for reading (Docker checks the digest only).
 # A new version: `docker buildx imagetools inspect mvevans89/pridec_forecast:<tag>`, the top-level Digest.
-FORECAST_IMAGE = ('mvevans89/pridec_forecast:1.1.0'
-                  '@sha256:7dcf83ced71bd8f77e1cde82c0c64144f90a33b823318af0eee3e94009f893c8')
+FORECAST_IMAGE = 'mvevans89/pridec_forecast:1.1.0@sha256:7dcf83ced71bd8f77e1cde82c0c64144f90a33b823318af0eee3e94009f893c8'
 
 
 def _container_user() -> list[str]:
