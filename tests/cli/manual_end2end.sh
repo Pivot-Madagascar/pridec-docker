@@ -31,7 +31,7 @@ docker compose run --env-from-file .env.docker --rm etl validate_inputs
 docker compose run --rm forecast -h
 docker compose run --env-from-file .env.docker --rm forecast forecast
 
-docker compose run --env-from-file .env.docker --env ALERT_NAME="COMRespinfVigilance" --rm etl calc_orgUnit_alerts
+docker compose run --env-from-file .env.docker --env ALERT_NAME="CSBMalaria" --rm etl calc_orgUnit_alerts
 
 #will error if it doesn't match CSB alert name
 docker compose run --env-from-file .env.docker --rm etl post_forecast
