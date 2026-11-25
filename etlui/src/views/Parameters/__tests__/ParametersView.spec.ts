@@ -48,14 +48,18 @@ describe('ParametersView', () => {
     wrapper.unmount()
   })
 
-  it('opens the section of the URL (/admin/config redirects to configuration) and saves the editable keys only', async () => {
+  it('opens the section of the URL (/admin/config redirects to configuration), read only: no run keys, no Save', async () => {
     const wrapper = await mountPage('configuration')
+    const section = shown(wrapper)
 
-    await shown(wrapper).findAll('button').find(b => b.text() === 'Save')!.trigger('click')
-    await flushPromises()
-    expect(update).toHaveBeenCalledWith({
-      parent_ou: 'OU_PARENT', ou_level: 5, disease_code: 'MAL', log_level: 'INFO', pivot_url: 'https://pivot.example'
-    })
+    // DISEASE_CODE and OU_LEVEL come from each run: not shown. The others come from .env: shown, disabled.
+    expect(section.find('#disease_code').exists()).toBe(false)
+    expect(section.find('#ou_level').exists()).toBe(false)
+    for (const id of ['#parent_ou', '#pivot_url', '#log_level']) expect(section.find(id).attributes('disabled')).toBeDefined()
+    expect((section.find('#parent_ou').element as HTMLInputElement).value).toBe('OU_PARENT')
+    expect(section.findAll('button').map(b => b.text())).not.toContain('Save')
+    expect(section.findAll('button').map(b => b.text())).toContain('Reload from .env')
+    expect(update).not.toHaveBeenCalled()
     expect(wrapper.find('[data-test="pivot-token"]').text()).toBe('Set in etlhub (.env)') // never the token
     wrapper.unmount()
   })

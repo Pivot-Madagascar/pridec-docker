@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button'
 import { Item, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { LOG_LEVELS, type ConfigUpdate } from '@/types/config'
+import { LOG_LEVELS } from '@/types/config'
 
 // One section at a time, chosen in the side menu and kept in the URL (?section=); /admin/config lands on configuration.
 const SECTIONS = [
@@ -35,7 +35,8 @@ const tokenStatus = computed(() => {
   if (!config.dhis_token_expires_at) return 'Active'
   return `Active until ${new Date(config.dhis_token_expires_at * 1000).toLocaleString()}`
 })
-const form = ref({ parent_ou: '', ou_level: '' as number | string | null, disease_code: '', log_level: '', pivot_url: '' })
+// Read only here since 2026-11-25: DISEASE_CODE and OU_LEVEL come from each run, the others from .env (Reload from .env).
+const form = ref({ parent_ou: '', log_level: '', pivot_url: '' })
 const showSuccess = ref(false)
 
 // etlhub copies these values from .env into Redis at each start: a change here lasts until the next restart.
@@ -44,8 +45,6 @@ const fillForm = () => {
   if (!config) return
   form.value = {
     parent_ou: config.parent_ou || '',
-    ou_level: config.ou_level ?? '',
-    disease_code: config.disease_code || '',
     log_level: config.log_level || '',
     pivot_url: config.pivot_url || ''
   }
@@ -60,18 +59,6 @@ const flashSuccess = () => {
   if (configStore.error) return
   showSuccess.value = true
   setTimeout(() => (showSuccess.value = false), 3000)
-}
-
-const handleSave = async () => {
-  showSuccess.value = false
-  await configStore.updateConfig({
-    parent_ou: form.value.parent_ou || null,
-    ou_level: form.value.ou_level ? Number(form.value.ou_level) : null,
-    disease_code: form.value.disease_code || null,
-    log_level: (form.value.log_level || null) as ConfigUpdate['log_level'],
-    pivot_url: form.value.pivot_url || null
-  })
-  flashSuccess()
 }
 
 const handleReload = async () => {
@@ -140,28 +127,20 @@ const profile = computed(() => [
           <Card class="section">
             <header>
               <h3 class="section-title">Configuration</h3>
-              <p class="hint">Values are reset from .env each time etlhub starts.</p>
+              <p class="hint">Read only: etlhub takes these values from .env at each start. To change one, edit .env, then Reload from .env.</p>
             </header>
             <div v-if="configStore.error" class="error-message">{{ configStore.error }}</div>
-            <div v-if="showSuccess" class="success-message">Saved successfully</div>
+            <div v-if="showSuccess" class="success-message">Reloaded from .env</div>
 
             <div class="fields">
               <div class="form-group">
                 <Label for="parent_ou">Parent OrgUnit ID</Label>
-                <Input id="parent_ou" v-model="form.parent_ou" type="text" placeholder="OrgUnit ID (e.g., VtP4BdCeXIo)" />
-              </div>
-              <div class="form-group">
-                <Label for="ou_level">OrgUnit Level</Label>
-                <Input id="ou_level" v-model.number="form.ou_level" type="number" min="1" max="10" placeholder="5 for CSB, 6 for fokontany" />
-              </div>
-              <div class="form-group">
-                <Label for="disease_code">Disease Code</Label>
-                <Input id="disease_code" v-model="form.disease_code" type="text" placeholder="pridec_historic_CSBMalaria" />
+                <Input id="parent_ou" v-model="form.parent_ou" type="text" disabled placeholder="Not set" />
               </div>
               <div class="form-group">
                 <Label for="log_level">Log level</Label>
                 <!-- Reka refuses '' as an item value: 'default' stands for no LOG_LEVEL (etlhub's INFO). -->
-                <Select :model-value="form.log_level || 'default'" @update:model-value="v => (form.log_level = v === 'default' ? '' : String(v))">
+                <Select :model-value="form.log_level || 'default'" disabled @update:model-value="v => (form.log_level = v === 'default' ? '' : String(v))">
                   <SelectTrigger id="log_level" class="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="default">Default (INFO)</SelectItem>
@@ -171,7 +150,7 @@ const profile = computed(() => [
               </div>
               <div class="form-group sm:col-span-2">
                 <Label for="pivot_url">Pivot URL</Label>
-                <Input id="pivot_url" v-model="form.pivot_url" type="url" placeholder="https://… (the Pivot DHIS2 the imports read from)" />
+                <Input id="pivot_url" v-model="form.pivot_url" type="url" disabled placeholder="Not set" />
                 <!-- PIVOT_TOKEN stays in etlhub's .env: only whether it is set comes to the browser. -->
                 <p class="hint" data-test="pivot-token">
                   {{ configStore.config?.has_pivot_token ? 'Set in etlhub (.env)' : 'Missing: set PIVOT_TOKEN in etlhub\'s .env' }}
@@ -183,7 +162,6 @@ const profile = computed(() => [
               <Button variant="secondary" :disabled="configStore.loading" @click="handleReload">
                 {{ configStore.loading ? 'Loading...' : 'Reload from .env' }}
               </Button>
-              <Button :disabled="configStore.loading" @click="handleSave">{{ configStore.loading ? 'Saving...' : 'Save' }}</Button>
             </div>
           </Card>
         </TabsContent>
