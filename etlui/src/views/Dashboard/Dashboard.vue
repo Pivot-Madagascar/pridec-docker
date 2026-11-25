@@ -139,7 +139,7 @@
       </Accordion>
 
       <aside data-test="activity-aside">
-        <RecentActivity :activityLog="activityLog" />
+        <RecentActivity :activity-log="activity" :error="activityError" />
       </aside>
     </div>
 
@@ -281,7 +281,7 @@ import ModeToggle from '@/views/Dashboard/components/ModeToggle.vue'
 import PreviewDialog from '@/views/Dashboard/components/PreviewDialog.vue'
 import RecentActivity from '@/views/Dashboard/components/RecentActivity.vue'
 
-import { useActivityLog } from '@/composables/useActivityLog'
+import { usePassActivity } from '@/composables/usePassActivity'
 import { useImportAvailability } from '@/composables/useImportAvailability'
 import { useFetchedImports } from '@/composables/useFetchedImports'
 import { useGeeImports } from '@/composables/useGeeImports'
@@ -295,15 +295,13 @@ import type { StepName } from '@/types/pipeline'
 const FILE_LABELS: Record<InputName, string> = { config: 'config.json', external_data: 'external_data.csv' }
 
 
-const { activityLog, addActivity } = useActivityLog()
 const {
   state, serverFiles, defaults, busy, pending, refresh, confirm, cancel,
   launch, openRun, abandonRun, decide, decideImports, skipAlerts, setMode, upload, remove, useDefault,
   pause, abandonPass, archiveUrl
-} = usePipeline(addActivity)
+} = usePipeline(() => {}) // Recent Activity reads the pass's journal (usePassActivity), not this page's actions
+const { activity, error: activityError } = usePassActivity(state)
 const active = computed(() => state.value?.pass?.state === 'active')
-// A mode never shows what happened in the other: the switch empties Recent Activity.
-watch(() => state.value?.test_mode, (mode, before) => { if (before !== undefined && mode !== before) activityLog.value = [] })
 const crumbs = computed(() => (state.value ? position(state.value) : []))
 const target = computed(() => (state.value ? positionItem(state.value) : null))
 

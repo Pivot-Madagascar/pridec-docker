@@ -7,7 +7,10 @@
         <Button variant="link" size="sm" class="h-auto p-0" as-child><RouterLink to="/tracking">View all</RouterLink></Button>
       </CardAction>
     </CardHeader>
-    <p v-if="activityLog.length === 0" class="px-4 text-sm text-muted-foreground">No activity yet: launches and decisions show here.</p>
+    <p v-if="error" class="px-4 text-sm text-destructive" data-test="activity-error">{{ error }}</p>
+    <p v-if="activityLog.length === 0" class="px-4 text-sm text-muted-foreground">
+      No activity yet in this pass: its last {{ RECENT }} requests show here (a running job, once it ends).
+    </p>
     <!-- shadcn Trace: one line per entry, the icon and colour of its status (success, error: Trace's own red);
          unfolding shows the message and, for a job, its request and logs. -->
     <Trace v-if="activityLog.length" class="px-4">
@@ -24,26 +27,23 @@
         </TraceCollapsibleTrigger>
         <TraceCollapsibleContent class="text-xs">
           <p>{{ entry.message }}</p>
-          <!-- Only activities that started a job have something to show: their request and logs -->
-          <Button v-if="entry.jobId" variant="link" size="xs" class="px-0" data-test="detail-btn" @click="openDetail(entry)">
-            Request and logs
+          <!-- The tracked request (while etlhub keeps it) and, for a job, its logs -->
+          <Button v-if="entry.request || entry.jobId" variant="link" size="xs" class="px-0" data-test="detail-btn" @click="openDetail(entry)">
+            {{ entry.jobId ? 'Request and logs' : 'Request' }}
           </Button>
         </TraceCollapsibleContent>
       </TraceCollapsible>
     </Trace>
 
-    <!-- Same dialog as the tracking page: the tracked request (found by its X-Request-ID), then the job logs.
-         Not tracked (TRACKED_ENDPOINTS) or not found: the logs still load from the job_id. -->
-    <RequestDialog :open="!!logsJobId" :request="request" :job-id="logsJobId" :error="error" @close="logsJobId = null" />
+    <!-- Same dialog as the tracking page: the request the journal joined to the event, then the job logs.
+         No longer kept by etlhub: the logs still load from the job_id. -->
+    <RequestDialog :open="!!shown" :request="shown?.request" :job-id="shown?.jobId" @close="shown = null" />
   </Card>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { storeToRefs } from 'pinia'
-import type { ActivityEntry } from '@/composables/useActivityLog'
-import type { RequestLog } from '@/services/api'
-import { useTrackingStore } from '@/stores/useTrackingStore'
+import { RECENT, type ActivityEntry } from '@/composables/usePassActivity'
 import RequestDialog from '@/views/TrackerView/components/RequestDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardHeader, CardTitle } from '@/components/ui/card'
@@ -53,21 +53,10 @@ import {
 import { CircleCheck, CircleX } from '@lucide/vue'
 
 defineProps<{
-  activityLog: ActivityEntry[]
+  activityLog: ActivityEntry[] // the pass's last requests, from its journal (usePassActivity)
+  error?: string
 }>()
 
-const store = useTrackingStore()
-const { error } = storeToRefs(store)
-const logsJobId = ref<string | null>(null)
-const request = ref<RequestLog | null>(null)
-
-// Same as TrackerView's handleSelect, from the activity's requestId instead of a table row.
-async function openDetail(entry: ActivityEntry) {
-  request.value = null
-  logsJobId.value = entry.jobId ?? null
-  if (!entry.requestId) return
-  await store.fetchRequest(entry.requestId)
-  // fetchRequest keeps the previous selection on error: only show this activity's request
-  request.value = store.selected?.request_id === entry.requestId ? store.selected : null
-}
+const shown = ref<ActivityEntry | null>(null)
+const openDetail = (entry: ActivityEntry) => (shown.value = entry)
 </script>

@@ -13,15 +13,16 @@ vi.mock('@/services/api', () => ({
 
 import RecentActivity from '@/views/Dashboard/components/RecentActivity.vue'
 
-const entry = (id: number, jobId?: string, requestId?: string, success = true) =>
-  ({ id, action: 'Import GEE', message: 'started', time: '10:00', success, jobId, requestId })
+const REQUEST = { request_id: 'req-1', timestamp: null, method: 'POST', url: 'http://localhost:8111/import_gee',
+  status_code: 202, duration_ms: 12.5, client_host: null, job_id: 'import_gee_1234abcd', error: null }
+
+const entry = (id: number, jobId: string | null = null, request: typeof REQUEST | null = null, success = true) =>
+  ({ id: String(id), action: 'Import GEE', message: 'started', time: '2026-11-25 10:00', success, jobId, request })
 // A shadcn Trace line per entry: folded, its details (message, Detail button) shown once unfolded.
 const unfold = async (wrapper: ReturnType<typeof mount>, index = 0) => {
   await wrapper.findAll('[data-test="activity-entry"] button')[index].trigger('click')
   await flushPromises()
 }
-const REQUEST = { request_id: 'req-1', timestamp: null, method: 'POST', url: 'http://localhost:8111/import_gee',
-  status_code: 202, duration_ms: 12.5, client_host: null, job_id: 'import_gee_1234abcd', error: null }
 
 describe('RecentActivity', () => {
   beforeEach(() => {
@@ -29,19 +30,18 @@ describe('RecentActivity', () => {
     getRequest.mockReset()
   })
 
-  it('opens the tracked request and the job logs from the Detail button, like the tracking page', async () => {
+  it('opens the journal\'s request and the job logs from the Detail button, like the tracking page', async () => {
     getJobLogs.mockResolvedValue({ data: { job_id: 'import_gee_1234abcd', status: 'success', message: 'done', logs: 'step 1' } })
-    getRequest.mockResolvedValue({ data: REQUEST })
-    const wrapper = mount(RecentActivity, { props: { activityLog: [entry(1, 'import_gee_1234abcd', 'req-1'), entry(2)] } })
+    const wrapper = mount(RecentActivity, { props: { activityLog: [entry(1, 'import_gee_1234abcd', REQUEST), entry(2)] } })
 
     expect(wrapper.find('[data-test="detail-btn"]').exists()).toBe(false) // folded
     await unfold(wrapper, 0)
     await unfold(wrapper, 1)
-    expect(wrapper.findAll('[data-test="detail-btn"]')).toHaveLength(1) // only an entry that started a job
+    expect(wrapper.findAll('[data-test="detail-btn"]')).toHaveLength(1) // only an entry with a request or a job
     await wrapper.find('[data-test="detail-btn"]').trigger('click')
     await flushPromises()
 
-    expect(getRequest).toHaveBeenCalledWith('req-1')
+    expect(getRequest).not.toHaveBeenCalled() // the journal already joined the request
     expect(wrapper.text()).toContain('/import_gee')
     expect(wrapper.text()).toContain('202')
     expect(getJobLogs).toHaveBeenCalledWith('import_gee_1234abcd')
@@ -63,7 +63,7 @@ describe('RecentActivity', () => {
   })
 
   it('shows each entry with the colour and icon of its status, and its message once unfolded', async () => {
-    const wrapper = mount(RecentActivity, { props: { activityLog: [entry(1), { ...entry(2, 'import_gee_1', 'r', false), message: 'DHIS2 refused' }] } })
+    const wrapper = mount(RecentActivity, { props: { activityLog: [entry(1), { ...entry(2, 'import_gee_1', null, false), message: 'DHIS2 refused' }] } })
 
     const lines = wrapper.findAll('[data-slot="trace-line"]')
     expect(lines.map(l => l.attributes('data-status') ?? 'success')).toEqual(['success', 'error'])

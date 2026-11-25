@@ -11,6 +11,8 @@ import type { DefaultFile, InputName, ServerFile } from '@/types/inputs'
 // While a job holds the lock, the state is read again at this pace until the lock is free.
 export const POLL_MS = 3000
 
+// ponytail: both callers pass a no-op since 2026-11-25 (Recent Activity reads the pass's journal, usePassActivity);
+// drop this parameter, its calls in `act` and their assertions in usePipeline.spec.ts.
 type AddActivity = (action: string, message: string, success: boolean, job?: pipeline.LaunchedJob) => void
 // choice: the action the user picked when etlhub offered several (impact.actions), else undefined.
 type Call = (confirm: boolean, choice?: string) => Promise<unknown>

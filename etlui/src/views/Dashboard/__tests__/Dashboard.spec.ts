@@ -17,6 +17,7 @@ const getImportAvailability = vi.fn()
 const getFetchedImports = vi.fn()
 const getGeeImports = vi.fn()
 const skipAlerts = vi.fn()
+const getJournal = vi.fn().mockResolvedValue([])
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 vi.mock('@/services/pipeline', () => ({
@@ -34,7 +35,8 @@ vi.mock('@/services/pipeline', () => ({
   getFetchedImports: (...args: unknown[]) => getFetchedImports(...args),
   getGeeImports: (...args: unknown[]) => getGeeImports(...args),
   skipAlerts: (...args: unknown[]) => skipAlerts(...args),
-  archiveUrl: (folder: string) => `http://api.test/output/archive?folder=${folder}`
+  archiveUrl: (folder: string) => `http://api.test/output/archive?folder=${folder}`,
+  getJournal: (...args: unknown[]) => getJournal(...args)
 }))
 vi.mock('@/services/inputs', () => ({
   getInputFiles: vi.fn().mockResolvedValue({}),
@@ -404,6 +406,19 @@ describe('Dashboard', () => {
     await alerts.find('[data-test="skip-alerts"]').trigger('click')
     await flushPromises()
     expect(skipAlerts).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('shows the pass\'s last requests in Recent Activity from its journal, so a reload keeps them', async () => {
+    getJournal.mockResolvedValueOnce([{ cycle: '202610', pass_id: '3f9c1a2b', at: '2026-11-25T09:19:42', step: 'data_import',
+      item: 'import_gee', event: 'succeeded', job_id: 'import_gee_1', actor: 'jdoe', request_id: 'r1', detail: null,
+      mode: 'test', request: null }])
+    const wrapper = await mountPage() // a fresh page: what a reload or coming back from another page does
+
+    expect(getJournal).toHaveBeenCalledWith('3f9c1a2b')
+    const aside = wrapper.find('[data-test="activity-aside"]')
+    expect(aside.findAll('[data-test="activity-entry"]')).toHaveLength(1)
+    expect(aside.text()).toContain('Import GEE')
     wrapper.unmount()
   })
 
