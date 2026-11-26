@@ -4,8 +4,10 @@ DHIS2 is faked with httpx.MockTransport and Redis with an in-memory dict: these 
 say nothing about real Redis expiry, only about what etlhub writes and reads.
 """
 import base64
+import fnmatch
 import logging
 import os
+import time
 
 import httpx
 import pytest
@@ -17,6 +19,7 @@ from etlhub.infrastructure import auth_store
 
 DHIS2_URL = "https://dhis2.test"
 PASSWORD = "s3cret-Pa55word"
+USERS = {"admin": PASSWORD, "jdoe": "an0ther-Pa55word"}
 FRONTEND = "http://localhost:5173"
 
 
@@ -43,39 +46,46 @@ class FakeRedis:
     def pipeline(self):
         return self
 
+    def scan_iter(self, pattern):
+        return [k for k in list(self.data) if fnmatch.fnmatchcase(k, pattern)]
+
     def execute(self):
         pass
 
 
 class FakeDHIS2:
-    """Basic auth for admin, ApiToken for the tokens it created."""
+    """Basic auth for USERS, ApiToken for the tokens it created (each one acts as the user who created it)."""
 
     def __init__(self):
         self.tokens = {}  # uid -> key
+        self.owners = {}  # key -> username
         self.created = 0
         self.calls = []
         self.down = False
         self.fail_create = False
 
-    def _basic_ok(self, request):
-        expected = "Basic " + base64.b64encode(f"admin:{PASSWORD}".encode()).decode()
-        return request.headers.get("authorization") == expected
+    def _basic_user(self, request):
+        for name, password in USERS.items():
+            if request.headers.get("authorization") == "Basic " + base64.b64encode(f"{name}:{password}".encode()).decode():
+                return name
+        return None
 
-    def _token_ok(self, request):
+    def _token_user(self, request):
         header = request.headers.get("authorization", "")
-        return header.startswith("ApiToken ") and header[9:] in self.tokens.values()
+        key = header[9:] if header.startswith("ApiToken ") else None
+        return self.owners[key] if key in self.tokens.values() else None
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         if self.down:
             raise httpx.ConnectError("down", request=request)
         self.calls.append((request.method, request.url.path))
-        authed = self._basic_ok(request) or self._token_ok(request)
+        user = self._basic_user(request) or self._token_user(request)
         if request.url.path == "/api/me.json":
-            if not authed:
+            if not user:
                 return httpx.Response(401)
-            return httpx.Response(200, json={"id": "u1", "username": "admin", "email": None, "displayName": "Admin"})
+            return httpx.Response(200, json={"id": f"id_{user}", "username": user, "email": None, "displayName": user})
         if request.method == "POST" and request.url.path == "/api/apiToken":
-            if not self._basic_ok(request):
+            if not self._basic_user(request):
                 return httpx.Response(401)
             if self.fail_create:
                 return httpx.Response(500)
@@ -84,11 +94,11 @@ class FakeDHIS2:
             self.created += 1
             n = self.created
             uid, key = f"tokenUid{n:03d}", f"d2pat_key{n}"
-            self.tokens[uid] = key
+            self.tokens[uid], self.owners[key] = key, self._basic_user(request)
             return httpx.Response(201, json={"httpStatusCode": 201, "response": {"key": key, "uid": uid}})
         if request.method == "DELETE" and request.url.path.startswith("/api/apiToken/"):
             uid = request.url.path.rsplit("/", 1)[1]
-            if not authed or uid not in self.tokens:
+            if not user or uid not in self.tokens:
                 return httpx.Response(404)
             del self.tokens[uid]
             return httpx.Response(200, json={"httpStatusCode": 200, "response": {"uid": uid}})
@@ -126,8 +136,14 @@ def https_client(anon_app, fake_redis, dhis2, settings):
     return TestClient(anon_app, base_url="https://testserver")
 
 
-def _login(client, password=PASSWORD, url=DHIS2_URL):
-    return client.post("/auth/login", json={"dhis2_url": url, "username": "admin", "password": password})
+def _login(client, password=None, url=DHIS2_URL, username="admin"):
+    return client.post("/auth/login", json={"dhis2_url": url, "username": username,
+                                            "password": password or USERS[username]})
+
+
+def _session_ends(client):
+    """What the browser does after 24 h: the session cookie is gone, the device cookie stays."""
+    client.cookies.delete("etlhub_session")
 
 
 def test_login_sets_httponly_cookie_and_stores_the_token_server_side(https_client, fake_redis, dhis2, caplog):
@@ -185,68 +201,121 @@ def test_empty_allowlist_refuses_every_login(https_client, settings, dhis2, monk
     assert _login(https_client).status_code == 400
 
 
-def test_second_login_revokes_previous_token_and_invalidates_previous_session(anon_app, https_client, dhis2):
+def test_the_session_lasts_24_h_the_token_and_the_browser_id_30_days(https_client):
+    response = _login(https_client)
+
+    cookies = response.headers.get_list("set-cookie")
+    assert any(c.startswith("etlhub_session=") and "Max-Age=86400" in c for c in cookies)
+    assert any(c.startswith("etlhub_device=") and f"Max-Age={30 * 24 * 3600}" in c and "HttpOnly" in c for c in cookies)
+    credential = auth_store.get_credential("admin")
+    assert credential["expires_at"] - time.time() > 29 * 24 * 3600
+    assert response.json()["expires_at"] == credential["expires_at"]
+    assert credential["token"] not in str(cookies)
+
+
+def test_a_login_from_the_same_browser_after_24_h_keeps_the_token(https_client, dhis2):
+    first = _login(https_client).json()
+    uid = auth_store.get_credential("admin")["pat_uid"]
+    _session_ends(https_client)
+    assert https_client.get("/auth/me").status_code == 401  # logged out by the browser
+
+    second = _login(https_client)
+
+    assert second.status_code == 200 and second.json()["expires_at"] == first["expires_at"]
+    assert auth_store.get_credential("admin")["pat_uid"] == uid and dhis2.created == 1 and uid in dhis2.tokens
+    assert https_client.get("/auth/me").status_code == 200
+
+
+def test_a_login_of_the_same_account_from_another_browser_replaces_its_token(anon_app, https_client, dhis2):
     _login(https_client)
-    first_uid = auth_store.get_credential()["pat_uid"]
+    first_uid = auth_store.get_credential("admin")["pat_uid"]
 
     other_browser = TestClient(anon_app, base_url="https://testserver")
     assert _login(other_browser).status_code == 200
 
-    assert first_uid not in dhis2.tokens
-    assert len(dhis2.tokens) == 1
-    assert https_client.get("/auth/me").status_code == 401
+    assert first_uid not in dhis2.tokens and len(dhis2.tokens) == 1
+    assert https_client.get("/auth/me").status_code == 401  # the first browser is logged out
     assert other_browser.get("/auth/me").status_code == 200
 
 
-def test_failed_second_login_does_not_leave_the_revoked_token_active(anon_app, https_client, dhis2):
+def test_each_account_has_its_own_token_and_jobs_use_the_latest(anon_app, https_client, dhis2):
     _login(https_client)
-    first_uid = auth_store.get_credential()["pat_uid"]
+    admin_uid = auth_store.get_credential("admin")["pat_uid"]
+    jdoe_browser = TestClient(anon_app, base_url="https://testserver")
+    _login(jdoe_browser, username="jdoe")
+    jdoe_uid = auth_store.get_credential("jdoe")["pat_uid"]
+
+    assert admin_uid != jdoe_uid and {admin_uid, jdoe_uid} <= set(dhis2.tokens)
+    assert https_client.get("/auth/me").json()["username"] == "admin"  # nobody logged out by another account
+    assert jdoe_browser.get("/auth/me").json()["username"] == "jdoe"
+    assert auth_store.get_credential()["pat_uid"] == jdoe_uid  # the jobs' token: the most recently created
+    assert dhis2.owners[auth_store.get_credential("admin")["token"]] == "admin"  # each token acts as its account
+
+    assert jdoe_browser.post("/auth/logout", headers={"Origin": FRONTEND}).status_code == 204
+    assert jdoe_uid not in dhis2.tokens  # a logout revokes that account's token only
+    assert https_client.get("/auth/me").status_code == 200
+    assert auth_store.get_credential()["pat_uid"] == admin_uid  # the jobs fall back on the remaining token
+
+
+def test_a_token_revoked_in_dhis2_is_replaced_at_login(https_client, dhis2):
+    _login(https_client)
+    uid = auth_store.get_credential("admin")["pat_uid"]
+    del dhis2.tokens[uid]  # revoked by hand in DHIS2
+    _session_ends(https_client)
+
+    assert _login(https_client).status_code == 200
+    assert auth_store.get_credential("admin")["pat_uid"] != uid and dhis2.created == 2
+
+
+def test_failed_login_from_another_browser_does_not_leave_the_revoked_token_active(anon_app, https_client, dhis2):
+    _login(https_client)
+    first_uid = auth_store.get_credential("admin")["pat_uid"]
     dhis2.fail_create = True
 
     other_browser = TestClient(anon_app, base_url="https://testserver")
     assert _login(other_browser).status_code == 502
 
     assert first_uid not in dhis2.tokens
-    assert auth_store.get_credential() is None
+    assert auth_store.get_credential("admin") is None
     assert https_client.get("/auth/me").status_code == 401
 
 
-def test_logout_revokes_token_and_clears_session(https_client, dhis2):
+def test_logout_revokes_the_token_and_clears_the_session(https_client, dhis2):
     _login(https_client)
 
     response = https_client.post("/auth/logout", headers={"Origin": FRONTEND})
 
     assert response.status_code == 204
     assert dhis2.tokens == {}
-    assert auth_store.get_credential() is None
+    assert auth_store.get_credential("admin") is None
     assert https_client.get("/auth/me").status_code == 401
 
 
 def test_a_login_or_logout_while_a_job_runs_keeps_the_token_that_job_read(anon_app, https_client, dhis2, checkpoint_store):
     _login(https_client)
-    first_uid = auth_store.get_credential()["pat_uid"]
+    first_uid = auth_store.get_credential("admin")["pat_uid"]
     checkpoint_store.start("import_gee", "import_gee_1")  # read DHIS_TOKEN at its start
 
     other_browser = TestClient(anon_app, base_url="https://testserver")
     assert _login(other_browser).status_code == 200
-    second_uid = auth_store.get_credential()["pat_uid"]
+    second_uid = auth_store.get_credential("admin")["pat_uid"]
     assert first_uid in dhis2.tokens  # the running import keeps working; the token expires on its own
     assert https_client.get("/auth/me").status_code == 401  # its session is still replaced
 
     assert other_browser.post("/auth/logout", headers={"Origin": FRONTEND}).status_code == 204
-    assert second_uid in dhis2.tokens and auth_store.get_credential() is None
+    assert second_uid in dhis2.tokens and auth_store.get_credential("admin") is None
 
-    # Logged out: etlhub no longer knows that token, it is left to expire (24 h at most).
+    # Logged out: etlhub no longer knows that token, it is left to expire (30 days at most).
     checkpoint_store.finish("import_gee_1", "success")
     _login(other_browser)
-    third_uid = auth_store.get_credential()["pat_uid"]
-    _login(https_client)  # no job any more: the previous token is revoked again
+    third_uid = auth_store.get_credential("admin")["pat_uid"]
+    _login(https_client)  # another browser, no job any more: the token it replaces is revoked
     assert third_uid not in dhis2.tokens
 
 
 def test_expired_credential_logs_the_user_out(https_client, fake_redis):
     _login(https_client)
-    fake_redis.delete(auth_store.CREDENTIAL_KEY)  # what Redis does when the TTL ends
+    fake_redis.delete(f"{auth_store.CREDENTIAL_KEY}:admin")  # what Redis does when the TTL ends
 
     assert https_client.get("/auth/me").status_code == 401
 

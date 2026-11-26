@@ -21,10 +21,15 @@ from etlhub.core.dependencies import get_auth_store
 logger = logging.getLogger(__name__)
 
 SESSION_COOKIE = "etlhub_session"
+# A random id per browser (never the token), kept 30 days: a new login from the browser that created the account's
+# token reuses it; a login from another browser replaces it.
+DEVICE_COOKIE = "etlhub_device"
 # WebSocket close code when the session is missing or no longer valid. etlui sends the
 # user back to /login on it (useWebSocketLogger.ts).
 WS_NOT_AUTHENTICATED = 4401
-TOKEN_LIFETIME_SECONDS = 24 * 3600
+# The browser session (and its cookie) ends after 24 h; each account's DHIS2 token lives 30 days (router.login).
+SESSION_LIFETIME_SECONDS = 24 * 3600
+TOKEN_LIFETIME_SECONDS = 30 * 24 * 3600
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 _UID = re.compile(r"^[A-Za-z0-9]{11}$")
@@ -124,10 +129,10 @@ def revoke_pat(client: httpx.Client, url: str, uid: str, *, auth: tuple | None =
 
 
 def session_from_cookies(cookies) -> dict | None:
-    """Session of the cookie ({user, pat_uid, test_mode}), valid only while it belongs to the active DHIS2 token."""
+    """Session of the cookie ({user, pat_uid, test_mode}), valid only while it belongs to its account's DHIS2 token."""
     session_id = cookies.get(SESSION_COOKIE)
     session = get_auth_store().get_session(session_id) if session_id else None
-    credential = get_auth_store().get_credential() if session else None
+    credential = get_auth_store().get_credential(session["user"]["username"]) if session else None
     if not session or not credential or credential["pat_uid"] != session["pat_uid"]:
         return None
     return session

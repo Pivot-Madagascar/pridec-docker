@@ -1,11 +1,12 @@
 """DHIS2 login state kept in Redis.
 
-- `dhis2:credential`: the one active DHIS2 personal access token, read by the ETL scripts.
+- `dhis2:credential:{username}`: the DHIS2 personal access token of each account (one per account, 30 days). The ETL
+  scripts read the most recently created one (`get_credential()` without a username).
 - `session:{sha256(id)}`: browser sessions; only the hash of the session id is stored.
 - `login:fail:{ip}:{username}`: failed login counter.
 
-Credential and sessions are written with the token's remaining lifetime (EX), so Redis
-deletes them when DHIS2 stops accepting the token. Redis persistence (AOF) keeps them
+A credential is written with its token's lifetime (EX), so Redis deletes it when DHIS2 stops accepting the token;
+a session lives 24 h. Redis persistence (AOF) keeps them
 across restarts; there is no other copy.
 """
 import hashlib
@@ -19,29 +20,38 @@ from etlhub.infrastructure.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 
-CREDENTIAL_KEY = "dhis2:credential"
+CREDENTIAL_KEY = "dhis2:credential"  # prefix of the per-account keys
+
+
+def _credential_key(username: str) -> str:
+    return f"{CREDENTIAL_KEY}:{username.lower()}"
 
 
 def _session_key(session_id: str) -> str:
     return "session:" + hashlib.sha256(session_id.encode()).hexdigest()
 
 
-def get_credential() -> dict | None:
-    """Return {url, token, pat_uid, username, expires_at} or None (missing, expired, Redis down)."""
+def get_credential(username: str | None = None) -> dict | None:
+    """{url, token, pat_uid, username, expires_at, device} of `username`'s token; without a username, the most recently
+    created token of all accounts (the ETL jobs'). None when missing, expired or Redis is down."""
     try:
-        data = get_redis().get(CREDENTIAL_KEY)
+        r = get_redis()
+        if username:
+            data = r.get(_credential_key(username))
+            return json.loads(data) if data else None
+        credentials = [json.loads(d) for d in (r.get(k) for k in r.scan_iter(f"{CREDENTIAL_KEY}:*")) if d]
     except redis.RedisError as e:
         logger.warning("Cannot read the DHIS2 credential from Redis: %s", e)
         return None
-    return json.loads(data) if data else None
+    return max(credentials, key=lambda c: c.get("created_at", c["expires_at"]), default=None)
 
 
 def set_credential(credential: dict, ttl: int) -> None:
-    get_redis().set(CREDENTIAL_KEY, json.dumps(credential), ex=ttl)
+    get_redis().set(_credential_key(credential["username"]), json.dumps(credential), ex=ttl)
 
 
-def delete_credential() -> None:
-    get_redis().delete(CREDENTIAL_KEY)
+def delete_credential(username: str) -> None:
+    get_redis().delete(_credential_key(username))
 
 
 def create_session(user: dict, pat_uid: str, ttl: int) -> str:

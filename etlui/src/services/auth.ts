@@ -24,7 +24,7 @@ export async function login(dhis2Url: string, username: string, password: string
 export const getDhis2Urls = (): Promise<string[]> =>
     api.get<string[]>('/auth/dhis2-urls').then(r => r.data, () => [])
 
-// Ends the etlhub session (it revokes the DHIS2 token). The auth store's logout() clears and redirects.
+// Ends the etlhub session and revokes this account's DHIS2 token (other accounts keep theirs). The auth store's logout() clears and redirects.
 export async function logout(): Promise<void> {
     await api.post('/auth/logout')
 }

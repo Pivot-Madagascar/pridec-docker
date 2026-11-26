@@ -78,7 +78,7 @@ async def handle_etl_logs_ws(websocket: WebSocket, job_id: str, gate: PipelineGa
         await websocket.send_json({"type": "etl_log_history", "job_id": job_id, "logs": history or ""})
 
         if status is None:
-            # Logs without a job record: the record expired (24 h), the job is long over.
+            # Logs without a job record: the record expired (30 days), the job is long over.
             await _complete(websocket, job_id, None)
             return
         await _send_status(websocket, job_id, status)

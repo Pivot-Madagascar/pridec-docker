@@ -49,7 +49,7 @@ async def get_request(request_id: str, service: TrackingService = Depends(get_tr
     response_model=ETLLog,
     summary="Logs of a job",
     description=(
-        "Log text of the job, plus its status and message while the job record exists in Redis (24 h). "
+        "Log text of the job, plus its status and message while the job record exists in Redis (30 days). "
         "Only for a job the pipeline of the current mode launched: one of the other mode is not found (404, 4004). "
         "Live stream: WebSocket on the same path (not described by OpenAPI; messages etl_log_history, "
         "job_status_update, etl_log_entry, etl_log_complete; close code 4004 unknown job, 4401 no session)."

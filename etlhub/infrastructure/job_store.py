@@ -12,6 +12,11 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler(sys.__stderr__))
 logger.propagate = False
 
+# job:<id> and etl_logs:<id> in Redis: the tracking page and the log WebSocket read them. logs/<id>.log keeps the logs
+# for good (logs/<id>.json the status, forecasts only). ponytail: no maxmemory on the redis service, so 30 days of
+# job logs stay in memory; cap it if Redis grows.
+JOB_TTL_SECONDS = 30 * 24 * 3600
+
 
 class JobStore:
     """Job records and log history. A failure is logged and never raised: storing must not fail the job itself."""
@@ -31,7 +36,7 @@ class JobStore:
             redis_client = get_redis()
             redis_client.setex(
                 f"job:{job_id}",
-                86400,
+                JOB_TTL_SECONDS,
                 json.dumps(data)
             )
         except Exception as e:
@@ -42,7 +47,7 @@ class JobStore:
         try:
             redis_client = get_redis()
             redis_client.append(f"etl_logs:{job_id}", text)
-            redis_client.expire(f"etl_logs:{job_id}", 86400)
+            redis_client.expire(f"etl_logs:{job_id}", JOB_TTL_SECONDS)
         except Exception as e:
             logger.warning("JobStore.append_logs(%s) to Redis failed: %s", job_id, e)
         try:

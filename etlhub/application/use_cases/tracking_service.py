@@ -18,7 +18,7 @@ class TrackingService:
         self._gate = gate
 
     def _with_job_status(self, log: dict) -> dict:
-        """job_status from the job record (Redis, 24 h): None without a job_id or once it expired.
+        """job_status from the job record (Redis, 30 days): None without a job_id or once it expired.
 
         A killed worker leaves its job "running" until DELETE /pipeline/lock sets it to error.
         """
@@ -37,7 +37,7 @@ class TrackingService:
         return RequestLog(**self._with_job_status(log))
 
     def get_etl_logs(self, job_id: str) -> ETLLog:
-        """Logs and, while the job record exists (24 h), its status and message."""
+        """Logs and, while the job record exists (30 days), its status and message."""
         if not self._gate.has_job(job_id):
             raise JobNotFoundError(f"ETL logs not found for this job_id: {job_id}")
         logs = self._job_repo.get_logs(job_id)

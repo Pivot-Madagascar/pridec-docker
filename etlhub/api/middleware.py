@@ -84,7 +84,8 @@ async def _with_job_id(response: Response) -> tuple[Response, str | None]:
     if "application/json" not in response.headers.get("content-type", "") or not length or int(length) > _MAX_JOB_BODY:
         return response, None
     body = b"".join([chunk async for chunk in response.body_iterator])
-    rebuilt = Response(content=body, status_code=response.status_code, headers=dict(response.headers))
+    rebuilt = Response(content=body, status_code=response.status_code)
+    rebuilt.raw_headers = response.raw_headers  # not dict(headers): it keeps one of two Set-Cookie (session, device)
     try:
         job_id = json.loads(body).get("job_id")
     except (ValueError, AttributeError):
