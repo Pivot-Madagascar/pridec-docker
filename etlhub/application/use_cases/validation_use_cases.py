@@ -21,6 +21,22 @@ def _check_external_data_level(external_data: pd.DataFrame | None, disease_data:
                          "level (fkt for a CSB run, or csb for an ADJ/COM run)? Every external covariate would be empty.")
 
 
+def _check_forecast_months(config: dict, input_data: pd.DataFrame) -> None:
+    """The R forecast (PRIDEC::split_cv_forecast) needs the months forecast_start - month_analysis and
+    forecast_start + month_assess - 1 in the data, else it stops in the forecast container. Refused here, with its cause.
+    ponytail: checks input_valid's periods, as the R data prep kept them so far; follow split_cv_forecast if it changes."""
+    start = pd.Period(year=int(config["forecast_start"][:4]), month=int(config["forecast_start"][4:6]), freq="M")
+    periods = set(input_data["period"].astype(str))
+    needed = [(start - config["month_analysis"]).strftime("%Y%m"), (start + config["month_assess"] - 1).strftime("%Y%m")]
+    missing = [p for p in needed if p not in periods]
+    if missing:
+        raise ValueError(
+            f"The data covers {min(periods, default='no month')} to {max(periods, default='no month')}, but the forecast of {start.strftime('%Y%m')} needs "
+            f"{' and '.join(missing)} (month_analysis {config['month_analysis']}, month_assess {config['month_assess']}): "
+            "the months of the grid come from disease_data, climate_data and external_data.csv; use an external_data "
+            "that covers them, or change month_analysis / month_assess.")
+
+
 def validate_input_files(
     config_path: str | None = None,
     external_data_path: str | None = None,
@@ -67,6 +83,7 @@ def validate_input_files(
         orgunit_poly=orgunit_poly,
         external_data=external_data,
     )
+    _check_forecast_months(result.config, result.input_data)  # before writing: no *_valid file for a forecast that would fail
 
     with open(str(input_base / "config_valid.json"), "w") as f:
         json.dump(result.config, f, indent=2)

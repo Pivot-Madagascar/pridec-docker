@@ -123,7 +123,7 @@ def preview_external_data(
     summary="Default input files offered in the current mode",
     description=(
         "item (config/<disease>, external_data/<level>) → {filename, size}. Files of the repo: assets/forecast_configs/ "
-        "in production, assets/test/inputs/ in test mode. An item whose file is missing is left out."
+        "in both modes (test mode rehearses production). An item whose file is missing is left out."
     ),
 )
 def default_files(

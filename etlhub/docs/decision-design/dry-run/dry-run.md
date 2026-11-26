@@ -98,7 +98,7 @@ folder `data/uploads/dry_run/` keep their old names: they hold the test state wr
 |---|---|---|---|
 | Pipeline state (checkpoints, runs, lock, journal) | `TEST_MODE` | SQLite `logs/etlhub.db` | in-memory SQLite in Redis `pipeline:dry_run:db` |
 | Uploaded files kept per cycle | `TEST_MODE` | `data/uploads/<cycle>/` | `data/uploads/dry_run/<cycle>/` (deleted when leaving test mode) |
-| Default input files | `TEST_MODE` | production defaults | `assets/test/inputs/` |
+| Default input files | `TEST_MODE` | production defaults | production defaults (since 2026-11-26; `assets/test/inputs/` before) |
 | Scripts that post to DHIS2 | `DRYRUN` (.env) | `?dryRun=false`: data written | `?dryRun=true`: DHIS2 validates, saves nothing |
 | Forecast container (R) | — | gets `DRYRUN` from `.env` via `--env-file` | same; the R code does not read it |
 

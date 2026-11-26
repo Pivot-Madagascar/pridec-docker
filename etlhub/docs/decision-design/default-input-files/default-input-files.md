@@ -10,32 +10,40 @@ clicks "Use default".
 
 ## Where the defaults come from
 
-The defaults are files of the repository, under `assets/`. Each mode has its own set:
+The defaults are files of the repository, under `assets/`, the **same in both modes** (since 2026-11-26):
 
-| Item | Production (`DRYRUN=false`) | Test mode (`DRYRUN=true`) |
-|---|---|---|
-| `config/Malaria` | `assets/forecast_configs/config_malaria.json` | `assets/test/inputs/config.json` |
-| `config/Diarrhea` | `assets/forecast_configs/config_diarrhea.json` | `assets/test/inputs/config.json` |
-| `config/Respinf` | `assets/forecast_configs/config_respiratory.json` | `assets/test/inputs/config.json` |
-| `external_data/fkt` (ADJ, COM) | `assets/forecast_configs/external_data_fkt.csv` | `assets/test/inputs/external_data.csv` |
-| `external_data/csb` (CSB) | `assets/forecast_configs/external_data_csb.csv` | `assets/test/inputs/external_data.csv` |
+| Item | Production and test mode |
+|---|---|
+| `config/Malaria` | `assets/forecast_configs/config_malaria.json` |
+| `config/Diarrhea` | `assets/forecast_configs/config_diarrhea.json` |
+| `config/Respinf` | `assets/forecast_configs/config_respiratory.json` |
+| `external_data/fkt` (ADJ, COM) | `assets/forecast_configs/external_data_fkt.csv` |
+| `external_data/csb` (CSB) | `assets/forecast_configs/external_data_csb.csv` |
 
-The mapping is `SOURCES` in `default_files.py`. `test_every_repo_default_exists` fails if a file is renamed.
+The mapping is `SOURCES` in `default_files.py` (both keys point to one dict). `test_every_repo_default_exists` fails
+if a file is renamed; `test_test_mode_offers_the_production_files` if the modes diverge again.
 
-### Known inconsistency in test mode (kept on purpose)
+### Why test mode no longer has its own set (decision of 2026-11-26)
 
-`assets/test/inputs/` is a **CSB/Malaria** test set, and test mode offers it for **every** disease and level:
+Until then test mode offered `assets/test/inputs/` (a CSB/Malaria set: `config.json` needing `mosquito_net`,
+`external_data.csv` with 5 columns). Two problems:
 
-- its `external_data.csv` has the 21 CSB orgUnits and **none** of the 195 fokontany ones;
-- its `config.json` needs `mosquito_net` in `pred_vars`, a column that only this test CSV has.
+- **Dates.** That set was built for the CLI's test mode, which forces `forecast_start` to `202601`; its
+  `external_data.csv` covers `202101` to `202612`. etlhub sets `forecast_start` to the cycle, and the R forecast
+  (`PRIDEC::split_cv_forecast`) needs the months `forecast_start - month_analysis` and
+  `forecast_start + month_assess - 1` in the data. From the cycle `202611` on, every test-mode forecast with that
+  default stopped in the container ("The data must contain the requested date range": needs `202701`, data until
+  `202612`). Seen on 2026-11-25, while the same cycle passed in production with the production files
+  (`201501` to `202712`).
+- **Levels.** One file for every level: an ADJ/COM (fokontany) run failed at `validate_inputs` (no orgUnit in common).
 
-In a test-mode **ADJ or COM** run (fokontany) with these defaults, the external columns are empty (NaN) after the
-merge in `validate_inputs`. `validate_inputs` only checks NAs in `external_data` *before* the merge, so the
-validation probably passes and the failure comes later, in the R forecast. This comes from reading the code: it was
-not run. Upload matching files for fokontany runs in test mode.
+Test mode is meant to rehearse production with the DHIS2 writes in dry run, so it now uses the production files.
+Cost: INLA runs in test mode too (longer forecasts). `assets/test/inputs/` stays for the CLI test procedure
+(`../../testing-QA/test-cli-cycle.md`) and the unit tests.
 
-The test `config.json` uses 5 models (inla, glm_nb, ranger, arimax, naive). It replaces the earlier decision to use
-a `forecast_assets/test_config.json` (Ranger + Naive) in test mode: that file never existed.
+`validate_inputs` also refuses, since the same day, a grid that misses one of those two months
+(`validation_use_cases._check_forecast_months`), whatever the mode and wherever the `external_data` comes from: the
+job fails at validation with the months covered and the months needed, not minutes later in the forecast.
 
 ## Storage: none, the files of `assets/` as they are now
 

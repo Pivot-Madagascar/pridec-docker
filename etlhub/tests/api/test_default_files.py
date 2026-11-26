@@ -55,6 +55,11 @@ def test_every_repo_default_exists():
             assert (ASSETS / relative).is_file(), relative
 
 
+def test_test_mode_offers_the_production_files():
+    """Test mode rehearses production (default-input-files.md, 2026-11-26)."""
+    assert SOURCES["test"] == SOURCES["production"]
+
+
 def test_defaults_follow_the_mode(client, checkpoint_store):
     assert client.get("/input/defaults").json()["external_data/fkt"]["filename"] == "external_data_fkt.csv"
 
