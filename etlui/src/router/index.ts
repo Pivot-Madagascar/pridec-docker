@@ -71,7 +71,7 @@ const router = createRouter({
       path: '/help',
       name: 'Help',
       component: () => import('@/views/Help/HelpView.vue'),
-      meta: { title: 'Help', label: 'Help' }
+      meta: { title: 'Help', label: 'Help', public: true } // public: linked from the login page
     },
     // Merged into /parameters on 2026-11-23: old links open its Configuration section.
     { path: '/admin/config', redirect: { path: '/parameters', query: { section: 'configuration' } } }

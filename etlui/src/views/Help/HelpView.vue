@@ -1,5 +1,9 @@
 <template>
-  <div class="flex flex-col gap-6" :lang="lang">
+  <!-- Before login the page comes alone (App.vue): its own margins and a way back. -->
+  <div class="flex flex-col gap-6" :class="{ 'mx-auto max-w-5xl px-4 py-8': !auth.isAuthenticated }" :lang="lang">
+    <router-link v-if="!auth.isAuthenticated" to="/login" class="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground hover:underline" data-test="help-back-login">
+      <ArrowLeft class="size-4" /> {{ lang === 'fr' ? 'Retour à la connexion' : 'Back to sign in' }}
+    </router-link>
     <Item class="p-0" data-test="page-header">
       <ItemContent>
         <ItemTitle><h2 class="text-2xl font-bold">{{ lang === 'fr' ? 'Aide' : 'Help' }}</h2></ItemTitle>
@@ -49,6 +53,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useStorage } from '@vueuse/core'
+import { ArrowLeft } from '@lucide/vue'
+import { useAuthStore } from '@/stores/auth'
 import { Card } from '@/components/ui/card'
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -58,4 +64,5 @@ import { HELP, type Lang } from './content'
 const stored = useStorage<Lang>('etlui-help-lang', navigator.language.startsWith('fr') ? 'fr' : 'en')
 const lang = computed({ get: () => (stored.value === 'fr' ? 'fr' : 'en'), set: v => { if (v) stored.value = v } })
 const t = computed(() => HELP[lang.value])
+const auth = useAuthStore()
 </script>

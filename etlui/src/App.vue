@@ -4,8 +4,8 @@
     <Toaster position="bottom-right" :toast-options="TOAST_OPTIONS" />
   </div>
 
-  <!-- Login: the page alone, no menu. -->
-  <router-view v-if="route.meta.public" />
+  <!-- Login, or Help before login: the page alone, no menu. -->
+  <router-view v-if="route.meta.public && !auth.isAuthenticated" />
   <!-- shadcn Sidebar: the side menu (open or folded, kept in its cookie), then the top bar and the page. -->
   <SidebarProvider v-else>
     <AppSidebar />

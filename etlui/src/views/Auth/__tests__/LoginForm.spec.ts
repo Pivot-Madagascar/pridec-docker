@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, RouterLinkStub } from '@vue/test-utils'
 
 const login = vi.fn().mockResolvedValue(undefined)
 vi.mock('@/services/auth', () => ({
@@ -20,5 +20,10 @@ describe('LoginForm', () => {
     await flushPromises()
     expect(login).toHaveBeenCalledWith('https://dhis2.example', 'admin', 'secret')
     expect((wrapper.find('#password').element as HTMLInputElement).value).toBe('') // cleared after the request
+  })
+
+  it('links to the Help page', () => {
+    const wrapper = mount(LoginForm, { global: { stubs: { RouterLink: RouterLinkStub } } })
+    expect(wrapper.findComponent(RouterLinkStub).props('to')).toBe('/help')
   })
 })

@@ -60,3 +60,11 @@ describe('the routes of an active pass (Forecast, Tracking, Logs)', () => {
     expect(router.currentRoute.value.path).toBe(path)
   })
 })
+
+describe('the route to Help', () => {
+  it('opens without a login (linked from the login page)', async () => {
+    useAuthStore().clear()
+    expect(await go('/help')).toBe('Help')
+    expect(await go('/journal')).toBe('Login') // the other pages still need one
+  })
+})
