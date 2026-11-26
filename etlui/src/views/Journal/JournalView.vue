@@ -153,7 +153,7 @@
                 <span v-if="e.mode === 'test'" class="ml-1 rounded bg-warning/15 px-1.5 py-0.5 text-warning">test</span>
               </TableCell>
               <TableCell class="px-3 py-2 text-xs">{{ e.step ?? '-' }}</TableCell>
-              <TableCell class="px-3 py-2 font-mono text-xs break-all">{{ e.item ?? '-' }}</TableCell>
+              <TableCell class="px-3 py-2 whitespace-nowrap font-mono text-xs">{{ e.item ?? '-' }}</TableCell>
               <TableCell class="px-3 py-2">
                 <span class="font-semibold" :class="EVENT_COLORS[e.event] ?? 'text-foreground'">{{ e.event }}</span>
                 <span v-if="e.detail" class="ml-2 text-xs text-muted-foreground">{{ formatDetail(e.detail) }}</span>
