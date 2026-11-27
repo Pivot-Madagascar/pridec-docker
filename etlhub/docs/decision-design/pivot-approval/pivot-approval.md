@@ -22,15 +22,26 @@ check each data element and ask on the terminal before posting a flagged one. et
    `ImportApprovalDialog` shows one selectable row each; flagged rows start unchecked. etlui keeps the answer in
    Pinia (`stores/fetchedImports.ts`) and asks again only when a Pivot import finishes, the pass or mode changes, or
    on Refresh.
-3. `POST /pipeline/imports/approve` `{decision: "approve", elements: [...]}`: the item `approve_imports` runs as a
-   synchronous job (`AnalyticsService.approve_imports`, as `post_forecast`): lock, pass's DRYRUN, journal `launched` with
-   `params: {elements}`, then `post_dataElements` per element; success unlocks `build_analytics`.
-   `reject` is unchanged (back to pending, `decided` event).
+3. `POST /pipeline/imports/approve` `{decision: "approve", elements: [...]}`: **202** `ETLResponse` with the `job_id` of
+   the Celery job `approve_imports` (since 2026-11-27; it ran synchronously in the API until then, answering 200
+   `{decision, job_id}` or 500). `AnalyticsService.approve_imports` checks the elements (409 before the gate), then
+   launches through `TaskLauncher` like any job: lock, the mode's DRYRUN, journal `launched` with `params: {elements}`
+   (`carry_over`); the worker runs `post_pivot_imports`, `post_dataElements` per element; success unlocks
+   `build_analytics`. Its end message (`Imports approved, posted: …`) is the job record's `message`; each element's
+   outcome stays readable after the job in `GET /pipeline/imports/fetched` (`post`). A failed post fails the job
+   (`error`, its message, the failed element's `post.error`). `reject` is unchanged: **200** `{decision}`, back to
+   pending, `decided` event.
+4. etlui follows the job like any launch: `decideImports` returns the `job_id` (`LaunchedJob`), `usePipeline` gives it
+   to the job toast (`followJob`), the checkpoints are polled while the lock is held, and the dialog keeps its lines at
+   "Posting…" while `approve_imports` is `running`; when it ends, `useFetchedImports` reads the list again and each line
+   shows its `post`.
 
 ## Decisions
 
 - **The approval is the post** (no new pipeline item): `approve_imports` already sits between the imports and
-  `build_analytics`, and `gate.run("approve_imports")` gives the lock, the DRYRUN check and the journal for free.
+  `build_analytics`, and its launch (`gate.start`) gives the lock, the DRYRUN check and the journal for free.
+- **A Celery job since 2026-11-27** (owner's decision, migration m2): no job runs in the API process any more, so none
+  redirects its process-wide `stdout`/`stderr`; the dialog follows the job instead of waiting for the answer.
 - **`elements: []` is allowed**: approving without posting (e.g. all flagged, DHIS2 already has the data). It is journaled.
 - **A flagged element can be posted**: the user decides, as the CLI's `[y/N]` prompt allowed.
 - **Element names are a closed list** (`Literal` of `check_import_availability.COM_ELEMENTS + CSB_ELEMENTS`): they become

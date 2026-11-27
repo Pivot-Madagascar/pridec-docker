@@ -1,5 +1,9 @@
 # Checkpoint control: diagrams
 
+> **Superseded in part** (note of 2026-11-27): passes, pass folders, the test mode per user, DRYRUN = TEST MODE and
+> the Pivot approval per element replaced parts of this design: see the note at the top of
+> [pipeline-checkpoints.md](pipeline-checkpoints.md).
+
 This document gathers, as diagrams, everything etlhub controls (target design, revised 2026-10-12).
 The workflow (3 phases, `pridec` commands, step order) follows the **reference documentation** (`pivot_forecast.sh`), which is authoritative;
 this document only adds etlhub's control layer on top of it (lock, checkpoints, cycles, confirmations).
@@ -191,7 +195,7 @@ flowchart LR
 ## 3. Launch control
 
 This path applies to every job launch: Celery (`/import_*`, `/fetch_*`, `/validate_inputs`, `/build_analytics`,
-`/forecast/`), synchronous (`/post_forecast`, `/update_key`), and `/calc_orgunit_alerts`. Everything happens in a single SQLite
+`/forecast/`), synchronous (`/post_forecast`, `/update_key`; both Celery jobs since 2026-11-24 / 2026-11-27), and `/calc_orgunit_alerts`. Everything happens in a single SQLite
 transaction (`BEGIN IMMEDIATE`); a refusal writes nothing.
 
 ```mermaid

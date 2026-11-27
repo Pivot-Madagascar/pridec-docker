@@ -30,7 +30,7 @@ It implements the "system" configuration already requested in [../pipeline-check
 
 ## 1. What becomes configurable, what stays in code
 
-An item that **runs** something needs a script (`ETL_JOBS` / `SYNC_JOBS` in `etl_use_cases.py`).
+An item that **runs** something needs a script (`ETL_JOBS` in `etl_use_cases.py`; `SYNC_JOBS` is gone since 2026-11-27).
 An interface cannot create a script: it can only **choose** among the jobs etlhub knows.
 So "add or remove items" means: **turn known jobs on or off, and declare the forecast units (`dataElement`s)**.
 

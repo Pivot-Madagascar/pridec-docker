@@ -1,5 +1,9 @@
 # Pipeline tracking: quick guide
 
+> **Superseded in part** (note of 2026-11-27): passes, pass folders, the test mode per user, DRYRUN = TEST MODE and
+> the Pivot approval per element replaced parts of this design: see the note at the top of
+> [pipeline-checkpoints.md](pipeline-checkpoints.md).
+
 This guide briefly explains how etlhub tracks and controls the monthly pipeline (target design, revised 2026-10-12).
 - The workflow itself (3 phases, `pridec` commands, order) follows the reference documentation (`pivot_forecast.sh`), which is authoritative.
 - The full design, and what is already implemented, are in [pipeline-checkpoints.md](pipeline-checkpoints.md).

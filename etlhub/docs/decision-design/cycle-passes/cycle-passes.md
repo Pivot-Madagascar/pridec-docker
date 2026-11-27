@@ -1,5 +1,12 @@
 # Cycle passes: redo, pause, resume, abandon
 
+> **Superseded in part** (note of 2026-11-27): § 12 describes the code of 2026-10-22. Since then `_settle()` is gone:
+> a month change no longer pauses the active pass, which stays active until the user pauses, abandons or completes it
+> ([../pass-config/pass-config.md](../pass-config/pass-config.md), 2026-11-20). The mode is per user, and leaving a mode
+> whose pass is active asks to pause or abandon it; test and production no longer share `input/` and `output/`
+> ([../mode-isolation/mode-isolation.md](../mode-isolation/mode-isolation.md), 2026-11-19). DRYRUN = TEST MODE
+> ([../dry-run/dry-run.md](../dry-run/dry-run.md), 2026-11-23).
+
 > **Since 2026-10-27**: a new pass can start while the month's last pass is paused (with confirm), and files live in
 > `input/<cycle>/<pass>/` and `output/<cycle>/<pass>/` instead of `uploads/`: see [../pass-folders/pass-folders.md](../pass-folders/pass-folders.md).
 >

@@ -1,5 +1,9 @@
 # Pipeline checkpoints: the essentials
 
+> **Superseded in part** (note of 2026-11-27): passes, pass folders, the test mode per user, DRYRUN = TEST MODE and
+> the Pivot approval per element replaced parts of this design: see the note at the top of
+> [pipeline-checkpoints.md](pipeline-checkpoints.md).
+
 etlhub records what **really succeeded** in the month's pipeline, and **refuses** what breaks the rules
 (design revised on 2026-10-12, applied except `calc_orgunit_alerts`, the test-mode scope and the `external_data` check;
 the system-configuration changes below are requested for the next version).

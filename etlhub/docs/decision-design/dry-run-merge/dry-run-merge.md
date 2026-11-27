@@ -1,5 +1,12 @@
 # Merging DRYRUN and TEST_MODE, with the runtime config in Redis
 
+> **Superseded** (note of 2026-11-27): not implemented as analysed here. The owner's rule **DRYRUN = TEST MODE**
+> (2026-11-20, applied on 2026-11-23, [../dry-run/dry-run.md](../dry-run/dry-run.md)) settled it: the mode served decides
+> DRYRUN for every job; `.env`'s `DRYRUN` is the CLI's only and does not choose the mode (a session starts in test);
+> `DRYRUN` is no editable key in Redis. The mode is per user since 2026-11-19 (`pipeline:test_mode` is gone,
+> [../mode-isolation/mode-isolation.md](../mode-isolation/mode-isolation.md)), and the forecast container gets no env
+> since 2026-11-25 ([../forecast-sandbox/forecast-sandbox.md](../forecast-sandbox/forecast-sandbox.md)). Kept as history.
+
 > **Status: analysis, 2026-10-22. Not implemented, not decided.** Open questions in § 8.
 > Builds on [../dry-run/dry-run.md](../dry-run/dry-run.md) (current state) and
 > [../cycle-passes/cycle-passes.md](../cycle-passes/cycle-passes.md) (leaving test mode pauses the test pass).

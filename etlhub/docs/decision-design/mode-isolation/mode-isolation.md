@@ -163,6 +163,15 @@ Confirmed by the owner (2026-11-19):
 ## 6. Limits
 
 - Two users of the same mode share its passes, as before.
+- **The editable config is shared by both modes** (owner's decision, 2026-11-27: documented, not split).
+  `app:config:dynamic` is one Redis key: `PUT /api/config` or a reload from either mode changes it for both.
+  `PARENT_OU`, `LOG_LEVEL` and, since 2026-11-27 (schema version 4), `PIVOT_URL` apply to the passes started after
+  (a started pass keeps its own, `PASS_CONFIG`, `pass-config/`); a pass from before 2026-11-27 has no `PIVOT_URL`
+  of its own, so its next `import_pivot_*`, in either mode, still reads the new value.
+  The run context a test job writes (`DISEASE_CODE`, `OU_LEVEL`, `ALERT_NAME`, `apply_to_config_store`) shows in
+  production's `GET /api/config`. etlui's Parameters page shows the fields read only (only "Reload from .env",
+  which copies the same `.env` for both modes), and says the config is shared; `PUT /api/config` is reachable
+  through the API only.
 - `mode_changed` events stay in the journal of the mode that was left: they say a switch happened, not what was
   done in the other mode.
 - `GET /api/tracking/requests` lists at most `limit` requests of the mode, after filtering (SQL), so a mode is not

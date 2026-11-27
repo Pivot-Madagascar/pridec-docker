@@ -14,6 +14,12 @@ Status: implemented 2026-11-20. Schema version 3: run `python -m etlhub.migrate`
 > each `POST /import_gee` may send `gee_variables`, written on the pass once the launch is accepted. PARENT_OU, LOG_LEVEL
 > and the DHIS2 URL stay fixed as below.
 
+> **Changed on 2026-11-27: PIVOT_URL is fixed by the pass too** (owner's decision), like PARENT_OU and LOG_LEVEL:
+> column `pivot_url` (schema version 4, migration 4), read from the editable config when the pass starts, journaled
+> with `pass_started`, returned with the pass. `PASS_KEYS` maps `PIVOT_URL` to it, so `fetch_pivot.pivot_url()` reads
+> the pass's: a `PUT /api/config` or a reload during a pass no longer changes the Pivot its imports read. A pass from
+> before has NULL and still reads the editable config (Redis). Home shows it under "Parameters of this pass".
+
 ## Decision
 
 A pass fixes its whole configuration when it starts, and nothing changes it afterwards: not Admin Config, not `.env`, not another login, not the calendar.
@@ -22,21 +28,21 @@ A pass fixes its whole configuration when it starts, and nothing changes it afte
 |---|---|---|
 | GEE variables | Home's checkboxes, over `pridec_gee.AVAILABLE_VARIABLES` (body `gee_variables`; absent: all; empty or unknown: 400) | `gee_variables` (comma-separated, in `pridec_gee`'s order; NULL: all) |
 | DRYRUN | Home's Dry run switch (body `dry_run`; absent: true in test mode, else `DRYRUN` of `.env`) | `dry_run` |
-| PARENT_OU, LOG_LEVEL | the editable config (Redis) at that moment | `parent_ou`, `log_level` |
+| PARENT_OU, LOG_LEVEL, PIVOT_URL (since 2026-11-27) | the editable config (Redis) at that moment | `parent_ou`, `log_level`, `pivot_url` |
 | DHIS2 URL | the credential of the last login | `dhis_url` |
 | Cycle | the target month (already the case) | `cycle` |
 
 - `POST /pipeline/passes` fixes it (Home, "New pass"). A launch that starts a pass (no pass active) fixes the values of that moment, with every GEE variable and the launch's DRYRUN.
 - Journaled with `pass_started` (its `detail`), returned with the pass everywhere (`GET /pipeline/checkpoints` `pass`, `GET /pipeline/cycles`).
 - **Launches follow it** (`CheckpointStore._check_config`): a launch asking another `dry_run`, or from a session on another DHIS2 URL, is refused (409), nothing written. `update_key` in a dry-run pass is refused: only a pass started without dry run can update the key.
-- **Jobs read their own pass's**: `CeleryTaskLauncher.launch` hands `pass_config` to the Celery task, `_run_task` puts it in `core/job_context.job_pass_config`, and `script_config._get` returns it for `GEE_VARIABLES`, `PARENT_OU`, `LOG_LEVEL` (`PASS_KEYS`). Outside a Celery job (the inline `post_forecast` / `update_key`, the import parameters, the availability check) it reads the active pass (`CheckpointStore.pass_config()`). `_dhis2_credential` refuses a credential whose URL is not the job's pass's (someone logged in elsewhere since the launch). The forecast's env file got the pass's `PARENT_OU` and `LOG_LEVEL` until 2026-11-25; the forecast now gets no env at all (the R code reads none: `decision-design/forecast-sandbox/`).
+- **Jobs read their own pass's**: `CeleryTaskLauncher.launch` hands `pass_config` to the Celery task, `_run_task` puts it in `core/job_context.job_pass_config`, and `script_config._get` returns it for `GEE_VARIABLES`, `PARENT_OU`, `LOG_LEVEL`, `PIVOT_URL` (`PASS_KEYS`; a NULL falls through to Redis). Outside a Celery job (the import parameters, the availability check; every job is a Celery job since 2026-11-27) it reads the active pass (`CheckpointStore.pass_config()`). `_dhis2_credential` refuses a credential whose URL is not the job's pass's (someone logged in elsewhere since the launch). The forecast's env file got the pass's `PARENT_OU` and `LOG_LEVEL` until 2026-11-25; the forecast now gets no env at all (the R code reads none: `decision-design/forecast-sandbox/`).
 - **No more automatic pause at a month change.** A pass stays active on its month until the user pauses, abandons or completes it. A new month's pass starts once the active one is paused or abandoned.
-- `GEE_VARIABLES` left `config_store.EDITABLE_KEYS`: `GET /api/config` returns the variables of `pridec_gee`, read only; `PUT /api/config` no longer takes them. Admin Config edits PARENT_OU and LOG_LEVEL for the **next** passes.
+- `GEE_VARIABLES` left `config_store.EDITABLE_KEYS`: `GET /api/config` returns the variables of `pridec_gee`, read only; `PUT /api/config` no longer takes them. Admin Config edits PARENT_OU, LOG_LEVEL and PIVOT_URL for the **next** passes.
 - The import parameters (journaled with each launch, compared for carry-over and for reusing availability checks) follow the pass's GEE variables and PARENT_OU: a new pass with other values does not carry over an earlier import.
 
 ## Passes from before 2026-11-20
 
-Migration 3 adds the columns as NULL: such a pass fixes nothing and behaves as before (Redis / `.env` values, the launch's DRYRUN or the default, no DHIS2 check), except the month change, which no longer pauses it.
+Migration 3 adds the columns as NULL: such a pass fixes nothing and behaves as before (Redis / `.env` values, the launch's DRYRUN or the default, no DHIS2 check), except the month change, which no longer pauses it. Migration 4 (2026-11-27) adds `pivot_url` the same way: a pass started before it reads PIVOT_URL from the editable config, as before.
 
 ## etlui
 

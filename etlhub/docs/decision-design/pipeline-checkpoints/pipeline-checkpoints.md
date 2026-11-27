@@ -1,5 +1,18 @@
 # Pipeline checkpoints: target design
 
+> **Superseded in part** (note of 2026-11-27). This is the design of 2026-10-09 and 2026-10-12. Later decisions
+> changed it, and the code follows them: a month runs as **passes**
+> ([../cycle-passes/cycle-passes.md](../cycle-passes/cycle-passes.md), 2026-10-22); kept files live in
+> `input/<cycle>/<pass>/` and `output/<cycle>/<pass>/`, not `uploads/`
+> ([../pass-folders/pass-folders.md](../pass-folders/pass-folders.md), 2026-10-27); the test mode is **per user**, with its
+> own `test/input` and `test/output`, and leaving a mode pauses or abandons its pass instead of erasing it
+> ([../mode-isolation/mode-isolation.md](../mode-isolation/mode-isolation.md), 2026-11-19); Pivot imports are fetched, then
+> approved per data element ([../pivot-approval/pivot-approval.md](../pivot-approval/pivot-approval.md), 2026-11-20); a pass
+> fixes its configuration and a month change no longer pauses it
+> ([../pass-config/pass-config.md](../pass-config/pass-config.md), 2026-11-20); **DRYRUN = TEST MODE** for every job
+> ([../dry-run/dry-run.md](../dry-run/dry-run.md), 2026-11-23); `calc_orgunit_alerts` is a Celery job (2026-11-24).
+> Where this document disagrees with them or with the code, they win.
+
 > **Status (2026-10-12)**
 >
 > - **Design revised on 2026-10-12** to align with the reference documentation (`pivot_forecast.sh`):
@@ -442,7 +455,7 @@ Limits:
 12. ✅ **etlui** (`usePipeline`, `ModeToggle` before step ①, `ForecastRuns`, `ImpactDialog`): reads the route, no ✓ computed locally anymore; choice of the pair and opening of the run;
     file pickers under the displayed pair; approval screen with the report and the CSV state;
     409 messages; impact dialog on `confirmation_required` then resend with `confirm=true`.
-13. ✅ **Documentation**: endpoint table, `ARCHITECTURE.md`, `CLAUDE.MD`, `known-issues.md`, guide and diagrams.
+13. ✅ **Documentation**: endpoint table, `ARCHITECTURE.md`, `CLAUDE.md`, `known-issues.md`, guide and diagrams.
 14. ✅ **Automatic month switch** and **test mode** (`PUT /pipeline/mode`, checkpoints in Redis, confirmed exit).
 15. ✅ **Phase 3**: `system_update` = `build_analytics` → `update_key`; `calc_csb_alerts` and `build_analytics_after_alerts` removed (2 slots for `build_analytics`).
 16. ✅ **`approve_imports`**: decision item in `data_import`, prerequisite of `build_analytics`;

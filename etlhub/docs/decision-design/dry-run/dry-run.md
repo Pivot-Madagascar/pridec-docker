@@ -5,7 +5,7 @@
 > under etlhub (`CheckpointStore.default_dry_run()` = the mode; `script_config._get("DRYRUN")` never reads `.env`).
 > `update_key` is refused in test mode. Everything below is history.
 
-> **Since 2026-11-17:** `DRYRUN` of `.env` is only the default of a launch outside test mode. Each launch of a job that writes to DHIS2 (`domain/pipeline.DHIS2_WRITES`: the 3 imports, `build_analytics`, `post_forecast`, `update_key`) takes an optional `dry_run`; absent, `true` in test mode, else `DRYRUN` of `.env` (`PipelineGate.default_dry_run`); the job's value is journaled (`launched` `dry_run`) and read by the scripts through `script_config._get` (`core/job_context.job_dry_run`, for that job only); `update_key` in dry run is refused (409: `pivot_dhis_tools` ignores its `dryRun`). etlui: one Dry run switch per pass (Dashboard).
+> **Since 2026-11-17:** `DRYRUN` of `.env` is only the default of a launch outside test mode. Each launch of a job that writes to DHIS2 (the 3 imports, `build_analytics`, `post_forecast`, `update_key`) takes an optional `dry_run`; absent, `true` in test mode, else `DRYRUN` of `.env` (`PipelineGate.default_dry_run`); the job's value is journaled (`launched` `dry_run`) and read by the scripts through `script_config._get` (`core/job_context.job_dry_run`, for that job only); `update_key` in dry run is refused (409: `pivot_dhis_tools` ignores its `dryRun`). etlui: one Dry run switch per pass (Dashboard).
 
 What the code did on 2026-10-20, not a target design. Related: the test-mode part of
 [pipeline-checkpoints.md](../pipeline-checkpoints/pipeline-checkpoints.md), [default-input-files.md](../default-input-files/default-input-files.md).
@@ -131,7 +131,7 @@ Not concerned: `/api/auth/*`, `/api/tracking/*`, `/api/config/*`, `/output/*`, `
 | `POST /pipeline/runs/current/approve`, `…/skip_alerts`, `POST /pipeline/imports/approve` | that mode's store | — |
 | `PUT /pipeline/cycle`, `DELETE /pipeline/lock` | that mode's store | — |
 | `POST /import_gee`, `/import_pivot_com`, `/import_pivot_csb` (202) | gate in that mode's store | the script posts with `dryRun` |
-| `POST /post_forecast`, `/update_key` (200, synchronous) | gate in that mode's store | the script posts with `dryRun` |
+| `POST /post_forecast`, `/update_key` (202, Celery jobs since 2026-11-24 / 2026-11-27) | gate in that mode's store | the script posts with `dryRun` |
 | `POST /build_analytics` (202) | gate in that mode's store | **ignored** by the DHIS2 call |
 | `POST /fetch_climate`, `/fetch_disease`, `/fetch_geojson`, `/validate_inputs` (202) | gate in that mode's store | — |
 | `POST /forecast/` (202) | gate in that mode's store | copied into the container env file (unused by R) |

@@ -83,11 +83,11 @@ Start the FastAPI application (Uvicorn server) from the etlhub directory in the 
 cd etlhub && python -m run_server
 ```
 
-The server should start on `http://localhost:8000` by default.
+The server starts on `http://localhost:8111` (the port is set in `etlhub/run_server.py`).
 
 To verify that the server is working, access:
-- **API Documentation**: http://localhost:8000/docs
-- **Redoc Documentation**: http://localhost:8000/redoc
+- **API Documentation**: http://localhost:8111/docs
+- **Redoc Documentation**: http://localhost:8111/redoc
 
 ## 6. Set Up and Start the Frontend (etlui)
 
