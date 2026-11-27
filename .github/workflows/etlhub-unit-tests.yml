@@ -40,16 +40,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('etlhub/requirements*.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('etlhub/requirements*.txt', 'etlhub/constraints.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-test.txt
-          pip install pytest-cov
+          # constraints.txt: the exact versions tested in test-venv (pytest-cov included).
+          pip install -r requirements.txt -r requirements-test.txt pytest-cov -c constraints.txt
 
       - name: Run unit tests
         run: |

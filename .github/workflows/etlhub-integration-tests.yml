@@ -19,31 +19,37 @@ jobs:
       has_secrets: ${{ steps.check.outputs.has_secrets }}
       dhis2_reachable: ${{ steps.ping.outputs.reachable }}
     steps:
+      # Same secrets as e2e-playwright.yml (environment init_test). A missing one fails the run: a skipped
+      # integration test must not look green.
       - name: Check secrets
         id: check
         env:
-          DHIS_URL: ${{ secrets.DHIS2_URL }}
-          DHIS_TOKEN: ${{ secrets.DHIS2_TOKEN }}
+          DHIS2_TEST_URL: ${{ secrets.DHIS2_TEST_URL }}
+          DHIS2_TEST_USERNAME: ${{ secrets.DHIS2_TEST_USERNAME }}
+          DHIS2_TEST_PASSWORD: ${{ secrets.DHIS2_TEST_PASSWORD }}
         run: |
-          if [ -n "$DHIS_URL" ] && [ -n "$DHIS_TOKEN" ]; then
-            echo "has_secrets=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_secrets=false" >> "$GITHUB_OUTPUT"
+          missing=""
+          for name in DHIS2_TEST_URL DHIS2_TEST_USERNAME DHIS2_TEST_PASSWORD; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets in environment init_test:$missing"
+            exit 1
           fi
+          echo "has_secrets=true" >> "$GITHUB_OUTPUT"
 
-      - name: Ping DHIS2_URL
+      - name: Ping DHIS2_TEST_URL
         id: ping
-        if: steps.check.outputs.has_secrets == 'true'
         env:
-          DHIS_URL: ${{ secrets.DHIS2_URL }}
+          DHIS2_TEST_URL: ${{ secrets.DHIS2_TEST_URL }}
         run: |
-          # Never log the token here, only testing host reachability.
+          # Never log the credentials here, only testing host reachability.
           if curl --silent --show-error --fail --max-time 10 \
               --output /dev/null --write-out "HTTP %{http_code}\n" \
-              "$DHIS_URL/api/system/info"; then
+              "${DHIS2_TEST_URL%/}/api/system/info"; then
             echo "reachable=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::DHIS_URL ($DHIS_URL) is not reachable from the GitHub Actions runner."
+            echo "::warning::DHIS2_TEST_URL is not reachable from the GitHub Actions runner."
             echo "reachable=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -89,13 +95,26 @@ jobs:
 
       - name: Run integration tests
         env:
-          DHIS_URL: ${{ secrets.DHIS2_URL }}
-          DHIS_TOKEN: ${{ secrets.DHIS2_TOKEN }}
+          DHIS2_TEST_URL: ${{ secrets.DHIS2_TEST_URL }}
+          DHIS2_TEST_USERNAME: ${{ secrets.DHIS2_TEST_USERNAME }}
+          DHIS2_TEST_PASSWORD: ${{ secrets.DHIS2_TEST_PASSWORD }}
         run: |
           pytest tests -v -m "integration" \
             --junitxml=test-results/junit-integration.xml \
             --cov=. \
             --cov-report=xml:test-results/coverage-integration.xml
+
+      # A skipped integration test (missing DHIS2_TEST_* variables) leaves pytest green: fail when none ran.
+      - name: Fail if no integration test ran
+        run: |
+          python - <<'EOF'
+          import sys, xml.etree.ElementTree as ET
+          root = ET.parse("test-results/junit-integration.xml").getroot()
+          suites = [root] if root.tag == "testsuite" else list(root)
+          ran = sum(int(s.get("tests", 0)) - int(s.get("skipped", 0)) for s in suites)
+          print(f"{ran} integration test(s) ran")
+          sys.exit(1 if ran == 0 else 0)
+          EOF
 
       - name: Publish integration test report
         if: always()
