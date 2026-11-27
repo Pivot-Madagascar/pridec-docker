@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 
-from etlhub.api.routers import BLOCKED, CONFIRM_RELAUNCH, WebhookUrl, error_doc
+from etlhub.api.routers import BLOCKED, CONFIRM_RELAUNCH, LAUNCH_FAILED, WebhookUrl, error_doc
 from etlhub.application.use_cases.forecast_service import ForecastService
 from etlhub.domain.schemas import ETLResponse, ForecastParams, JobStatus
 from etlhub.core.dependencies import get_forecast_service
@@ -26,9 +26,10 @@ router = APIRouter(prefix="/forecast", tags=["Forecast"])
             "description": "Validation Error - missing or invalid forecast parameters, or a path outside input/",
         },
         **BLOCKED,
+        **LAUNCH_FAILED,
     },
 )
-async def api_forecast(
+def api_forecast(
     params: ForecastParams,
     webhook_url: WebhookUrl = Query(None),
     confirm: bool = CONFIRM_RELAUNCH,
@@ -56,7 +57,7 @@ async def api_forecast(
         404: error_doc("Job not found - invalid or expired job ID", {"message": "Job not found"}),
     },
 )
-async def forecast_status(
+def forecast_status(
     job_id: str,
     service: ForecastService = Depends(get_forecast_service),
 ):

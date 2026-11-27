@@ -76,3 +76,11 @@ def test_openapi_documents_every_operation_and_its_session(anon_app):
     assert [(m, p) for m, p, op in operations if not op.get("description")] == []
     assert {(m, p) for m, p, op in operations if "security" not in op} == PUBLIC - {("GET", "/")}
     assert [(m, p) for m, p, op in operations if "security" in op and "401" not in op["responses"]] == []
+
+
+def test_openapi_declares_the_500_of_every_launch(anon_app):
+    """A launch (202) can fail before its job runs: the run context (ETLException), the store or the broker -> 500."""
+    operations = [(m.upper(), p, op) for p, ops in anon_app.openapi()["paths"].items() for m, op in ops.items()]
+    launches = [(m, p) for m, p, op in operations if "202" in op["responses"]]
+    assert ("POST", "/import_pivot_com") in launches and ("POST", "/forecast/") in launches
+    assert [(m, p) for m, p, op in operations if "202" in op["responses"] and "500" not in op["responses"]] == []

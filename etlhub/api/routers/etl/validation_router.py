@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query, Depends
 
-from etlhub.api.routers import BLOCKED, CONFIRM_OVERWRITE, WebhookUrl
+from etlhub.api.routers import BLOCKED, CONFIRM_OVERWRITE, LAUNCH_FAILED, WebhookUrl
 from etlhub.application.use_cases.ingestion_service import IngestionService
 from etlhub.domain.schemas import ETLResponse, InputPath
 from etlhub.core.dependencies import get_ingestion_service
@@ -20,9 +20,9 @@ router = APIRouter(tags=["Validation"])
         "Connect to `/api/tracking/etl-logs/{job_id}` for live progress."
     ),
     response_description="Validation task accepted and queued in background.",
-    responses=BLOCKED,
+    responses={**BLOCKED, **LAUNCH_FAILED},
 )
-async def api_validate_inputs(
+def api_validate_inputs(
     config_path: InputPath | None = Query(None, description="Path to config.json, under input/"),
     external_data_path: InputPath | None = Query(None, description="Path to external_data.csv, under input/"),
     disease_data_path: InputPath | None = Query(None, description="Path to disease_data.json, under input/"),

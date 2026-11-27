@@ -28,6 +28,14 @@ def error_doc(description: str, example: dict) -> dict:
     return {"description": description, "content": {"application/json": {"example": example}}}
 
 
+# Every launch: a run job's writes the run context to Redis (checkpoint_store.apply_to_config_store, ETLException ->
+# {message}); any launch can also meet a store or broker failure (FastAPI's plain-text 500).
+LAUNCH_FAILED = {500: error_doc(
+    "Internal error, nothing runs: the run context of a run job could not be written to Redis (body `{message}`), "
+    "or the pipeline store or the broker failed (plain text `Internal Server Error`). A job already recorded is "
+    "marked `error` and the pipeline lock is freed.",
+    {"message": "Could not write the forecast run context (DISEASE_CODE, OU_LEVEL) to Redis"},
+)}
 NOT_AUTHENTICATED = {401: error_doc("No valid session: log in with POST /auth/login", {"detail": "Not authenticated"})}
 BLOCKED = {409: {
     "description": (

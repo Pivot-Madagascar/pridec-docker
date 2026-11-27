@@ -22,7 +22,7 @@ _NOT_FOUND = {404: error_doc("Unknown id, or expired from Redis and absent from 
         "recorded in the other mode, or before the mode was recorded, is never listed."
     ),
 )
-async def list_requests(
+def list_requests(
     limit: int = Query(50, description="Maximum number of entries"),
     endpoint: str | None = Query(None, description="Keep only requests whose URL contains this text"),
     service: TrackingService = Depends(get_tracking_service),
@@ -40,7 +40,7 @@ async def list_requests(
     ),
     responses=_NOT_FOUND,
 )
-async def get_request(request_id: str, service: TrackingService = Depends(get_tracking_service)):
+def get_request(request_id: str, service: TrackingService = Depends(get_tracking_service)):
     return service.get_request(request_id)
 
 
@@ -56,7 +56,7 @@ async def get_request(request_id: str, service: TrackingService = Depends(get_tr
     ),
     responses=_NOT_FOUND,
 )
-async def get_etl_logs(job_id: str, service: TrackingService = Depends(get_tracking_service)):
+def get_etl_logs(job_id: str, service: TrackingService = Depends(get_tracking_service)):
     return service.get_etl_logs(job_id)
 
 

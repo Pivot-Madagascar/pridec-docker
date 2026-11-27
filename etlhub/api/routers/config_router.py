@@ -68,8 +68,8 @@ def _response(store: ConfigRepository, auth: AuthStore) -> ConfigResponse:
         "read only (a pass chooses its own when it starts)."
     ),
 )
-async def get_config(store: ConfigRepository = Depends(get_config_store),
-                     auth: AuthStore = Depends(get_auth_store)) -> ConfigResponse:
+def get_config(store: ConfigRepository = Depends(get_config_store),
+               auth: AuthStore = Depends(get_auth_store)) -> ConfigResponse:
     return _response(store, auth)
 
 @router.put(
@@ -79,8 +79,8 @@ async def get_config(store: ConfigRepository = Depends(get_config_store),
     description="Writes the fields that are set (null fields are left as they are) and returns the new configuration.",
     responses={502: error_doc("Redis write failed", {"detail": "Failed to write config to Redis"})},
 )
-async def update_config(config: ConfigUpdate, store: ConfigRepository = Depends(get_config_store),
-                        auth: AuthStore = Depends(get_auth_store)) -> ConfigResponse:
+def update_config(config: ConfigUpdate, store: ConfigRepository = Depends(get_config_store),
+                  auth: AuthStore = Depends(get_auth_store)) -> ConfigResponse:
     updates = {k.upper(): v for k, v in config.model_dump(exclude_none=True).items()}
     if updates and not store.set_all(updates):
         raise HTTPException(status_code=502, detail="Failed to write config to Redis")
@@ -92,8 +92,8 @@ async def update_config(config: ConfigUpdate, store: ConfigRepository = Depends(
     summary="Reload the dynamic configuration from .env",
     responses={502: error_doc("Redis write failed", {"detail": "Failed to write config to Redis"})},
 )
-async def reload_config(store: ConfigRepository = Depends(get_config_store),
-                        auth: AuthStore = Depends(get_auth_store)) -> ConfigResponse:
+def reload_config(store: ConfigRepository = Depends(get_config_store),
+                  auth: AuthStore = Depends(get_auth_store)) -> ConfigResponse:
     """Rereads the editable keys (config_store.EDITABLE_KEYS) from etlhub's .env and writes them to Redis,
     overwriting the current values, as the API does at each start. A key missing from .env is removed from Redis.
     Use it after editing .env by hand."""

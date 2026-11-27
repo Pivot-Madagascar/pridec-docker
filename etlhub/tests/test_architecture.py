@@ -1,4 +1,4 @@
-"""Guard: imports between etlhub layers follow the hexagonal direction (etlhub/CLAUDE.MD, "Architecture").
+"""Guard: imports between etlhub layers follow the hexagonal direction (etlhub/CLAUDE.md, "Architecture").
 
 Every import is checked, lazy ones and `if TYPE_CHECKING:` ones included.
 A new crossing fails this test; fix the code, never extend ALLOWED_DEBT.

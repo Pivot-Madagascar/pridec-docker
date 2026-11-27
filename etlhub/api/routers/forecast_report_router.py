@@ -28,7 +28,7 @@ router = APIRouter(prefix="/output", tags=["Output Files"])
         500: error_doc("The file exists but cannot be read", {"detail": "Failed to read forecast report"}),
     },
 )
-async def get_forecast_report():
+def get_forecast_report():
     report_path = work_dir(get_settings().data_dir, "output", current_test_mode()) / "forecast_report.html"
 
     if not os.path.exists(report_path):

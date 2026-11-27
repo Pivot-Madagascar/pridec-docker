@@ -114,7 +114,7 @@ def test_reload_uses_the_same_loading(redis, client):
 
 
 def test_the_routes_get_their_stores_by_injection(redis, app, client):
-    """Depends in the route signatures (etlhub/CLAUDE.MD, Architecture): app.dependency_overrides reaches every route."""
+    """Depends in the route signatures (etlhub/CLAUDE.md, Architecture): app.dependency_overrides reaches every route."""
     from etlhub.core.dependencies import get_auth_store, get_config_store
 
     class Store:

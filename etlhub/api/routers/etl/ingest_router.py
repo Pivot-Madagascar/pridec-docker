@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query, Depends
 
-from etlhub.api.routers import BLOCKED, CONFIRM_OVERWRITE, CONFIRM_RELAUNCH, WebhookUrl, error_doc
+from etlhub.api.routers import BLOCKED, CONFIRM_OVERWRITE, CONFIRM_RELAUNCH, LAUNCH_FAILED, WebhookUrl, error_doc
 from etlhub.application.use_cases.availability_service import AvailabilityService
 from etlhub.application.use_cases.ingestion_service import IngestionService, chosen_gee_variables
 from etlhub.domain.schemas import ETLResponse, GeeChoice, ImportAvailabilityReport
@@ -12,7 +12,7 @@ router = APIRouter(tags=["Ingest"])
 def add_launch_route(router: APIRouter, task_type: str, summary: str, description: str, response_description: str,
                      message: str, confirm_query=CONFIRM_RELAUNCH) -> None:
     """POST /{task_type}: queues the Celery job, 202 with its job_id. Its DRYRUN is the mode's (DRYRUN = TEST MODE)."""
-    async def endpoint(
+    def endpoint(
         webhook_url: WebhookUrl = Query(None),
         confirm: bool = confirm_query,
         service: IngestionService = Depends(get_ingestion_service),
@@ -27,7 +27,7 @@ def add_launch_route(router: APIRouter, task_type: str, summary: str, descriptio
         summary=summary,
         description=description + "Pass `webhook_url` to be notified when the job completes.",
         response_description=response_description,
-        responses=BLOCKED,
+        responses={**BLOCKED, **LAUNCH_FAILED},
         name=f"api_{task_type}",
     )(endpoint)
 
@@ -44,10 +44,11 @@ def add_launch_route(router: APIRouter, task_type: str, summary: str, descriptio
         "the launch is accepted (a 409 changes nothing). Pass `webhook_url` to be notified when the job completes."
     ),
     response_description="Task accepted and queued in background.",
-    responses={**BLOCKED, 400: error_doc("Empty or unknown GEE variables", {"message": "Unknown GEE variables: x"})},
+    responses={**BLOCKED, **LAUNCH_FAILED,
+               400: error_doc("Empty or unknown GEE variables", {"message": "Unknown GEE variables: x"})},
     name="api_import_gee",
 )
-async def api_import_gee(
+def api_import_gee(
     body: GeeChoice | None = None,
     webhook_url: WebhookUrl = Query(None),
     confirm: bool = CONFIRM_RELAUNCH,
