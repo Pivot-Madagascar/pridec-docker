@@ -39,7 +39,8 @@ _PASSES = """CREATE TABLE IF NOT EXISTS passes (
     parent_ou     TEXT,
     log_level     TEXT,
     dry_run       INTEGER,
-    dhis_url      TEXT
+    dhis_url      TEXT,
+    pivot_url     TEXT   -- since 2026-11-27 (migration 4); NULL: the editable config's (Redis), as before
 )"""
 _SCHEMA = _PASSES + """;
 CREATE UNIQUE INDEX IF NOT EXISTS one_active_pass ON passes(state) WHERE state = 'active';
@@ -107,7 +108,7 @@ CREATE INDEX IF NOT EXISTS ix_availability_checks ON availability_checks(cycle, 
 _RUN_COLUMNS = ("pass_id", "couple", "state", "disease_code", "ou_level", "alert_name", "opened_at")
 _EVENT_COLUMNS = ("cycle", "pass_id", "at", "step", "item", "event", "job_id", "actor", "request_id", "detail")
 # The configuration of a pass, fixed when it starts: what its jobs read (script_config._get), never Redis or .env.
-PASS_CONFIG = ("gee_variables", "parent_ou", "log_level", "dry_run", "dhis_url")
+PASS_CONFIG = ("gee_variables", "parent_ou", "log_level", "dry_run", "dhis_url", "pivot_url")
 _PASS_COLUMNS = ("id", "cycle", "state", "started_at", "started_by", *PASS_CONFIG)
 _AVAILABILITY_DAYS = 30  # a stored check older than this is checked again (decision 2026-10-26)
 # Pass folders (etlhub/docs/decision-design/pass-folders/pass-folders.md): input/<cycle>/<pass>/ and output/<cycle>/<pass>/.
@@ -244,12 +245,12 @@ def apply_to_config_store(context: dict[str, str | None]) -> None:
 
 
 def live_pass_config() -> dict:
-    """What a new pass fixes besides its GEE variables and DRYRUN: PARENT_OU and LOG_LEVEL of the editable config
-    (Redis, never through script_config: it reads the active pass) and the DHIS2 URL of the last login."""
+    """What a new pass fixes besides its GEE variables and DRYRUN: PARENT_OU, LOG_LEVEL and PIVOT_URL of the editable
+    config (Redis, never through script_config: it reads the active pass) and the DHIS2 URL of the last login."""
     from etlhub.infrastructure.auth_store import get_credential
     config = ConfigStore().get_all()
     return {"parent_ou": config.get("PARENT_OU"), "log_level": config.get("LOG_LEVEL"),
-            "dhis_url": (get_credential() or {}).get("url")}
+            "pivot_url": config.get("PIVOT_URL"), "dhis_url": (get_credential() or {}).get("url")}
 
 
 class RedisBlob:
@@ -307,13 +308,16 @@ class CheckpointStore:
     # --- helpers (inside a transaction) ---------------------------------------------------
 
     @contextmanager
-    def _transaction(self) -> Iterator[sqlite3.Connection]:
-        """Same SQL in both modes: the SQLite file in production, an in-memory copy kept in Redis in test mode."""
-        with self._mode_transaction(self._test_mode()) as conn:
+    def _transaction(self, read: bool = False) -> Iterator[sqlite3.Connection]:
+        """Same SQL in both modes: the SQLite file in production, an in-memory copy kept in Redis in test mode.
+        read=True: the block writes nothing, so in production it takes no write lock (see _file_transaction)."""
+        with self._mode_transaction(self._test_mode(), read) as conn:
             yield conn
 
-    def _mode_transaction(self, test_mode: bool) -> AbstractContextManager[sqlite3.Connection]:
-        return self._memory_transaction() if test_mode else self._file_transaction()
+    def _mode_transaction(self, test_mode: bool, read: bool = False) -> AbstractContextManager[sqlite3.Connection]:
+        # ponytail: test mode ignores read (Redis lock, BEGIN IMMEDIATE on the attached file, blob saved back);
+        # pass it to _memory_transaction if test-mode reads ever hold up production launches.
+        return self._memory_transaction() if test_mode else self._file_transaction(read)
 
     @contextmanager
     def _memory_transaction(self) -> Iterator[sqlite3.Connection]:
@@ -344,14 +348,15 @@ class CheckpointStore:
             return _schema_version(conn) is not None
 
     @contextmanager
-    def _file_transaction(self) -> Iterator[sqlite3.Connection]:
+    def _file_transaction(self, read: bool = False) -> Iterator[sqlite3.Connection]:
         # BEGIN IMMEDIATE takes the write lock up front: two launches cannot both see the lock free.
+        # A read (read=True: the block must write nothing) takes a deferred BEGIN: under WAL a reader does not wait for a writer.
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         with closing(sqlite3.connect(self._db_path, timeout=5, isolation_level=None)) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             self._check_schema(conn, str(self._db_path))
             conn.execute("PRAGMA foreign_keys = ON")  # off by default, per connection, ignored inside a transaction
-            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("BEGIN" if read else "BEGIN IMMEDIATE")
             try:
                 yield conn
                 conn.execute("COMMIT")
@@ -603,14 +608,21 @@ class CheckpointStore:
         Existing passes get NULL: they keep reading Redis / .env, as before. Migration 1 creates passes from today's
         _PASSES on a db without it: the columns may be there already."""
         present = {r[1] for r in conn.execute("PRAGMA table_info(passes)")}
-        for column in PASS_CONFIG:
+        # The columns of 2026-11-20, not PASS_CONFIG: what this released migration adds must never change.
+        for column in ("gee_variables", "parent_ou", "log_level", "dry_run", "dhis_url"):
             if column not in present:
                 conn.execute(f"ALTER TABLE passes ADD COLUMN {column} {'INTEGER' if column == 'dry_run' else 'TEXT'}")
+
+    def _migration_4(self, conn: sqlite3.Connection, uploads: Path) -> None:
+        """PIVOT_URL fixed by a pass too (2026-11-27, pass-config.md): passes.pivot_url. Existing passes get NULL: they
+        keep reading the editable config (Redis), as before. Present already if migration 1 created passes just now."""
+        if "pivot_url" not in {r[1] for r in conn.execute("PRAGMA table_info(passes)")}:
+            conn.execute("ALTER TABLE passes ADD COLUMN pivot_url TEXT")
 
     # Schema migrations (docs/decision-design/db-migrations/db-migrations.md): MIGRATIONS[i] takes a db from version i
     # to i + 1, applied by hand only (migrate()). Never edit a released one: a change to _SCHEMA ships with a new
     # migration and its test on a db of the previous version.
-    MIGRATIONS = (_migration_1, _migration_2, _migration_3)
+    MIGRATIONS = (_migration_1, _migration_2, _migration_3, _migration_4)
 
     def _check_schema(self, conn: sqlite3.Connection, where: str) -> None:
         """A new db gets the schema at SCHEMA_VERSION; any other one must already be at it: nothing migrates here."""
@@ -688,7 +700,7 @@ class CheckpointStore:
 
     def report(self, pass_id: str | None, couple: str) -> Path | None:
         """The archived report of a closed run (the pass shown on the Dashboard by default), or None."""
-        with self._transaction() as conn:
+        with self._transaction(read=True) as conn:
             p = self._get_pass(conn, pass_id) if pass_id else self._shown(conn)
         path = p and self._report_path(p, couple)
         return path if path and path.is_file() else None
@@ -765,10 +777,7 @@ class CheckpointStore:
     def _begin(self, conn: sqlite3.Connection, p: dict) -> None:
         """A new pass: its folders, empty working files (the previous pass saved or dropped them when it left), and
         the config / external_data uploads of the previous pass of the cycle when it is paused or complete (carried
-        as success, like the imports). pass-folders.md.
-
-        ponytail: test and production share the working files: a production pass left active while a test pass starts
-        loses them (its run fetches again). Save and restore them on mode switch if that matters.
+        as success, like the imports). pass-folders.md. Each mode has its own working files (work_dir, since 2026-11-19).
         """
         self._clear_workdirs()
         for root in (self._input_dir, self._output_dir):
@@ -848,19 +857,6 @@ class CheckpointStore:
         return conn.execute("SELECT step, item, pass_id FROM pipeline_events WHERE job_id = ? AND event = 'launched'",
                             (job_id,)).fetchone()
 
-    @contextmanager
-    def run(self, task: str, job_id: str, confirm: bool = False, params: dict | None = None) -> Iterator[None]:
-        """For synchronous work: start, then success or error when the block ends.
-        params: kept in the launched event (approve_imports: the elements posted). Through `carry_over`, which carries
-        nothing here: a launch that starts a pass cannot reach approve_imports (its imports are not done yet)."""
-        self.start(task, job_id, confirm, carry_over={task: params} if params is not None else None)
-        try:
-            yield
-        except BaseException:
-            self.finish(job_id, "error")
-            raise
-        self.finish(job_id, "success")
-
     # --- input files -----------------------------------------------------------------------
 
     def _check_input_change(self, conn: sqlite3.Connection, p: dict, name: str, confirm: bool,
@@ -926,7 +922,7 @@ class CheckpointStore:
 
     def launch_cycle(self) -> str:
         """The month of the active pass. PipelineBlockedError without one."""
-        with self._transaction() as conn:
+        with self._transaction(read=True) as conn:
             return self._current(conn)["cycle"]
 
     def set_cycle(self, cycle: str | None) -> dict:
@@ -954,8 +950,8 @@ class CheckpointStore:
         """Starts a pass on the target month at once (Home, "New pass"): its folders, and what is carried over from
         the cycle (uploads, and imports with the same parameters `carry_over`). After a complete or paused pass, only
         with confirm=true. Refused while a job runs or a pass is active. pass-folders.md § 6.
-        Its configuration is fixed now (PASS_CONFIG): gee_variables (comma-separated; None: all), PARENT_OU, LOG_LEVEL
-        and the DHIS2 URL of the last login; dry_run is recorded but the mode decides (DRYRUN = TEST MODE).
+        Its configuration is fixed now (PASS_CONFIG): gee_variables (comma-separated; None: all), PARENT_OU, LOG_LEVEL,
+        PIVOT_URL and the DHIS2 URL of the last login; dry_run is recorded but the mode decides (DRYRUN = TEST MODE).
         """
         config = self._config(gee_variables)
         with self._transaction() as conn:
@@ -971,7 +967,7 @@ class CheckpointStore:
     def pass_config(self) -> dict | None:
         """The fixed configuration (PASS_CONFIG) of the active pass of the mode served; None without one.
         A launch hands it to its Celery job (tasks.py); script_config._get reads it here outside a Celery job."""
-        with self._transaction() as conn:
+        with self._transaction(read=True) as conn:
             active = self._active(conn)
         return {c: active[c] for c in PASS_CONFIG} if active else None
 
@@ -1176,7 +1172,7 @@ class CheckpointStore:
         """
         cutoff = (datetime.now() - timedelta(days=_AVAILABILITY_DAYS)).isoformat(timespec="microseconds")
         found = {}
-        with self._transaction() as conn:
+        with self._transaction(read=True) as conn:
             cycle = (self._shown(conn) or {"cycle": self._target(conn)})["cycle"]
             for task, task_params in params.items():
                 row = conn.execute(
@@ -1218,7 +1214,7 @@ class CheckpointStore:
     def progress(self, pass_id: str | None = None) -> dict:
         """State of a pass in the current mode (test or production): by default the active one, else the last one of
         the target month (`pass` null when that month has none yet: the first launch starts it)."""
-        with self._transaction() as conn:
+        with self._transaction(read=True) as conn:
             p = self._get_pass(conn, pass_id) if pass_id else self._shown(conn)
             rows = self._rows(conn, p["id"]) if p else {}
             run = self._open_run(conn, p["id"]) if p else None
@@ -1238,7 +1234,7 @@ class CheckpointStore:
     def held_lock(self) -> dict | None:
         """The job holding the lock, both modes': {job_id, task, own}. For the unlock route only, which asks the workers
         about that job; one of the other mode (own false) is never shown (progress and messages say so, no more)."""
-        with self._transaction() as conn:
+        with self._transaction(read=True) as conn:
             row = conn.execute(f"SELECT job_id, task FROM {self._lock_table(conn)}").fetchone()
             return {"job_id": row[0], "task": row[1], "own": self._owns(conn, row[0])} if row else None
 
@@ -1267,7 +1263,7 @@ class CheckpointStore:
 
     def _mode_journal(self) -> tuple[str, Callable[[], AbstractContextManager[sqlite3.Connection | None]]]:
         """The current mode and its store: production (SQLite file) or test (Redis blob). A mode never reads the other's."""
-        return ("test", self._test_journal) if self._test_mode() else ("production", self._file_transaction)
+        return ("test", self._test_journal) if self._test_mode() else ("production", lambda: self._file_transaction(read=True))
 
     def current_mode(self) -> str:
         """The current mode: 'production' or 'test' (TEST_MODE)."""
@@ -1299,7 +1295,7 @@ class CheckpointStore:
             stats = {p: (n, at) for p, n, at in conn.execute(count)} if conn else {}
             passes = [{**p, "mode": mode, **dict(zip(("events", "last_at"), stats.get(p["id"], (0, None))))}
                       for p in (self._passes(conn) if conn else [])]
-        with self._transaction() as conn:
+        with self._transaction(read=True) as conn:
             target = self._target(conn)
         return [{"cycle": c, "target": c == target,
                  "passes": sorted((p for p in passes if p["cycle"] == c), key=lambda p: p["started_at"], reverse=True)}

@@ -109,7 +109,7 @@ const props = defineProps<{
   imports: FetchedImport[] | null
   canApprove: boolean // approve_imports launchable, no job running
   canReject: boolean // approve_imports in success
-  posting: boolean // "Approve and post" sent and etlhub posting (synchronously: no per-line progress to read)
+  posting: boolean // "Approve and post" sent and its approve_imports job running (no per-line progress to read)
   approved: boolean // approve_imports in success: Build analytics is offered
   canBuild: boolean // build_analytics of step 1 launchable, no job running
 }>()

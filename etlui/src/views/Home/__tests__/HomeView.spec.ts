@@ -21,7 +21,7 @@ vi.mock('@/services/config', () => ({
   configService: {
     get: vi.fn().mockResolvedValue({
       dhis_url: 'https://dhis2.example', has_dhis_token: true, dhis_token_expires_at: null, parent_ou: 'OU_PARENT',
-      ou_level: 5, disease_code: 'MAL', log_level: 'INFO', gee_variables: ['v1', 'v2', 'v3']
+      ou_level: 5, disease_code: 'MAL', log_level: 'INFO', gee_variables: ['v1', 'v2', 'v3'], pivot_url: 'https://pivot.today'
     })
   }
 }))
@@ -153,18 +153,19 @@ describe('HomeView', () => {
   it('DRYRUN follows the mode, never chosen; a paused pass shows the configuration it started with', async () => {
     getCheckpoints.mockResolvedValue(checkpoints({ test_mode: true, dry_run: true })) // DRYRUN = TEST MODE, from etlhub
     getCycles.mockResolvedValue([{ cycle: '202610', target: true, passes: [{ ...pass('pppp1111', '202610', 'paused', 'test'),
-      gee_variables: null, parent_ou: 'OU_FIXED', log_level: 'DEBUG', dry_run: false, dhis_url: 'https://old.dhis2' }] }])
+      gee_variables: null, parent_ou: 'OU_FIXED', log_level: 'DEBUG', dry_run: false, dhis_url: 'https://old.dhis2', pivot_url: 'https://pivot.fixed' }] }])
     startPass.mockResolvedValue(undefined)
     const wrapper = await mountPage()
     await closeCycleDialog(wrapper)
 
     // Resume: its own values, not today's Admin Config or login; DRYRUN: the mode's, whatever the pass stored
-    for (const value of ['OU_FIXED', 'DEBUG', 'https://old.dhis2', 'Dry run: nothing is written']) expect(wrapper.text()).toContain(value)
+    for (const value of ['OU_FIXED', 'DEBUG', 'https://old.dhis2', 'PIVOT_URLhttps://pivot.fixed', 'Dry run: nothing is written']) expect(wrapper.text()).toContain(value)
     expect(wrapper.find('[data-test="dry-run-btn"]').exists()).toBe(false)
 
     await wrapper.find('[role="radio"][value="new"]').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('OU_PARENT') // a new pass fixes today's values
+    expect(wrapper.text()).toContain('PIVOT_URLhttps://pivot.today')
     expect(wrapper.find('[data-test="dry-run-btn"]').exists()).toBe(false) // no Dry run choice for a new pass either
     await startButton(wrapper).trigger('click')
     await flushPromises()

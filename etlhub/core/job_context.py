@@ -5,7 +5,8 @@ from pathlib import Path
 # launch: what script_config._get reads for PASS_KEYS. None outside a Celery job (the store's active pass then).
 job_pass_config: ContextVar[dict | None] = ContextVar("job_pass_config", default=None)
 # Script config key -> PASS_CONFIG column (pass-config.md). DRYRUN is the mode (script_config), the DHIS2 URL the login's.
-PASS_KEYS = {"GEE_VARIABLES": "gee_variables", "PARENT_OU": "parent_ou", "LOG_LEVEL": "log_level"}
+PASS_KEYS = {"GEE_VARIABLES": "gee_variables", "PARENT_OU": "parent_ou", "LOG_LEVEL": "log_level",
+             "PIVOT_URL": "pivot_url"}
 
 # Test mode of the request or job being served: the user's choice, kept in their session (get_current_user sets it),
 # handed to a Celery job with its launch. None outside them.

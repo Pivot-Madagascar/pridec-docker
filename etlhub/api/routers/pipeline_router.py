@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from etlhub.api.routers import BLOCKED, error_doc
+from etlhub.api.routers import BLOCKED, LAUNCH_FAILED, error_doc
 from etlhub.application.use_cases import fetch_pivot, gee_import
 from etlhub.application.use_cases.analytics_service import AnalyticsService
 from etlhub.application.use_cases.check_import_availability import COM_ELEMENTS, CSB_ELEMENTS
@@ -16,7 +16,7 @@ from etlhub.core.dependencies import (get_analytics_service, get_auth_store, get
 from etlhub.core.job_context import current_test_mode
 from etlhub.domain.interfaces.auth_store import AuthStore
 from etlhub.domain.exceptions import ConfirmationRequiredError
-from etlhub.domain.schemas import GeeChoice
+from etlhub.domain.schemas import ETLResponse, GeeChoice
 from etlhub.domain.interfaces.job_repository import JobRepository
 from etlhub.domain.interfaces.pipeline_gate import PipelineGate
 from etlhub.domain.interfaces.task_launcher import TaskLauncher
@@ -183,27 +183,33 @@ def gee_imports(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
 
 @router.post(
     "/imports/approve",
+    status_code=202,
+    response_model=None,  # 202 ETLResponse (approve) or 200 {decision} (reject): both documented in `responses`
     summary="Approve the Pivot data elements to post, or reject the imports (step data_import)",
     description=(
-        "approve, with `elements` (required, may be empty): the approve_imports job posts those fetched elements to "
-        "DHIS2, synchronously, with the mode's DRYRUN (journal: launched with params {elements}); on success "
-        "approve_imports is success and unlocks build_analytics. An element not fetched in this pass gets 409. "
-        "Again after a success needs confirm=true. reject: approve_imports back to pending, nothing posted."
+        "approve, with `elements` (required, may be empty): 202 with the job_id of the approve_imports job (Celery "
+        "since 2026-11-27, was synchronous), which posts those fetched elements to DHIS2 with the mode's DRYRUN "
+        "(journal: launched with params {elements}); on success approve_imports is success and unlocks build_analytics. "
+        "Each element's outcome is read after the job in GET /pipeline/imports/fetched (`post`), the job's end in its "
+        "record (GET /api/tracking/etl-logs/{job_id}). An element not fetched in this pass gets 409. "
+        "Again after a success needs confirm=true. reject: 200, approve_imports back to pending, nothing posted."
     ),
-    responses={200: {"content": {"application/json": {"example": {"decision": "approve",
-                                                                  "job_id": "approve_imports_1a2b3c4d"}}}},
+    responses={202: {"model": ETLResponse},
+               200: {"description": "reject", "content": {"application/json": {"example": {"decision": "reject"}}}},
                422: error_doc("approve without `elements`, or an unknown element", {"detail": "..."}),
-               500: error_doc("A post failed", {"message": "approve_imports failed: ..."}), **BLOCKED},
+               **BLOCKED, **LAUNCH_FAILED},
 )
-# def, not async: the post runs in FastAPI's threadpool (as POST /post_forecast).
-def decide_imports(body: ImportsDecision, confirm: bool = CONFIRM, gate: PipelineGate = Depends(get_pipeline_gate),
-                   service: AnalyticsService = Depends(get_analytics_service)) -> dict[str, str]:
+def decide_imports(body: ImportsDecision, response: Response, confirm: bool = CONFIRM,
+                   gate: PipelineGate = Depends(get_pipeline_gate),
+                   service: AnalyticsService = Depends(get_analytics_service)) -> ETLResponse | dict[str, str]:
     if body.decision == "reject":
         gate.decide_imports("reject")
+        response.status_code = 200
         return {"decision": "reject"}
     if body.elements is None:
         raise HTTPException(status_code=422, detail="approve needs `elements`: the data elements to post (may be empty)")
-    return {"decision": "approve", "job_id": service.approve_imports(body.elements, confirm).job_id}
+    return ETLResponse(status="accepted", message="Imports approval started in background",
+                       job_id=service.approve_imports(body.elements, confirm), webhook_url=None)
 
 
 @router.put(

@@ -398,10 +398,11 @@ const decideFromReport = async (decision: 'approve' | 'reject') => {
   await decide(decision)
 }
 
-// "Approve and post" sent from the dialog: its lines show "Posting…" while etlhub posts (busy, a confirmation included),
-// then their post state, read again with the list (useFetchedImports follows approve_imports).
+// "Approve and post" sent from the dialog: its lines show "Posting…" while it is sent (busy, a confirmation included) and
+// while the approve_imports job runs (a Celery job since 2026-11-27: the checkpoints are polled while it holds the lock,
+// its toast follows it), then their post state, read again with the list (useFetchedImports follows approve_imports).
 const approvalSent = ref(false)
-const approvalPosting = computed(() => approvalSent.value && busy.value)
+const approvalPosting = computed(() => approvalSent.value && (busy.value || approveImports.value?.status === 'running'))
 const openApproval = () => {
   approvalSent.value = false
   fetched.show()

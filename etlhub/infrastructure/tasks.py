@@ -5,7 +5,6 @@ from datetime import datetime
 from etlhub.core.celery_app import celery_app
 from etlhub.core.job_context import current_test_mode, job_pass_config, pipeline_test_mode
 from etlhub.domain.exceptions import ETLException
-from etlhub.application.use_cases.analytics_service import RUNNING_INLINE
 from etlhub.application.use_cases.etl_use_cases import ETL_JOBS, notify_webhook, run_etl_job
 from etlhub.infrastructure.forecast_runner import run_rscript
 from etlhub.infrastructure.job_store import JobStore
@@ -103,8 +102,9 @@ class CeleryTaskLauncher:
         JobStore().set(job_id, {"job_id": job_id, "status": "pending", "message": "Queued"})
         # The user's mode, and the configuration of the job's pass: the job reads its own pass's, never the active one
         # when it starts (the lock forbids a pause meanwhile; this survives a manual unlock).
-        mode = {"test_mode": current_test_mode(), "pass_config": gate.pass_config()}
         try:
+            # Read inside the try: a failed read (database is locked, a Redis LockError) must free the lock too.
+            mode = {"test_mode": current_test_mode(), "pass_config": gate.pass_config()}
             # task_id=job_id: is_active finds the job among the workers' tasks.
             if task_type == "forecast":
                 task_forecast.apply_async((job_id,), {"webhook_url": webhook_url, **mode, **kwargs}, task_id=job_id)
@@ -112,12 +112,13 @@ class CeleryTaskLauncher:
                 task_etl.apply_async((task_type, job_id),
                                      {"webhook_url": webhook_url, **mode, **kwargs}, task_id=job_id)
         except Exception:
-            gate.finish(job_id, "error")
+            # Frees the lock (gate.finish, a failure logged not raised: the launch's own error propagates), and ends the
+            # pending record and its log WebSocket. The detail goes to the server log only: every user reads the job.
+            logger.exception("Could not queue %s", job_id)
+            _update_task_status(JobStore(), job_id, "error", f"Could not queue {task_type}")
             raise
 
     def is_active(self, job_id: str) -> bool | None:
-        if job_id in RUNNING_INLINE:
-            return True
         # Running or prefetched by a worker. A worker restarted after a kill prefetches the queued task again: active.
         # The control broadcast waits celery's default 1 s for the workers' replies: it limits the question, not the job.
         try:

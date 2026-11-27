@@ -127,7 +127,7 @@ const profile = computed(() => [
           <Card class="section">
             <header>
               <h3 class="section-title">Configuration</h3>
-              <p class="hint">Read only: etlhub takes these values from .env at each start. To change one, edit .env, then Reload from .env.</p>
+              <p class="hint">Read only: etlhub takes these values from .env at each start. To change one, edit .env, then Reload from .env. Shared by test and production mode.</p>
             </header>
             <div v-if="configStore.error" class="error-message">{{ configStore.error }}</div>
             <div v-if="showSuccess" class="success-message">Reloaded from .env</div>

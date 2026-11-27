@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query, Depends
 
-from etlhub.api.routers import BLOCKED, CONFIRM_RELAUNCH, WebhookUrl, error_doc
+from etlhub.api.routers import BLOCKED, CONFIRM_RELAUNCH, LAUNCH_FAILED, WebhookUrl
 from etlhub.api.routers.etl.ingest_router import add_launch_route
 from etlhub.application.use_cases.analytics_service import AnalyticsService
 from etlhub.domain.schemas import ETLResponse
@@ -28,29 +28,25 @@ add_launch_route(
 @router.post(
     "/update_key",
     response_model=ETLResponse,
+    status_code=202,
     summary="Update PRIDE-C key in DHIS2 datastore",
     description=(
-        "Updates the PRIDE-C datastore key in DHIS2. "
-        "Executes `etl/scripts/update_pridec_key.py` synchronously: the request blocks until the script ends "
-        "(200 with status success, or 500). `webhook_url` is notified on success only. "
+        "Updates the PRIDE-C datastore key in DHIS2: runs `etl/scripts/update_pridec_key.py` in the background "
+        "(a Celery job since 2026-11-27, was synchronous). Pass `webhook_url` to be notified when the job completes. "
         "Never in test mode (409): test mode is a dry run (DRYRUN = TEST MODE) and pivot_dhis_tools ignores its "
         "dryRun, it would write the key anyway. Production mode only."
     ),
-    response_description="PRIDE-C key updated successfully.",
-    responses={
-        500: error_doc("Internal Server Error - update failed", {"message": "update_key failed: ..."}),
-        **BLOCKED,
-    },
+    response_description="Task accepted and queued in background.",
+    responses={**BLOCKED, **LAUNCH_FAILED},
 )
-# def, not async: FastAPI runs it in its threadpool, the event loop stays free.
-# ponytail: run_etl_job redirects the process-wide stdout/stderr, so prints of other API threads during the run land in
-# this job's log (one inline job at a time: the gate). Upgrade: run it through Celery, like post_forecast (2026-11-24).
 def api_update_key(
     webhook_url: WebhookUrl = Query(None),
     confirm: bool = CONFIRM_RELAUNCH,
     service: AnalyticsService = Depends(get_analytics_service),
 ):
-    return service.update_key(webhook_url, confirm)
+    job_id = service.update_key(webhook_url, confirm)
+    return ETLResponse(status="accepted", message="PRIDE-C key update started in background", job_id=job_id,
+                       webhook_url=webhook_url)
 
 
 add_launch_route(

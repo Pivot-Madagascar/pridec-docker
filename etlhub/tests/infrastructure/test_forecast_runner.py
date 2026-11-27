@@ -109,3 +109,12 @@ def test_a_test_mode_forecast_mounts_the_test_folders(runner_env, monkeypatch, j
     volumes = [seen["cmd"][i + 1] for i, arg in enumerate(seen["cmd"]) if arg == "-v"]
     assert volumes == [f"{runner_env}/test/input:/app/input:ro", f"{runner_env}/test/output:/app/output:rw"]
     assert (runner_env / "test" / "output").is_dir()
+
+
+def test_the_forecast_keeps_the_start_time_the_worker_recorded(runner_env, monkeypatch, job_store):
+    job_store.set("forecast_1", {"job_id": "forecast_1", "status": "running", "started": "2026-11-27T10:00:00"})
+    monkeypatch.setattr(forecast_runner.subprocess, "Popen", _fake_popen("done\n", 0))
+
+    status = forecast_runner.run_rscript("forecast_1", PARAMS, job_store)
+
+    assert status["started"] == job_store.get("forecast_1")["started"] == "2026-11-27T10:00:00"

@@ -1,12 +1,12 @@
 """import_pivot_com / import_pivot_csb jobs: fetch and check Pivot case counts, write them, post nothing to DHIS2.
-approve_imports job (post_pivot_imports): posts the data elements the user chose among them (POST /pipeline/imports/approve).
+approve_imports job (post_pivot_imports, Celery): posts the data elements the user chose among them (POST /pipeline/imports/approve).
 
 etlhub's copy of etl/scripts/import_pivot_COM_etlhub.py and import_pivot_CSB_etlhub.py, whose code runs at import
 (`from config import`: needs etl/scripts on sys.path, absent in the worker, and reads PARENT_OU from .env, not the pass).
 The scripts write <dataElement>_fetched.json and _flags.json in ./input/temp_fetch; etlhub keeps the same content in
 Redis instead (FetchedImports, since 2026-11-23), per pass and mode: opening a forecast run empties input/, a logout
 loses Pinia, neither loses it. A new fetch of an import replaces its last one whole; an import never fetched has none.
-PIVOT_URL and PARENT_OU come from etlhub's config (GET /api/config, Redis; PARENT_OU fixed by the pass), not from .env;
+PIVOT_URL and PARENT_OU come from etlhub's config (both fixed by the pass, from Redis when it started), not from .env;
 PIVOT_TOKEN, a secret, from the environment only.
 ponytail: two copies of the same steps; a change to one must be made to the other.
 """
@@ -41,7 +41,8 @@ def _save(task: str, results: list[dict]) -> None:
 
 
 def pivot_url() -> str | None:
-    """PIVOT_URL of the editable config (Redis under etlhub). config._get, not an imported name: etlhub replaces it."""
+    """PIVOT_URL fixed by the pass (since 2026-11-27; a pass from before: the editable config, Redis) under etlhub.
+    config._get, not an imported name: etlhub replaces it."""
     url = config._get("PIVOT_URL")
     return url.rstrip("/") if url else None
 
@@ -52,7 +53,7 @@ def has_pivot_token() -> bool:
 
 def import_pivot_com() -> None:
     setup_logging()  # here, not at import: the job's stdout/stderr redirection must be active
-    url, parent_ou = pivot_url(), get_parent_ou()  # the config's, the pass's
+    url, parent_ou = pivot_url(), get_parent_ou()  # both the pass's
     check_envvars({"PIVOT_TOKEN": PIVOT_TOKEN, "PIVOT_URL": url, "PARENT_OU": parent_ou})
     _save("import_pivot_com", fetch_pivot_com_etlhub(pivot_token=PIVOT_TOKEN, pivot_url=url,
                                                      prior_months=PRIOR_MONTHS, parent_ou=parent_ou))
@@ -101,10 +102,11 @@ def _mark(name: str, status: str, dry_run: bool, error: str | None = None) -> No
                 return
 
 
-def post_pivot_imports(elements: list[str]) -> None:
-    """approve_imports job: posts each chosen element's fetched values to DHIS2, with the job's DRYRUN (the pass's).
-    A failed post stops the job (error): the elements posted before it stay (CREATE_AND_UPDATE: posting again is safe).
-    Each element's outcome is kept with it (_mark), for the approval's per-line state."""
+def post_pivot_imports(elements: list[str]) -> str:
+    """approve_imports job (Celery since 2026-11-27): posts each chosen element's fetched values to DHIS2, with the
+    job's DRYRUN (the mode's). A failed post stops the job (error): the elements posted before it stay
+    (CREATE_AND_UPDATE: posting again is safe). Each element's outcome is kept with it (_mark), for the approval's
+    per-line state (GET /pipeline/imports/fetched, read after the job). Returns the job's end message."""
     setup_logging()
     url, token, dry_run = get_dhis_url(), get_dhis_token(), get_dry_run()
     if not elements:
@@ -123,6 +125,7 @@ def post_pivot_imports(elements: list[str]) -> None:
             _mark(name, "failed", dry_run, str(e))
             raise
         _mark(name, "posted", dry_run)
+    return f"Imports approved, posted: {', '.join(elements) or 'nothing'}"
 
 
 def _check_import(name: str, response) -> None:

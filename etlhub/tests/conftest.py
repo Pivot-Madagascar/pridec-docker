@@ -13,7 +13,6 @@ sys.modules['earthengine_api'] = MagicMock()
 sys.modules['geopandas'] = MagicMock()
 
 from contextlib import contextmanager
-from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -56,8 +55,9 @@ def checkpoint_store(tmp_path, monkeypatch):
         test_mode=lambda: mode["test_mode"], blob=FakeBlob(), live_config=lambda: dict(store.live),
     )
     store.contexts = []  # run contexts the jobs received (instead of Redis)
-    # PARENT_OU, LOG_LEVEL (Redis) and the DHIS2 URL of the last login, as a new pass fixes them (pass-config.md)
-    store.live = {"parent_ou": "ou_parent", "log_level": "INFO", "dhis_url": "https://dhis2.test"}
+    # PARENT_OU, LOG_LEVEL, PIVOT_URL (Redis) and the DHIS2 URL of the last login, as a new pass fixes them (pass-config.md)
+    store.live = {"parent_ou": "ou_parent", "log_level": "INFO", "pivot_url": "https://pivot.test",
+                  "dhis_url": "https://dhis2.test"}
     store.mode = mode
     use_instance(monkeypatch, module.get_checkpoint_store, module, "CheckpointStore", store)
     yield store
@@ -98,10 +98,6 @@ class OpenGate:
 
     def finish(self, job_id, status):
         pass
-
-    @contextmanager
-    def run(self, task, job_id, confirm=False, params=None):
-        yield
 
     @contextmanager
     def change_input(self, name, confirm=False, removed=False):
@@ -222,8 +218,7 @@ def override_dependencies(app, mock_task_launcher, job_store, mock_request_track
         return IngestionService(mock_task_launcher)
     
     def get_mock_analytics_service():
-        return AnalyticsService(job_store, OpenGate(), SimpleNamespace(publish_log=lambda *a, **k: None,
-                                                                       publish_status=lambda *a, **k: None))
+        return AnalyticsService(mock_task_launcher, OpenGate())
     
     def get_mock_forecast_service():
         return ForecastService(mock_task_launcher, job_store)

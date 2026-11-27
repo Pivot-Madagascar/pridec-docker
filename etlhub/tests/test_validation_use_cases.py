@@ -1,13 +1,15 @@
 """validate_inputs refuses an external_data of the other level (same columns, other orgUnits), on the repo's assets,
 and a grid of months the R forecast would stop on."""
 import json
+import re
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from etlhub.application.use_cases.validation_use_cases import PROJECT_ROOT, _check_external_data_level, _check_forecast_months
+from etlhub.application.use_cases.validation_use_cases import _check_external_data_level, _check_forecast_months
 
-ASSETS = PROJECT_ROOT / "assets"
+ASSETS = Path(__file__).resolve().parents[2] / "assets"
 
 
 @pytest.fixture
@@ -41,3 +43,20 @@ def test_a_grid_that_misses_a_forecast_month_is_refused():
     with pytest.raises(ValueError, match="needs 202111"):  # forecast_start - month_analysis
         _check_forecast_months(config, _grid("2022-01", "2027-12"))
     _check_forecast_months(config, _grid("2015-01", "2027-12"))  # the production external data's months
+
+
+@pytest.mark.parametrize("test_mode, folder", [(False, "input"), (True, "test/input")])
+def test_the_inputs_are_read_in_the_mode_s_folder_under_data_dir(monkeypatch, tmp_path, test_mode, folder):
+    from types import SimpleNamespace
+
+    from etlhub.application.use_cases import validation_use_cases
+    from etlhub.core.job_context import pipeline_test_mode
+    monkeypatch.setattr(validation_use_cases, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
+    token = pipeline_test_mode.set(test_mode)
+    try:
+        with pytest.raises(FileNotFoundError, match=re.escape(str(tmp_path / folder / "config.json"))):
+            validation_use_cases.validate_input_files()
+        with pytest.raises(FileNotFoundError, match=re.escape(str(tmp_path / folder / "run1" / "config.json"))):
+            validation_use_cases.validate_input_files(input_dir="input/run1")
+    finally:
+        pipeline_test_mode.reset(token)

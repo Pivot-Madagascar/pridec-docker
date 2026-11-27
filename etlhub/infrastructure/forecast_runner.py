@@ -30,11 +30,9 @@ def _container_user() -> list[str]:
 
 
 def run_rscript(job_id, params, job_store: JobStore):
-    status = {
-        "status": "running",
-        "started": datetime.now().isoformat(),
-        "job_id": job_id
-    }
+    # The record tasks._run wrote when the worker started: its `started` is kept, not replaced.
+    status = job_store.get(job_id) or {"job_id": job_id, "started": datetime.now().isoformat()}
+    status["status"] = "running"
     job_store.set(job_id, status)
 
     host_pwd = get_settings().host_pwd

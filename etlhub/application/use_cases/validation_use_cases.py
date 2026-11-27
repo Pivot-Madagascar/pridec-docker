@@ -1,14 +1,12 @@
 import json
 import os
-from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
 
 from etl.scripts.validate_inputs import validate_inputs as _validate_inputs
-from etlhub.core.job_context import current_test_mode
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+from etlhub.core.config import get_settings
+from etlhub.core.job_context import current_test_mode, work_dir
 
 
 def _check_external_data_level(external_data: pd.DataFrame | None, disease_data: pd.DataFrame) -> None:
@@ -46,9 +44,9 @@ def validate_input_files(
     input_dir: str | None = None,
 ) -> None:
     """Validates the forecast inputs and writes the *_valid files next to them. Its output is the job log."""
-    # Paths are relative to the repo root (the API only accepts paths under input/), not to the worker's cwd;
-    # in test mode to test/, whose input/ is the test one.
-    root = PROJECT_ROOT / "test" if current_test_mode() else PROJECT_ROOT
+    # Paths are relative to the mode's root (the API only accepts paths under input/): DATA_DIR in production,
+    # DATA_DIR/test in test mode, whose input/ is the test one.
+    root = work_dir(get_settings().data_dir, "input", current_test_mode()).parent
     input_base = root / (input_dir or "input")
 
     paths = {

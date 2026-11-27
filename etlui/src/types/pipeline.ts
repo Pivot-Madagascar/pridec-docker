@@ -50,6 +50,7 @@ export interface Pass {
   log_level: string | null
   dry_run: boolean | null // DRYRUN = TEST MODE: etlhub sends the mode's, whatever the pass stored
   dhis_url: string | null
+  pivot_url: string | null // since 2026-11-27; null: the editable config's (Admin Config), as before
 }
 
 export interface Checkpoints {

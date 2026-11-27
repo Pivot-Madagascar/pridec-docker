@@ -55,6 +55,7 @@ vi.mock('@/services/api', () => ({ default: { get: (...args: unknown[]) => apiGe
 vi.mock('vue3-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }))
 
 import Dashboard from '@/views/Dashboard/Dashboard.vue'
+import { POLL_MS } from '@/composables/usePipeline'
 
 const item = (name: string, status = 'pending', launchable = false) => ({ item: name, status, job_id: null, updated_at: null, launchable })
 
@@ -516,7 +517,7 @@ describe('Dashboard', () => {
     wrapper.unmount()
   })
 
-  it('reviews and approves the fetched Pivot data line by line, shows the post state of each line, then offers Build Analytics', async () => {
+  it('reviews and approves the fetched Pivot data line by line, follows the approval job, shows the post state of each line, then offers Build Analytics', async () => {
     getCheckpoints.mockResolvedValue(state({ steps: [
       { step: 'data_import', done: false, accessible: true, items: [item('import_gee', 'success', true), item('approve_imports', 'pending', true), item('build_analytics')] },
       { step: 'forecast', done: false, accessible: false, items: [] },
@@ -559,8 +560,8 @@ describe('Dashboard', () => {
     await row('pridec_historic_COMRespinf').trigger('click') // a whole line selects
     await row('pridec_historic_COMMalaria').trigger('click') // and unselects
     expect([stateOf('pridec_historic_COMRespinf'), stateOf('pridec_historic_COMMalaria')]).toEqual(['Pending', '—'])
-    let posted!: () => void
-    decideImports.mockReturnValue(new Promise<void>(resolve => { posted = resolve })) // etlhub posts synchronously
+    let accepted!: (job: { jobId: string; requestId: string }) => void
+    decideImports.mockReturnValue(new Promise(resolve => { accepted = resolve })) // the request in flight
     await dialog.find('[data-test="approve-imports"]').trigger('click')
     await flushPromises()
     expect(decideImports).toHaveBeenCalledWith('approve', ['pridec_historic_COMRespinf'], false)
@@ -569,19 +570,35 @@ describe('Dashboard', () => {
     expect(wrapper.find('[data-test="busy-overlay"]').text()).toBe('Posting to DHIS2…') // a spinner over the content
     expect(wrapper.find('[data-test="build-analytics"]').exists()).toBe(false)
 
+    // 202: the approve_imports job runs (a Celery job since 2026-11-27). The lines stay at "Posting…" while it holds
+    // the lock; the checkpoints are read again at POLL_MS until it ends.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    getCheckpoints.mockResolvedValue(state({ lock: { job_id: 'approve_imports_1a2b3c4d', task: 'approve_imports', acquired_at: 't' }, steps: [
+      { step: 'data_import', done: false, accessible: true, items: [item('import_gee', 'success', true),
+        { ...item('approve_imports', 'running'), job_id: 'approve_imports_1a2b3c4d' }, item('build_analytics')] },
+      { step: 'forecast', done: false, accessible: false, items: [] },
+      { step: 'system_update', done: false, accessible: false, items: [] }
+    ] }))
+    accepted({ jobId: 'approve_imports_1a2b3c4d', requestId: 'r' })
+    await flushPromises()
+    expect([stateOf('pridec_historic_COMRespinf'), stateOf('pridec_historic_COMMalaria')]).toEqual(['Posting…', '—'])
+    expect(wrapper.find('[data-test="busy-overlay"]').text()).toBe('Posting to DHIS2…')
+    expect(getFetchedImports).toHaveBeenCalledTimes(1) // not read again while the job runs
+
     getCheckpoints.mockResolvedValue(state({ steps: [
       { step: 'data_import', done: false, accessible: true, items: [item('import_gee', 'success', true),
         { ...item('approve_imports', 'success', true), job_id: 'approve_imports_1a2b3c4d' }, item('build_analytics', 'pending', true)] },
       { step: 'forecast', done: false, accessible: false, items: [] },
       { step: 'system_update', done: false, accessible: false, items: [] }
     ] }))
-    getFetchedImports.mockResolvedValue([ // etlhub keeps each line's post with its data: read again after the approval
+    getFetchedImports.mockResolvedValue([ // etlhub keeps each line's post with its data: read again after the job
       { task: 'import_pivot_com', elements: [el('pridec_historic_COMMalaria', false),
         { ...el('pridec_historic_COMRespinf', true), post: { status: 'posted', at: 't', dry_run: true, error: null } }] },
       { task: 'import_pivot_csb', elements: [] }
     ])
-    posted()
+    await vi.advanceTimersByTimeAsync(POLL_MS) // the job ended: the next poll sees it
     await flushPromises()
+    vi.useRealTimers()
     expect([stateOf('pridec_historic_COMRespinf'), stateOf('pridec_historic_COMMalaria')]).toEqual(['Posted (dry run)', '—'])
     expect(wrapper.find('[data-test="busy-overlay"]').exists()).toBe(false)
     expect(grid.find('[data-item="approve_imports"]').text()).toContain('Approved: Build Analytics to launch')

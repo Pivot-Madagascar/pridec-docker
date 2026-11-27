@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from etlhub.infrastructure import tasks
-from tests.infrastructure.test_checkpoint_store import _import, _prepare
+from tests.infrastructure.test_checkpoint_store import _all_runs, _import, _pass, _prepare
 
 
 @pytest.fixture
@@ -125,11 +125,28 @@ def _post(client, name):
     return next(e for i in imports for e in i["elements"] if e["data_element"] == name)["post"]
 
 
-def test_imports_approval_posts_only_the_chosen_elements_with_the_mode_s_dry_run(client, checkpoint_store, fetched):
+def _work(queue, task):
+    """What a worker does with the last queued job (Celery replaced by `queue`). Returns its job_id."""
+    (job_id,), kwargs = queue[-1]
+    tasks.task_etl.run(task, job_id, **kwargs)
+    return job_id
+
+
+def test_imports_approval_is_a_job_that_posts_only_the_chosen_elements_with_the_mode_s_dry_run(
+        client, checkpoint_store, fetched, queue, job_store):
     response = client.post("/pipeline/imports/approve",
                            json={"decision": "approve", "elements": ["pridec_historic_CSBMalaria"]})
 
-    assert response.json()["job_id"].startswith("approve_imports_")
+    # A Celery job since 2026-11-27 (was synchronous): 202 at once, nothing posted until a worker runs it
+    assert response.status_code == 202
+    assert response.json()["status"] == "accepted" and response.json()["job_id"].startswith("approve_imports_")
+    assert (fetched, _approve_imports(client)["status"]) == ([], "running")
+    assert queue[-1][1]["elements"] == ["pridec_historic_CSBMalaria"]
+
+    job_id = _work(queue, "approve_imports")
+
+    assert job_id == response.json()["job_id"]
+    assert job_store.get(job_id)["message"] == "Imports approved, posted: pridec_historic_CSBMalaria"  # the toast's end
     assert [(p["payload"]["dataValues"][0]["dataElement"], p["dryRun"]) for p in fetched] == [
         ("pridec_historic_CSBMalaria", False)]  # production: DRYRUN = TEST MODE = false (post_dataElements mocked)
     assert _approve_imports(client)["status"] == "success"
@@ -142,7 +159,7 @@ def test_imports_approval_posts_only_the_chosen_elements_with_the_mode_s_dry_run
     assert client.post("/pipeline/imports/approve", json={"decision": "approve", "elements": []}).status_code == 409  # confirm
 
 
-def test_imports_approval_refuses_what_cannot_be_posted(client, fetched):
+def test_imports_approval_refuses_what_cannot_be_posted(client, fetched, queue):
     def approve(**body):
         return client.post("/pipeline/imports/approve", json={"decision": "approve", **body})
 
@@ -150,26 +167,32 @@ def test_imports_approval_refuses_what_cannot_be_posted(client, fetched):
     assert approve(elements=["../../etc/passwd"]).status_code == 422
     assert client.post("/pipeline/imports/approve", json={"decision": "maybe"}).status_code == 422
     assert approve(elements=["pridec_historic_COMRespinf"]).status_code == 409  # not fetched
-    assert (fetched, _approve_imports(client)["status"]) == ([], "pending")
+    assert (fetched, queue, _approve_imports(client)["status"]) == ([], [], "pending")
 
 
-def test_imports_approval_with_no_element_posts_nothing_and_reject_undoes_it(client, fetched):
-    assert client.post("/pipeline/imports/approve", json={"decision": "approve", "elements": []}).status_code == 200
+def test_imports_approval_with_no_element_posts_nothing_and_reject_undoes_it(client, fetched, queue, job_store):
+    assert client.post("/pipeline/imports/approve", json={"decision": "approve", "elements": []}).status_code == 202
+    job_id = _work(queue, "approve_imports")
     assert (fetched, _approve_imports(client)["status"]) == ([], "success")
+    assert job_store.get(job_id)["message"] == "Imports approved, posted: nothing"
 
-    assert client.post("/pipeline/imports/approve", json={"decision": "reject"}).json() == {"decision": "reject"}
+    rejected = client.post("/pipeline/imports/approve", json={"decision": "reject"})
+    assert (rejected.status_code, rejected.json()) == (200, {"decision": "reject"})
     assert _approve_imports(client)["status"] == "pending"
 
 
-def test_a_dhis2_import_error_fails_the_approval(client, fetched, monkeypatch):
+def test_a_dhis2_import_error_fails_the_approval_job(client, fetched, monkeypatch, queue, job_store):
     from etlhub.application.use_cases import fetch_pivot
     monkeypatch.setattr(fetch_pivot, "post_dataElements", lambda **kw: SimpleNamespace(
         json=lambda: {"status": "ERROR", "message": "conflicts"}))
 
     response = client.post("/pipeline/imports/approve",
                            json={"decision": "approve", "elements": ["pridec_historic_CSBMalaria"]})
+    assert response.status_code == 202
 
-    assert response.status_code == 500 and "DHIS2 refused pridec_historic_CSBMalaria" in response.json()["message"]
+    with pytest.raises(Exception, match="DHIS2 refused pridec_historic_CSBMalaria"):  # re-raised: Celery sees it fail
+        _work(queue, "approve_imports")
+    assert "DHIS2 refused pridec_historic_CSBMalaria" in job_store.get(response.json()["job_id"])["message"]
     assert _approve_imports(client)["status"] == "error"
     post = _post(client, "pridec_historic_CSBMalaria")
     assert post["status"] == "failed" and "DHIS2 refused" in post["error"]
@@ -577,7 +600,8 @@ def test_a_job_gets_the_configuration_of_its_pass_with_its_launch(client, checkp
     client.post("/import_gee")
 
     assert queued[0]["pass_config"] == {"gee_variables": "v1", "parent_ou": "ou_parent", "log_level": "INFO",
-                                        "dry_run": False, "dhis_url": "https://dhis2.test"}
+                                        "dry_run": False, "dhis_url": "https://dhis2.test",
+                                        "pivot_url": "https://pivot.test"}
 
 
 def test_no_route_lets_a_launch_choose_its_dry_run(app):
@@ -588,10 +612,7 @@ def test_no_route_lets_a_launch_choose_its_dry_run(app):
     assert offered == set()  # DRYRUN = TEST MODE
 
 
-def test_update_key_is_refused_in_test_mode_and_nothing_is_written(app, client, checkpoint_store, monkeypatch):
-    from etlhub.application.use_cases import analytics_service
-    ran = []
-    monkeypatch.setattr(analytics_service, "run_etl_job", lambda *args, **kwargs: ran.append(kwargs))
+def test_update_key_is_refused_in_test_mode_and_nothing_is_written(app, client, checkpoint_store, queue):
     checkpoint_store.progress()  # the production db and its shared lock exist, as after the API start
     checkpoint_store.mode["test_mode"] = True
 
@@ -599,7 +620,24 @@ def test_update_key_is_refused_in_test_mode_and_nothing_is_written(app, client, 
         refused = client.post("/update_key", params=params)
         assert refused.status_code == 409
         assert "cannot run in test mode" in refused.json()["message"]
-    assert ran == [] and checkpoint_store.progress()["lock"] is None
+    assert queue == [] and checkpoint_store.progress()["lock"] is None
+
+
+def test_update_key_is_a_background_job_in_production(client, checkpoint_store, queue, job_store, monkeypatch):
+    """A Celery job since 2026-11-27 (was synchronous): 202 at once, the worker runs the script, the cycle completes."""
+    from etlhub.application.use_cases import etl_use_cases
+    ran = []
+    monkeypatch.setitem(etl_use_cases.ETL_JOBS, "update_key", (lambda: ran.append("key"), "PRIDE-C key update"))
+    _all_runs(checkpoint_store)
+    _pass(checkpoint_store, "build_analytics")
+
+    response = client.post("/update_key")
+
+    assert response.status_code == 202 and response.json()["status"] == "accepted"
+    assert (ran, checkpoint_store.progress()["lock"]["job_id"]) == ([], response.json()["job_id"])
+    job_id = _work(queue, "update_key")
+    assert ran == ["key"] and job_store.get(job_id)["status"] == "success"
+    assert checkpoint_store.progress()["pass"]["state"] == "complete"
 
 
 def test_import_gee_imports_the_variables_chosen_in_its_dialog_and_keeps_them_on_the_pass(client, checkpoint_store,

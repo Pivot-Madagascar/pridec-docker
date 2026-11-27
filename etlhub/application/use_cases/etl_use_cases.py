@@ -38,9 +38,10 @@ ETL_JOBS = {
     "validate_inputs": (validate_input_files, "validate inputs"),
     "calc_orgunit_alerts": (calc_orgunit_alerts, "org unit alerts calculation"),
     "post_forecast": (post_forecast, "forecast publication"),  # a Celery job since 2026-11-24 (was synchronous)
+    # Celery jobs since 2026-11-27 (were run inline by the API); launched by AnalyticsService after its own checks.
+    "update_key": (update_key, "PRIDE-C key update"),
+    "approve_imports": (post_pivot_imports, "imports approval"),
 }
-# Run synchronously by the API (AnalyticsService).
-SYNC_JOBS = {"update_key": update_key, "approve_imports": post_pivot_imports}
 
 
 class _JobLogger(io.StringIO):
@@ -71,12 +72,19 @@ class _JobLogger(io.StringIO):
 
 def _execute_etl_job(fn, log: _JobLogger, name: str, **kwargs):
     """The scripts read DRYRUN through script_config._get: the mode the job runs in (DRYRUN = TEST MODE).
-    Returns the job function's result: a string is its end message (post_forecast's)."""
+    Returns the job function's result: a string is its end message (post_forecast's, approve_imports')."""
+    # etl/scripts/config.setup_logging() (basicConfig(force=True)) binds the root handlers to this job's log: put back
+    # the process's own after the job, or every later root warning lands in the last job's log.
+    root = logging.getLogger()
+    handlers, level = root.handlers[:], root.level
     with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
         try:
             return fn(**kwargs)
         except Exception as e:
             raise ETLException(f"{name} failed: {_reason(e)}") from e
+        finally:
+            root.handlers[:] = handlers
+            root.setLevel(level)
 
 
 def _reason(e: Exception) -> str:
@@ -85,7 +93,7 @@ def _reason(e: Exception) -> str:
 
 
 def run_etl_job(task_type: str, job_store: JobRepository, job_id: str, events: EventPublisher, **kwargs):
-    fn = SYNC_JOBS[task_type] if task_type in SYNC_JOBS else ETL_JOBS[task_type][0]
+    fn = ETL_JOBS[task_type][0]
     with _into_mode_folder(task_type):
         return _execute_etl_job(fn, _JobLogger(job_store, job_id, events), task_type, **kwargs)
 

@@ -85,8 +85,6 @@ PIPELINE: dict[str, dict[str, list[str]]] = {  # step -> {item: prerequisites}, 
     },
 }
 IMPORT_TASKS = tuple(i for i in PIPELINE["data_import"] if i.startswith("import_"))  # gee, pivot_com, pivot_csb
-# Their scripts write to DHIS2: a dry run in test mode, real writes in production (DRYRUN = TEST MODE, since 2026-11-23).
-DHIS2_WRITES = frozenset({*IMPORT_TASKS, "build_analytics", "post_forecast", "update_key"})
 RUN_TASKS = {"fetch_disease", "fetch_climate", "fetch_geojson", "validate_inputs", "forecast",
              "calc_orgunit_alerts", "post_forecast"}
 STEPS = list(PIPELINE)

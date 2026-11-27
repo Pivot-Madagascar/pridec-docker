@@ -32,16 +32,21 @@ describe('pipeline service', () => {
     expect(get).toHaveBeenLastCalledWith('/import_availability', { params: { refresh: true } })
   })
 
-  it('reads the fetched Pivot data and sends the chosen elements in the approve body, confirm in the query', async () => {
+  it('reads the fetched Pivot data, sends the chosen elements in the approve body, confirm in the query, and returns the approval job', async () => {
     get.mockResolvedValue({ data: { imports: [{ task: 'import_pivot_com', elements: [] }] } })
     expect(await pipeline.getFetchedImports()).toEqual([{ task: 'import_pivot_com', elements: [] }])
     expect(get).toHaveBeenCalledWith('/pipeline/imports/fetched')
 
-    await pipeline.decideImports('approve', ['pridec_historic_CSBMalaria'], true)
+    // approve: 202 with the approve_imports job (a Celery job since 2026-11-27), followed like any launch
+    post.mockResolvedValue({ data: { status: 'accepted', job_id: 'approve_imports_1a2b3c4d' } })
+    const approval = await pipeline.decideImports('approve', ['pridec_historic_CSBMalaria'], true)
+    expect(approval.jobId).toBe('approve_imports_1a2b3c4d')
     expect(post).toHaveBeenLastCalledWith('/pipeline/imports/approve',
-      { decision: 'approve', elements: ['pridec_historic_CSBMalaria'] }, CONFIRM)
-    await pipeline.decideImports('reject')
-    expect(post).toHaveBeenLastCalledWith('/pipeline/imports/approve', { decision: 'reject' }, undefined)
+      { decision: 'approve', elements: ['pridec_historic_CSBMalaria'] }, { ...CONFIRM, headers: { 'X-Request-ID': approval.requestId } })
+    post.mockResolvedValue({ data: { decision: 'reject' } }) // reject: 200, no job
+    expect((await pipeline.decideImports('reject')).jobId).toBeNull()
+    expect(post).toHaveBeenLastCalledWith('/pipeline/imports/approve', { decision: 'reject' },
+      { params: {}, headers: { 'X-Request-ID': expect.any(String) } })
   })
 
   it('reads the state from GET /pipeline/checkpoints', async () => {
@@ -71,10 +76,10 @@ describe('pipeline service', () => {
     expect(post).toHaveBeenCalledWith('/forecast/', {}, { params: {}, headers: { 'X-Request-ID': expect.any(String) } })
   })
 
-  it('returns null for a synchronous job without job_id', async () => {
-    post.mockResolvedValue({ data: { status: 'success' } })
+  it('launches update_key as a background job (202 with a job_id since 2026-11-27)', async () => {
+    post.mockResolvedValue({ data: { status: 'accepted', job_id: 'update_key_1' } })
 
-    expect((await pipeline.launchJob('update_key')).jobId).toBeNull()
+    expect((await pipeline.launchJob('update_key')).jobId).toBe('update_key_1')
   })
 
   it('opens, decides and abandons the forecast run', async () => {

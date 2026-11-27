@@ -16,7 +16,7 @@ export async function getImportAvailability(refresh = false): Promise<ImportAvai
   return response.data
 }
 
-// POST /<task> (or /forecast/ with {}: etlhub's ForecastParams defaults are the files written by validate_inputs): 202 with a job_id for Celery jobs (post_forecast too since 2026-11-24), 200 for update_key.
+// POST /<task> (or /forecast/ with {}: etlhub's ForecastParams defaults are the files written by validate_inputs): 202 with a job_id: every job is a Celery job (post_forecast since 2026-11-24, update_key since 2026-11-27).
 // The X-Request-ID (a UUID) becomes the request_id etlhub tracks: GET /api/tracking/requests/{requestId} finds this launch.
 // No dry_run: DRYRUN = TEST MODE, decided by etlhub from the mode.
 export type LaunchedJob = { jobId: string | null; requestId: string }
@@ -65,11 +65,16 @@ export async function getFetchedImports(): Promise<FetchedImport[]> {
   return response.data.imports
 }
 
-// POST /pipeline/imports/approve: approve posts the chosen elements to DHIS2 (synchronous, the pass's DRYRUN; [] posts
-// nothing) and unlocks build_analytics (step 1); reject sends the approval back to pending. Again after a success: 409
+// POST /pipeline/imports/approve: approve answers 202 with the job_id of the approve_imports job (Celery since 2026-11-27),
+// which posts the chosen elements to DHIS2 (the mode's DRYRUN; [] posts nothing) and unlocks build_analytics (step 1):
+// followed like any launch; each element's outcome is read after it in GET /pipeline/imports/fetched (`post`).
+// reject answers 200 without job_id (jobId null): the approval back to pending. Again after a success: 409
 // confirmation_required, resent with confirm=true.
-export async function decideImports(decision: 'approve' | 'reject', elements: string[] = [], confirm = false): Promise<void> {
-  await api.post('/pipeline/imports/approve', decision === 'approve' ? { decision, elements } : { decision }, withConfirm(confirm))
+export async function decideImports(decision: 'approve' | 'reject', elements: string[] = [], confirm = false): Promise<LaunchedJob> {
+  const requestId = crypto.randomUUID()
+  const config = { params: withConfirm(confirm)?.params ?? {}, headers: { 'X-Request-ID': requestId } }
+  const response = await api.post('/pipeline/imports/approve', decision === 'approve' ? { decision, elements } : { decision }, config)
+  return { jobId: response.data?.job_id ?? null, requestId }
 }
 
 // PUT /pipeline/mode: TEST_MODE, the test passes kept apart (DRYRUN stays the .env's); leaving it pauses the active test pass.

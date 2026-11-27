@@ -162,6 +162,7 @@ const parameters = computed(() => {
     ['PARENT_OU', resumed.value?.parent_ou ?? config?.parent_ou ?? '-'],
     ['GEE_VARIABLES', geeShown.value || '-'],
     ['LOG_LEVEL', resumed.value?.log_level ?? config?.log_level ?? '-'],
+    ['PIVOT_URL', resumed.value?.pivot_url ?? config?.pivot_url ?? '-'],
     ['OU_LEVEL, DISEASE_CODE', 'set by each forecast run, opened on the forecast page']
   ]
 })

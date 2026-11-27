@@ -141,6 +141,56 @@ def test_a_validate_inputs_failure_keeps_its_reason_in_the_job_message(job_store
                                        "validate_inputs")
 
 
+@pytest.mark.parametrize("fails", [False, True])
+def test_a_job_that_rebinds_root_logging_gives_it_back(job_store, fails):
+    """setup_logging() (basicConfig(force=True)) binds root to the job's log: after the job, root is the process's."""
+    import logging
+    from etlhub.application.use_cases import etl_use_cases
+    from etlhub.infrastructure import etl_events
+    root = logging.getLogger()
+    handlers, level = root.handlers[:], root.level
+
+    def job():
+        logging.basicConfig(level=logging.DEBUG, force=True)  # what etl/scripts/config.setup_logging() does
+        logging.getLogger("x").warning("in the job")
+        if fails:
+            raise RuntimeError("boom")
+
+    try:
+        etl_use_cases._execute_etl_job(job, etl_use_cases._JobLogger(job_store, "import_gee_1", etl_events), "import_gee")
+    except tasks.ETLException:
+        assert fails
+    logging.getLogger("x").warning("after the job")
+
+    assert root.handlers == handlers and root.level == level
+    assert "in the job" in job_store.get_logs("import_gee_1")
+    assert "after the job" not in job_store.get_logs("import_gee_1")
+
+
+def test_a_launch_that_cannot_read_its_pass_config_frees_the_lock(monkeypatch, job_store):
+    finished = []
+
+    class Gate:
+        def start(self, *args):
+            pass
+
+        def pass_config(self):
+            raise RuntimeError("database is locked")
+
+        def finish(self, job_id, status):
+            finished.append((job_id, status))
+
+    monkeypatch.setattr(tasks, "get_checkpoint_store", Gate)
+    monkeypatch.setattr(tasks.etl_events, "publish_status", lambda *args: None)
+    monkeypatch.setattr(tasks.task_etl, "apply_async", lambda *a, **kw: pytest.fail("queued without its pass config"))
+
+    with pytest.raises(RuntimeError, match="database is locked"):
+        tasks.CeleryTaskLauncher().launch("import_gee", "import_gee_1")
+
+    assert finished == [("import_gee_1", "error")]
+    assert job_store.get("import_gee_1")["status"] == "error"  # not left pending, its WebSocket waiting
+
+
 @pytest.mark.parametrize("replies, expected", [
     ({"w1@host": {"import_gee_1": ["active", {}]}}, True),
     ({"w1@host": {}, "w2@host": {"import_gee_1": ["reserved", {}]}}, True),  # prefetched by a restarted worker
@@ -162,15 +212,14 @@ def test_is_active_asks_the_workers_by_job_id(monkeypatch, replies, expected):
     assert asked == ["import_gee_1"]
 
 
-def test_is_active_is_true_for_an_inline_job_of_this_process_and_unknown_when_the_broker_is_down(monkeypatch):
+def test_is_active_is_unknown_when_the_broker_is_down(monkeypatch):
     def broker_down():
         raise ConnectionError("broker down")
 
     monkeypatch.setattr(tasks.celery_app.control, "inspect", broker_down)
-    monkeypatch.setattr(tasks, "RUNNING_INLINE", {"post_forecast_1"})
 
-    assert tasks.CeleryTaskLauncher().is_active("post_forecast_1") is True
-    assert tasks.CeleryTaskLauncher().is_active("import_gee_1") is None
+    # Every job is a Celery job since 2026-11-27 (update_key and approve_imports ran inline in the API before)
+    assert tasks.CeleryTaskLauncher().is_active("approve_imports_1") is None
 
 
 @pytest.mark.parametrize("test_mode", [True, False])

@@ -84,11 +84,10 @@ def get_forecast_service(
 
 
 def get_analytics_service(
-    job_repo: JobRepository = Depends(get_job_repository),
+    task_launcher: TaskLauncher = Depends(get_task_launcher),
     gate: PipelineGate = Depends(get_pipeline_gate),
-    events: EventPublisher = Depends(get_event_publisher),
 ) -> AnalyticsService:
-    return AnalyticsService(job_repo, gate, events)
+    return AnalyticsService(task_launcher, gate)
 
 
 def get_ingestion_service(
