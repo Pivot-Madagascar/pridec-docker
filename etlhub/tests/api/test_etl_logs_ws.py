@@ -104,3 +104,36 @@ def test_logs_without_job_record_complete_without_status(app, fake_ws_redis, tmp
     with _connect(app) as ws:
         assert ws.receive_json()["logs"] == "old run"
         assert ws.receive_json() == {"type": "etl_log_complete", "job_id": JOB, "final_status": None}
+
+
+def test_the_websocket_gets_its_subscription_by_injection(app, fake_ws_redis):
+    """The live events come from the EventSubscriber bound in core/dependencies.py (B3), not from a Redis client of
+    the WebSocket's own."""
+    from etlhub.core.dependencies import get_event_subscriber
+
+    class FakeSubscriber:
+        def __init__(self):
+            self.job_id, self.closed = None, False
+            self.events = [json.dumps({"type": "job_status_update", "job_id": JOB, "status": "success"})]
+
+        async def subscribe(self, job_id):
+            self.job_id = job_id
+
+        async def next_event(self, timeout):
+            return self.events.pop(0) if self.events else None
+
+        async def close(self):
+            self.closed = True
+
+    subscriber = FakeSubscriber()
+    _job(fake_ws_redis, "running")
+    app.dependency_overrides[get_event_subscriber] = lambda: subscriber
+    try:
+        with _connect(app) as ws:
+            messages = [ws.receive_json() for _ in range(4)]
+    finally:
+        app.dependency_overrides.pop(get_event_subscriber, None)
+
+    assert messages[-1] == {"type": "etl_log_complete", "job_id": JOB, "final_status": "success"}
+    assert subscriber.job_id == JOB and subscriber.closed
+    assert fake_ws_redis.pubsubs == []  # the Redis adapter was not used

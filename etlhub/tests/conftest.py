@@ -15,6 +15,7 @@ sys.modules['geopandas'] = MagicMock()
 from contextlib import contextmanager
 
 import pytest
+from fastapi import Depends
 from fastapi.testclient import TestClient
 
 
@@ -209,16 +210,18 @@ def mock_request_tracker():
 @pytest.fixture
 def override_dependencies(app, mock_task_launcher, job_store, mock_request_tracker):
     from etlhub.core.dependencies import get_ingestion_service, get_analytics_service, get_forecast_service, get_tracking_service
+    from etlhub.core.dependencies import get_fetched_imports
     from etlhub.application.use_cases.ingestion_service import IngestionService
     from etlhub.application.use_cases.analytics_service import AnalyticsService
     from etlhub.application.use_cases.forecast_service import ForecastService
     from etlhub.application.use_cases.tracking_service import TrackingService
     
     def get_mock_ingestion_service():
-        return IngestionService(mock_task_launcher)
+        from etlhub.infrastructure.import_settings import ScriptImportSettings
+        return IngestionService(mock_task_launcher, ScriptImportSettings())
     
-    def get_mock_analytics_service():
-        return AnalyticsService(mock_task_launcher, OpenGate())
+    def get_mock_analytics_service(imports=Depends(get_fetched_imports)):  # an override of the store reaches it
+        return AnalyticsService(mock_task_launcher, OpenGate(), imports)
     
     def get_mock_forecast_service():
         return ForecastService(mock_task_launcher, job_store)
@@ -275,16 +278,13 @@ class FakeAsyncRedis:
 
 @pytest.fixture
 def fake_ws_redis(monkeypatch, tmp_path):
-    """Replaces the WebSocket's pub/sub client and JobStore's Redis (both read `fake.data`); log files in tmp_path."""
+    """Replaces the EventSubscriber adapter's pub/sub client and JobStore's Redis (both read `fake.data`); log files in
+    tmp_path."""
     from types import SimpleNamespace
-    from etlhub.api.websockets import etl_logs
-    from etlhub.infrastructure import job_store
+    from etlhub.infrastructure import etl_events, job_store
     fake = FakeAsyncRedis()
 
-    async def client():
-        return fake
-
-    monkeypatch.setattr(etl_logs, "get_redis_client", client)
+    monkeypatch.setattr(etl_events, "_async_redis", lambda: fake)
     monkeypatch.setattr(job_store, "get_redis", lambda: SimpleNamespace(get=fake.data.get))
     monkeypatch.setattr(job_store, "get_settings", lambda: SimpleNamespace(logs_dir=str(tmp_path)))
     return fake

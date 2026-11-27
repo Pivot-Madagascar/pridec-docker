@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from etlhub.api.routers import forecast_report_router
+from etlhub.infrastructure import output_files
 
 
 def test_report_of_the_session_s_mode(app, monkeypatch, tmp_path):
@@ -12,7 +12,7 @@ def test_report_of_the_session_s_mode(app, monkeypatch, tmp_path):
     from etlhub.api.auth import get_current_user
     from etlhub.core.job_context import pipeline_test_mode
 
-    monkeypatch.setattr(forecast_report_router, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
+    monkeypatch.setattr(output_files, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
     for folder, html in ((tmp_path / "output", "<p>production</p>"), (tmp_path / "test" / "output", "<p>test</p>")):
         folder.mkdir(parents=True)
         (folder / "forecast_report.html").write_text(html, encoding="utf-8")
@@ -32,7 +32,7 @@ def test_report_of_the_session_s_mode(app, monkeypatch, tmp_path):
 
 
 def test_report_missing_is_404_and_unreadable_is_500(client, monkeypatch, tmp_path):
-    monkeypatch.setattr(forecast_report_router, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
+    monkeypatch.setattr(output_files, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
 
     assert client.get("/output/forecast_report.html").status_code == 404
 

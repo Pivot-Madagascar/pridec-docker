@@ -3,7 +3,8 @@ from fastapi import APIRouter, WebSocket, Depends, Query
 from etlhub.api.routers import error_doc
 from etlhub.application.use_cases.tracking_service import TrackingService
 from etlhub.api.websockets.etl_logs import handle_etl_logs_ws
-from etlhub.core.dependencies import get_pipeline_gate, get_tracking_service
+from etlhub.core.dependencies import get_event_subscriber, get_pipeline_gate, get_tracking_service
+from etlhub.domain.interfaces.event_subscriber import EventSubscriber
 from etlhub.domain.interfaces.pipeline_gate import PipelineGate
 from etlhub.domain.schemas.tracking import RequestLog, ETLLog
 
@@ -61,5 +62,8 @@ def get_etl_logs(job_id: str, service: TrackingService = Depends(get_tracking_se
 
 
 @router.websocket("/etl-logs/{job_id}")
-async def websocket_etl_logs(websocket: WebSocket, job_id: str, gate: PipelineGate = Depends(get_pipeline_gate)):
-    await handle_etl_logs_ws(websocket, job_id, gate)
+async def websocket_etl_logs(
+    websocket: WebSocket, job_id: str,
+    gate: PipelineGate = Depends(get_pipeline_gate), events: EventSubscriber = Depends(get_event_subscriber),
+):
+    await handle_etl_logs_ws(websocket, job_id, gate, events)

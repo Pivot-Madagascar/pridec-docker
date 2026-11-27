@@ -3,6 +3,8 @@ from datetime import datetime
 
 from etlhub.application.use_cases.check_import_availability import availability_plan, availability_report
 from etlhub.domain.exceptions import ETLException
+from etlhub.domain.interfaces.dhis2_reader import DHIS2Reader
+from etlhub.domain.interfaces.import_settings import ImportSettings
 from etlhub.domain.interfaces.pipeline_gate import PipelineGate
 
 
@@ -21,19 +23,22 @@ class AvailabilityService:
     only the other sections ask DHIS2. refresh=True asks DHIS2 for all of them.
     """
 
-    def __init__(self, gate: PipelineGate, plan=availability_plan, report=availability_report):
+    def __init__(self, gate: PipelineGate, dhis2: DHIS2Reader, settings: ImportSettings, plan=availability_plan,
+                 report=availability_report):
         self._gate = gate
+        self._dhis2 = dhis2
+        self._settings = settings
         self._plan = plan
         self._report = report
 
     def check(self, refresh: bool = False) -> dict:
         started_at = datetime.now().isoformat(timespec="microseconds")  # a launch during the check invalidates it
         try:
-            plan = self._plan()
+            plan = self._plan(self._settings)
             params = {task: json.dumps(p, sort_keys=True) for task, p in import_params(plan).items()}
             reused = {} if refresh else self._gate.reusable_availability(params)
             todo = [task for task in params if task not in reused]
-            fresh = self._report(todo) if todo else None
+            fresh = self._report(self._dhis2, self._settings, todo) if todo else None
         except Exception as e:  # missing PARENT_OU, no DHIS2 session: DHIS2 errors only mark their row
             self._gate.record_availability_check("availability_checked", {"error": str(e)[:200]})
             raise ETLException(f"Import availability check failed: {e}") from e

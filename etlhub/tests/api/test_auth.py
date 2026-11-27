@@ -13,9 +13,11 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from etlhub.api.auth import router as auth_router_module
 from etlhub.core.config import get_settings
+from etlhub.core.dependencies import get_dhis2_accounts
+from etlhub.domain.exceptions import DHIS2Error
 from etlhub.infrastructure import auth_store
+from etlhub.infrastructure.dhis2_accounts import HttpDHIS2Accounts
 
 DHIS2_URL = "https://dhis2.test"
 PASSWORD = "s3cret-Pa55word"
@@ -113,12 +115,13 @@ def fake_redis(monkeypatch):
 
 
 @pytest.fixture
-def dhis2(monkeypatch):
+def dhis2():
+    from etlhub.main import app
     fake = FakeDHIS2()
-    monkeypatch.setattr(
-        auth_router_module, "dhis2_client", lambda: httpx.Client(transport=httpx.MockTransport(fake.handler))
-    )
-    return fake
+    # The real adapter on a fake transport: the router must use the port it is given, never its own client.
+    app.dependency_overrides[get_dhis2_accounts] = lambda: HttpDHIS2Accounts(transport=httpx.MockTransport(fake.handler))
+    yield fake
+    app.dependency_overrides.pop(get_dhis2_accounts, None)
 
 
 @pytest.fixture
@@ -344,6 +347,63 @@ def test_redis_failure_after_token_creation_revokes_the_new_token(https_client, 
     assert dhis2.tokens == {}
 
 
+def test_auth_store_turns_redis_errors_into_auth_store_unavailable(fake_redis, monkeypatch):
+    import redis
+    from etlhub.domain.exceptions import AuthStoreUnavailable
+
+    def down(*args, **kwargs):
+        raise redis.RedisError("down")
+
+    monkeypatch.setattr(fake_redis, "get", down)
+    monkeypatch.setattr(fake_redis, "set", down)
+
+    with pytest.raises(AuthStoreUnavailable, match="down"):
+        auth_store.create_session({"username": "admin"}, "tokenUid001", 60)
+    with pytest.raises(AuthStoreUnavailable):
+        auth_store.get_session("abc")
+    assert auth_store.get_credential("admin") is None  # unchanged: a missing credential
+
+
+def test_login_uses_the_injected_dhis2_accounts_and_maps_its_error_to_502(anon_app, fake_redis, settings):
+    calls = []
+
+    class Unreachable:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            pass
+
+        def fetch_me(self, url, *, auth=None, token=None):
+            calls.append(url)
+            raise DHIS2Error("down")
+
+    anon_app.dependency_overrides[get_dhis2_accounts] = Unreachable
+    try:
+        response = _login(TestClient(anon_app, base_url="https://testserver"))
+    finally:
+        anon_app.dependency_overrides.pop(get_dhis2_accounts, None)
+
+    assert calls == [DHIS2_URL]
+    assert response.status_code == 502
+    assert response.json() == {"detail": "DHIS2 unreachable or returned an unexpected response"}
+
+
+def test_dhis2_accounts_turns_httpx_errors_into_dhis2_error(settings, monkeypatch):
+    monkeypatch.setattr(settings, "dhis2_auth_timeout", 3.0)
+
+    def down(request):
+        raise httpx.ConnectError("down", request=request)
+
+    with HttpDHIS2Accounts(transport=httpx.MockTransport(down)) as dhis2:
+        assert dhis2.client.follow_redirects is False and dhis2.client.timeout == httpx.Timeout(3.0)
+        with pytest.raises(DHIS2Error, match="down"):
+            dhis2.fetch_me(DHIS2_URL, auth=("admin", PASSWORD))
+        with pytest.raises(DHIS2Error, match="down"):
+            dhis2.create_pat(DHIS2_URL, ("admin", PASSWORD), 0)
+        assert dhis2.revoke_pat(DHIS2_URL, "tokenUid001", token="d2pat_x") is False  # never raises
+
+
 def test_request_from_another_origin_is_refused(https_client):
     _login(https_client)
 
@@ -377,23 +437,21 @@ def test_fetch_me_with_a_real_token():
     """
     import time
 
-    from etlhub.api.auth.dhis2_auth import create_pat, dhis2_client, fetch_me, revoke_pat
-
     url = os.getenv("DHIS2_TEST_URL", "").rstrip("/")
     basic = (os.getenv("DHIS2_TEST_USERNAME"), os.getenv("DHIS2_TEST_PASSWORD"))
     if not url or not all(basic):
         pytest.skip("DHIS2_TEST_URL, DHIS2_TEST_USERNAME and DHIS2_TEST_PASSWORD not set")
 
-    with dhis2_client() as client:
-        key, uid = create_pat(client, url, basic, (int(time.time()) + 600) * 1000)
+    with HttpDHIS2Accounts() as dhis2:
+        key, uid = dhis2.create_pat(url, basic, (int(time.time()) + 600) * 1000)
         try:
-            user = fetch_me(client, url, token=key)
+            user = dhis2.fetch_me(url, token=key)
         finally:
-            revoked = revoke_pat(client, url, uid, token=key)
+            revoked = dhis2.revoke_pat(url, uid, token=key)
         assert user is not None and user["id"] and user["username"] == basic[0]
         assert revoked
         # Deleted in DHIS2. Not "fetch_me(token) is None": DHIS2 2.40 keeps accepting a deleted token from its cache for a while.
-        assert client.get(f"{url}/api/apiToken/{uid}", auth=basic).status_code == 404
+        assert dhis2.client.get(f"{url}/api/apiToken/{uid}", auth=basic).status_code == 404
 
 
 def test_dhis2_urls_lists_allowed_hosts_with_the_scheme_login_accepts(anon_app, monkeypatch):

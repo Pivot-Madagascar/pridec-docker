@@ -1,13 +1,10 @@
-"""DHIS2 calls used by login/logout, and the session dependency.
+"""Login rules (allowed DHIS2 hosts, cookies, lifetimes) and the session dependency.
 
-Login exchanges a DHIS2 username/password for a personal access token (PAT). The PAT
+Login exchanges a DHIS2 username/password for a personal access token (PAT), through the DHIS2Accounts port. The PAT
 never leaves the server: the browser only gets an HttpOnly session cookie.
 """
-import logging
-import re
 from urllib.parse import urlparse
 
-import httpx
 from fastapi import HTTPException, WebSocketException, status
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import HTTPConnection
@@ -17,8 +14,6 @@ from etlhub.core.config import get_settings, split_csv
 from etlhub.core.job_context import pipeline_test_mode
 from etlhub.core.request_context import request_context
 from etlhub.core.dependencies import get_auth_store
-
-logger = logging.getLogger(__name__)
 
 SESSION_COOKIE = "etlhub_session"
 # A random id per browser (never the token), kept 30 days: a new login from the browser that created the account's
@@ -32,13 +27,6 @@ SESSION_LIFETIME_SECONDS = 24 * 3600
 TOKEN_LIFETIME_SECONDS = 30 * 24 * 3600
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
-_UID = re.compile(r"^[A-Za-z0-9]{11}$")
-# Attributes DHIS2 2.40 requires to create a PAT (checked manually against 2.40.3).
-_PAT_ATTRIBUTES = [{"type": "MethodAllowedList", "allowedMethods": ["GET", "POST", "PUT", "PATCH", "DELETE"]}]
-
-
-class DHIS2Error(Exception):
-    """DHIS2 is unreachable or answered something unexpected."""
 
 
 def allowed_hosts() -> list[str]:
@@ -65,67 +53,6 @@ def normalize_dhis2_url(url: str) -> str | None:
     if parsed.netloc.lower() not in allowed_hosts():
         return None
     return url.strip().rstrip("/")
-
-
-def dhis2_client() -> httpx.Client:
-    # No redirects: credentials must only ever go to the allowed host.
-    return httpx.Client(follow_redirects=False, timeout=get_settings().dhis2_auth_timeout)
-
-
-def _token_header(token: str) -> dict:
-    return {"Authorization": f"ApiToken {token}"}
-
-
-def fetch_me(client: httpx.Client, url: str, *, auth: tuple | None = None, token: str | None = None) -> dict | None:
-    """Return the DHIS2 user for these credentials, or None if DHIS2 rejects them."""
-    response = client.get(f"{url}/api/me.json", auth=auth, headers=_token_header(token) if token else None)
-    if response.status_code in (401, 403):
-        return None
-    if response.status_code != 200:
-        raise DHIS2Error(f"GET /api/me returned {response.status_code}")
-    try:
-        data = response.json()
-    except ValueError as e:
-        raise DHIS2Error("GET /api/me returned invalid JSON") from e
-    return {k: data.get(k) for k in ("id", "email", "username", "displayName")}
-
-
-def create_pat(client: httpx.Client, url: str, auth: tuple, expire_ms: int) -> tuple[str, str]:
-    """Create a PAT for the Basic-auth user. Return (key, uid)."""
-    response = client.post(
-        f"{url}/api/apiToken",
-        json={"expire": expire_ms, "attributes": _PAT_ATTRIBUTES},
-        auth=auth,
-    )
-    if response.status_code != 201:
-        raise DHIS2Error(f"POST /api/apiToken returned {response.status_code}")
-    try:
-        body = response.json()["response"]
-        key, uid = body["key"], body["uid"]
-    except (ValueError, KeyError, TypeError) as e:
-        raise DHIS2Error("POST /api/apiToken returned an unexpected body") from e
-    if not key.startswith("d2pat_") or not _UID.match(uid):
-        raise DHIS2Error("POST /api/apiToken returned an unexpected key or uid")
-    return key, uid
-
-
-def revoke_pat(client: httpx.Client, url: str, uid: str, *, auth: tuple | None = None, token: str | None = None) -> bool:
-    """Delete a PAT in DHIS2. Never raises: a failed revocation is logged, the token expires anyway."""
-    if not _UID.match(uid):
-        logger.warning("Not revoking DHIS2 token: invalid uid")
-        return False
-    try:
-        response = client.delete(
-            f"{url}/api/apiToken/{uid}", auth=auth, headers=_token_header(token) if token else None
-        )
-    except httpx.HTTPError as e:
-        logger.warning("Could not revoke DHIS2 token uid=%s: %s", uid, e)
-        return False
-    if response.status_code != 200:
-        logger.warning("DHIS2 refused to revoke token uid=%s: status %s", uid, response.status_code)
-        return False
-    logger.info("Revoked DHIS2 token uid=%s", uid)
-    return True
 
 
 def session_from_cookies(cookies) -> dict | None:

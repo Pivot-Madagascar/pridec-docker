@@ -3,11 +3,11 @@ import io
 import zipfile
 from types import SimpleNamespace
 
-from etlhub.api.routers import forecast_report_router
+from etlhub.infrastructure import output_files
 
 
 def test_archive_holds_input_and_output_but_no_symlink(client, monkeypatch, tmp_path):
-    monkeypatch.setattr(forecast_report_router, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
+    monkeypatch.setattr(output_files, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
     (tmp_path / "input").mkdir()
     (tmp_path / "input" / "config.json").write_text("{}")
     (tmp_path / "output" / "sub").mkdir(parents=True)
@@ -24,13 +24,13 @@ def test_archive_holds_input_and_output_but_no_symlink(client, monkeypatch, tmp_
 
 
 def test_archive_of_empty_folders_is_404(client, monkeypatch, tmp_path):
-    monkeypatch.setattr(forecast_report_router, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
+    monkeypatch.setattr(output_files, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
 
     assert client.get("/output/archive").status_code == 404
 
 
 def test_archive_of_input_only_holds_the_files_the_forecast_reads(client, monkeypatch, tmp_path):
-    monkeypatch.setattr(forecast_report_router, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
+    monkeypatch.setattr(output_files, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
     (tmp_path / "input").mkdir()
     (tmp_path / "input" / "disease_data.json").write_text("[]")
     (tmp_path / "output").mkdir()
@@ -53,7 +53,7 @@ def test_archive_serves_the_folders_of_the_session_s_mode(app, monkeypatch, tmp_
     from etlhub.api.auth import get_current_user
     from etlhub.core.job_context import pipeline_test_mode
 
-    monkeypatch.setattr(forecast_report_router, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
+    monkeypatch.setattr(output_files, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
     for folder, name in ((tmp_path / "input", "production.json"), (tmp_path / "test" / "input", "test.json")):
         folder.mkdir(parents=True)
         (folder / name).write_text("{}")
@@ -68,3 +68,25 @@ def test_archive_serves_the_folders_of_the_session_s_mode(app, monkeypatch, tmp_
         app.dependency_overrides[get_current_user] = session_of(test_mode)
         response = TestClient(app).get("/output/archive", params={"folder": "input"})
         assert zipfile.ZipFile(io.BytesIO(response.content)).namelist() == expected
+
+
+def test_the_routes_get_their_files_by_injection(client, app):
+    """Both routes read through the OutputFiles port bound in core/dependencies.py, not the disk directly."""
+    from etlhub.core.dependencies import get_output_files
+
+    class FakeOutputFiles:
+        def report(self):
+            return "<p>fake</p>"
+
+        def archive(self, folder):
+            return b"zip of " + (folder or "both").encode()
+
+    app.dependency_overrides[get_output_files] = FakeOutputFiles
+    try:
+        assert client.get("/output/forecast_report.html").text == "<p>fake</p>"
+        response = client.get("/output/archive", params={"folder": "output"})
+    finally:
+        app.dependency_overrides.pop(get_output_files, None)
+
+    assert response.content == b"zip of output"
+    assert 'filename="pridec_output.zip"' in response.headers["content-disposition"]

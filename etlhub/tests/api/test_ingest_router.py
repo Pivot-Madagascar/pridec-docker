@@ -38,9 +38,9 @@ def test_an_import_launch_records_its_parameters_and_a_failure_to_read_them_neve
         {"task": "import_pivot_com", "elements": ["e"], "periods": ["202609"], "org_units": "ou:LEVEL-6;P1"}]}
     launcher = _RecordingLauncher()
 
-    IngestionService(launcher, lambda: plan).launch("import_pivot_com")
-    IngestionService(launcher, lambda: plan).launch("fetch_climate")
-    IngestionService(launcher, lambda: (_ for _ in ()).throw(EnvironmentError("PARENT_OU missing"))).launch("import_gee")
+    IngestionService(launcher, None, lambda settings: plan).launch("import_pivot_com")
+    IngestionService(launcher, None, lambda settings: plan).launch("fetch_climate")
+    IngestionService(launcher, None, lambda settings: (_ for _ in ()).throw(EnvironmentError("PARENT_OU missing"))).launch("import_gee")
 
     assert launcher.launches == [
         ("import_pivot_com", {"import_pivot_com": {"dhis_url": "http://dhis2.test", "task": "import_pivot_com",

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
-from etlhub.api.routers import forecast_report_router
+from etlhub.infrastructure import output_files
 
 # Handlers that do no blocking work: they may stay async.
 ASYNC_OK = {"/"}  # main.root: a redirect
@@ -22,7 +22,7 @@ def test_the_session_s_mode_reaches_a_def_handler(anon_app, monkeypatch, tmp_pat
     """The async get_current_user sets the mode ContextVar; the def handler runs in a thread with a copy of it."""
     from etlhub.api.auth import dhis2_auth
 
-    monkeypatch.setattr(forecast_report_router, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
+    monkeypatch.setattr(output_files, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
     (tmp_path / "test" / "output").mkdir(parents=True)
     (tmp_path / "test" / "output" / "forecast_report.html").write_text("<p>test</p>")
 

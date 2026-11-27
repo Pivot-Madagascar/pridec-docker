@@ -4,8 +4,6 @@ import secrets
 import time
 from urllib.parse import urlparse
 
-import httpx
-import redis
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field, SecretStr
 
@@ -16,17 +14,14 @@ from etlhub.api.auth.dhis2_auth import (
     SESSION_COOKIE,
     SESSION_LIFETIME_SECONDS,
     TOKEN_LIFETIME_SECONDS,
-    DHIS2Error,
-    create_pat,
-    dhis2_client,
-    fetch_me,
     get_current_user,
     normalize_dhis2_url,
-    revoke_pat,
 )
 from etlhub.api.routers import NOT_AUTHENTICATED, error_doc
 from etlhub.core.config import get_settings
-from etlhub.core.dependencies import get_auth_store, get_config_store, get_pipeline_gate
+from etlhub.core.dependencies import get_auth_store, get_config_store, get_dhis2_accounts, get_pipeline_gate
+from etlhub.domain.exceptions import AuthStoreUnavailable, DHIS2Error
+from etlhub.domain.interfaces.dhis2_accounts import DHIS2Accounts
 
 logger = logging.getLogger(__name__)
 
@@ -65,32 +60,32 @@ def _job_running() -> bool:
         return True
 
 
-def _revoke(client: httpx.Client, previous: dict, url: str | None = None, basic: tuple | None = None) -> None:
+def _revoke(dhis2: DHIS2Accounts, previous: dict, url: str | None = None, basic: tuple | None = None) -> None:
     """Revoke an account's token and forget it (not revoked while a job runs: it may use it; it then expires alone)."""
     if _job_running():
         logger.info("DHIS2 token uid=%s not revoked: a job is running, it expires on its own", previous["pat_uid"])
     else:
-        revoked = revoke_pat(client, previous["url"], previous["pat_uid"], token=previous["token"])
+        revoked = dhis2.revoke_pat(previous["url"], previous["pat_uid"], token=previous["token"])
         if not revoked and basic and previous["url"] == url:
-            revoke_pat(client, url, previous["pat_uid"], auth=basic)
+            dhis2.revoke_pat(url, previous["pat_uid"], auth=basic)
     # Never leave a revoked token where jobs and sessions would still use it,
     # even if creating the new one fails below.
     get_auth_store().delete_credential(previous["username"])
 
 
-def _reusable(client: httpx.Client, current: dict | None, url: str, device_id: str | None) -> bool:
+def _reusable(dhis2: DHIS2Accounts, current: dict | None, url: str, device_id: str | None) -> bool:
     """The account's token is kept when this browser created it, on this DHIS2, and DHIS2 still accepts it."""
     return bool(current and device_id and current["url"] == url and current.get("device") == _device_hash(device_id)
-                and fetch_me(client, url, token=current["token"]) is not None)
+                and dhis2.fetch_me(url, token=current["token"]) is not None)
 
 
-def _rollback(client: httpx.Client, url: str, uid: str, basic: tuple, username: str) -> None:
-    revoke_pat(client, url, uid, auth=basic)
+def _rollback(dhis2: DHIS2Accounts, url: str, uid: str, basic: tuple, username: str) -> None:
+    dhis2.revoke_pat(url, uid, auth=basic)
     try:
         current = get_auth_store().get_credential(username)
         if current and current["pat_uid"] == uid:
             get_auth_store().delete_credential(username)
-    except redis.RedisError as e:
+    except AuthStoreUnavailable as e:
         logger.error("Could not remove the revoked DHIS2 credential from Redis: %s", e)
 
 
@@ -125,7 +120,8 @@ def dhis2_urls() -> list[str]:
         503: error_doc("Redis unavailable", {"detail": "Session store unavailable"}),
     },
 )
-def login(body: LoginRequest, request: Request, response: Response):
+def login(body: LoginRequest, request: Request, response: Response,
+          accounts: DHIS2Accounts = Depends(get_dhis2_accounts)):
     """Log in with a DHIS2 username and password.
 
     One DHIS2 personal access token per account, 30 days; the session (HttpOnly cookie) lasts 24 h. A login from the
@@ -144,8 +140,8 @@ def login(body: LoginRequest, request: Request, response: Response):
             raise HTTPException(status_code=429, detail="Too many failed attempts, try again later")
 
         basic = (body.username, body.password.get_secret_value())
-        with dhis2_client() as client:
-            user = fetch_me(client, url, auth=basic)
+        with accounts as dhis2:
+            user = dhis2.fetch_me(url, auth=basic)
             if user is None:
                 get_auth_store().record_failed_login(ip, body.username, FAILED_LOGIN_WINDOW_SECONDS)
                 raise HTTPException(status_code=401, detail="Invalid DHIS2 username or password")
@@ -154,7 +150,7 @@ def login(body: LoginRequest, request: Request, response: Response):
             username = user["username"]
             current = get_auth_store().get_credential(username)  # gone once its 30 days are over (Redis TTL)
             device_id = request.cookies.get(DEVICE_COOKIE)
-            if _reusable(client, current, url, device_id):
+            if _reusable(dhis2, current, url, device_id):
                 session_id = get_auth_store().create_session(user, current["pat_uid"], SESSION_LIFETIME_SECONDS)
                 _set_cookie(response, SESSION_COOKIE, session_id, SESSION_LIFETIME_SECONDS)
                 logger.info("DHIS2 login: user=%s url=%s ip=%s token_uid=%s (kept)", username, url, ip,
@@ -163,12 +159,12 @@ def login(body: LoginRequest, request: Request, response: Response):
 
             # Another browser, another DHIS2, or a token DHIS2 no longer accepts: this account's token is replaced.
             if current:
-                _revoke(client, current, url, basic)
+                _revoke(dhis2, current, url, basic)
             device_id = device_id or secrets.token_urlsafe(32)
             expires_at = int(time.time()) + TOKEN_LIFETIME_SECONDS
-            key, uid = create_pat(client, url, basic, expires_at * 1000)
+            key, uid = dhis2.create_pat(url, basic, expires_at * 1000)
             try:
-                if fetch_me(client, url, token=key) is None:
+                if dhis2.fetch_me(url, token=key) is None:
                     raise DHIS2Error("DHIS2 rejected the token it just created")
                 get_auth_store().set_credential(
                     {"url": url, "token": key, "pat_uid": uid, "username": username, "expires_at": expires_at,
@@ -179,12 +175,12 @@ def login(body: LoginRequest, request: Request, response: Response):
                 # Values written by the old config form; nothing reads them any more.
                 get_config_store().delete_keys(["DHIS_URL", "DHIS_TOKEN"])
             except Exception:
-                _rollback(client, url, uid, basic, username)
+                _rollback(dhis2, url, uid, basic, username)
                 raise
-    except (DHIS2Error, httpx.HTTPError) as e:
+    except DHIS2Error as e:
         logger.warning("DHIS2 login failed for user=%s url=%s: %s", body.username, url, e)
         raise HTTPException(status_code=502, detail="DHIS2 unreachable or returned an unexpected response")
-    except redis.RedisError as e:
+    except AuthStoreUnavailable as e:
         logger.error("DHIS2 login failed for user=%s: Redis error: %s", body.username, e)
         raise HTTPException(status_code=503, detail="Session store unavailable")
 
@@ -195,7 +191,7 @@ def login(body: LoginRequest, request: Request, response: Response):
 
 
 @auth_router.post("/auth/logout", status_code=204, summary="Log out")
-def logout(request: Request):
+def logout(request: Request, accounts: DHIS2Accounts = Depends(get_dhis2_accounts)):
     """End the session and revoke its account's DHIS2 token (not while a job runs: it may use it). Other accounts keep
     theirs. Always clears the session cookie."""
     session_id = request.cookies.get(SESSION_COOKIE)
@@ -204,8 +200,8 @@ def logout(request: Request):
         get_auth_store().delete_session(session_id)
         credential = get_auth_store().get_credential(session["user"]["username"])
         if credential and credential["pat_uid"] == session["pat_uid"]:
-            with dhis2_client() as client:
-                _revoke(client, credential)
+            with accounts as dhis2:
+                _revoke(dhis2, credential)
         logger.info("DHIS2 logout: user=%s", session["user"].get("username"))
 
     response = Response(status_code=204)

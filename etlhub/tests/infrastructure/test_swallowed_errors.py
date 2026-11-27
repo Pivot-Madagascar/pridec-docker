@@ -6,7 +6,7 @@ import pytest
 
 from etlhub.application.use_cases import etl_use_cases
 from etlhub.core.config import get_settings
-from etlhub.infrastructure import etl_events, job_store
+from etlhub.infrastructure import etl_events, job_store, webhook_notifier
 
 
 @pytest.fixture
@@ -49,9 +49,9 @@ def test_a_failed_webhook_is_logged_with_its_host_only(monkeypatch, caplog):
     def refused(*args, **kwargs):
         raise httpx.ConnectError(f"cannot reach {url}")
 
-    monkeypatch.setattr(etl_use_cases.httpx, "post", refused)
+    monkeypatch.setattr(webhook_notifier.httpx, "post", refused)
 
-    etl_use_cases.notify_webhook(url, "import_gee_1", "success", "done")
+    etl_use_cases.notify_webhook(url, "import_gee_1", "success", "done", webhook_notifier.HttpWebhookNotifier())
 
     assert "Webhook of import_gee_1 to hooks.example.org failed: ConnectError" in caplog.text
     assert "s3cret" not in caplog.text

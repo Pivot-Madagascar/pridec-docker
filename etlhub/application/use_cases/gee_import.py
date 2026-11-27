@@ -14,7 +14,8 @@ from datetime import datetime
 from pridec_gee import calc_date_range, fetch_climate_gee, get_dhis_geojson, post_climate
 from etl.scripts.config import (GEE_SERVICE_ACCOUNT, check_envvars, get_dhis_token, get_dhis_url, get_dry_run,
                                 get_gee_variables, get_parent_ou, setup_logging)
-from etlhub.application.use_cases.fetch_pivot import _check_import, _store
+from etlhub.application.use_cases.fetch_pivot import _check_import
+from etlhub.domain.interfaces.fetched_imports import FetchedImports
 from etlhub.application.use_cases.ingestion_service import available_gee_variables
 
 logger = logging.getLogger("import_gee")
@@ -49,22 +50,22 @@ def _state(status: str, dry_run: bool, error: str | None = None, rows: int | Non
             "rows": rows}
 
 
-def _save(states: dict[str, dict]) -> None:
-    _store().save(TASK, [{"variable": name, **state} for name, state in states.items()])
+def _save(imports: FetchedImports, states: dict[str, dict]) -> None:
+    imports.save(TASK, [{"variable": name, **state} for name, state in states.items()])
 
 
-def import_gee() -> None:
+def import_gee(imports: FetchedImports) -> None:
     setup_logging()  # here, not at import: the job's stdout/stderr redirection must be active
     variables = get_gee_variables()  # the pass's: chosen in the Import GEE dialog
     url, token, parent_ou, dry_run = get_dhis_url(), get_dhis_token(), get_parent_ou(), get_dry_run()
     check_envvars({"DHIS_TOKEN": token, "DHIS_URL": url, "PARENT_OU": parent_ou,
                    "GEE_SERVICE_ACCOUNT": GEE_SERVICE_ACCOUNT, "GEE_VARIABLES": variables})
     states = {name: _state("running", dry_run) for name in variables}
-    _save(states)
+    _save(imports, states)
     try:
         rows = _fetch(variables, url, token, parent_ou)
     except Exception as e:
-        _save({name: _state("failed", dry_run, f"GEE fetch failed: {e}") for name in variables})
+        _save(imports, {name: _state("failed", dry_run, f"GEE fetch failed: {e}") for name in variables})
         raise
     failed = []
     for name in variables:
@@ -81,15 +82,15 @@ def import_gee() -> None:
                 logger.error("%s: %s", name, e)
                 states[name] = _state("failed", dry_run, str(e))
                 failed.append(name)
-        _save(states)
+        _save(imports, states)
     if failed:
         raise RuntimeError(f"GEE import failed for {', '.join(failed)}")
 
 
-def gee_imports(chosen: str | None) -> list[dict]:
+def gee_imports(imports: FetchedImports, chosen: str | None) -> list[dict]:
     """Every GEE variable: whether the pass imports it (its gee_variables, comma-separated; None: all of them) and the
     state of its last import in the pass (None: never imported there)."""
-    states = {s["variable"]: s for s in _store().load(TASK)}
+    states = {s["variable"]: s for s in imports.load(TASK)}
     picked = chosen.split(",") if chosen else None
     return [{"variable": name, "chosen": picked is None or name in picked, "state": states.get(name)}
             for name in available_gee_variables()]

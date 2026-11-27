@@ -37,22 +37,22 @@ def fetched(monkeypatch):
     monkeypatch.setattr(module, "PIVOT_TOKEN", "t")
     monkeypatch.setattr(module, "get_parent_ou", lambda: "PASS_OU")
     monkeypatch.setattr(module, "setup_logging", lambda: None)
-    monkeypatch.setattr(module, "_store", lambda: store)
     store = _Store()
     return store, calls
 
 
 def test_nothing_fetched_lists_every_import_empty(fetched):
-    assert module.fetched_imports() == [{"task": "import_pivot_com", "elements": []},
+    store, _ = fetched
+    assert module.fetched_imports(store) == [{"task": "import_pivot_com", "elements": []},
                                         {"task": "import_pivot_csb", "elements": []}]
 
 
 def test_each_import_keeps_its_answer_and_the_same_import_again_replaces_it_whole(fetched, monkeypatch):
     store, calls = fetched
-    module.import_pivot_com()
-    module.import_pivot_csb()
+    module.import_pivot_com(store)
+    module.import_pivot_csb(store)
 
-    assert module.fetched_imports() == [
+    assert module.fetched_imports(store) == [
         {"task": "import_pivot_com", "elements": [{"data_element": "pridec_historic_COMMalaria", "rows": 1,
                                                    "flagged": False, "text": "ok", "error": None,
                                                    "post": None}]},
@@ -64,14 +64,14 @@ def test_each_import_keeps_its_answer_and_the_same_import_again_replaces_it_whol
     assert "parent_ou" not in calls["csb"]
 
     monkeypatch.setattr(module, "fetch_pivot_com_etlhub", lambda **kw: [])  # COM again: nothing this time
-    module.import_pivot_com()
-    assert module.fetched_imports()[0] == {"task": "import_pivot_com", "elements": []}
-    assert module.fetched_imports()[1]["elements"]  # CSB untouched
+    module.import_pivot_com(store)
+    assert module.fetched_imports(store)[0] == {"task": "import_pivot_com", "elements": []}
+    assert module.fetched_imports(store)[1]["elements"]  # CSB untouched
 
 
 def test_missing_parent_ou_fails_before_fetching(fetched, monkeypatch):
-    _, calls = fetched
+    store, calls = fetched
     monkeypatch.setattr(module, "get_parent_ou", lambda: None)
     with pytest.raises(EnvironmentError, match="PARENT_OU"):
-        module.import_pivot_com()
+        module.import_pivot_com(store)
     assert calls == {}

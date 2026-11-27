@@ -2,7 +2,9 @@ from typing import Protocol
 
 
 class AuthStore(Protocol):
-    """The DHIS2 credential of each account, the sessions and the failed-login counters."""
+    """The DHIS2 credential of each account, the sessions and the failed-login counters.
+
+    A store failure raises AuthStoreUnavailable (domain.exceptions); get_credential returns None instead."""
 
     def get_credential(self, username: str | None = None) -> dict | None: ...
 

@@ -86,7 +86,7 @@ def test_approve_through_the_api(client, checkpoint_store):
 
 
 @pytest.fixture
-def fetched(tmp_path, monkeypatch, checkpoint_store, job_store):
+def fetched(tmp_path, monkeypatch, checkpoint_store, job_store, app):
     """Both Pivot imports done; COMMalaria (flagged) and CSBMalaria fetched; the posts recorded instead of sent."""
     from etlhub.application.use_cases import fetch_pivot
     for task in ("import_pivot_com", "import_pivot_csb"):
@@ -97,8 +97,10 @@ def fetched(tmp_path, monkeypatch, checkpoint_store, job_store):
                  ("import_pivot_com", "pridec_historic_COMMalaria", {"text": None, "flagged": True, "error": "too many"}),
                  ("import_pivot_csb", "pridec_historic_CSBMalaria", {"text": "numNA: 0", "flagged": False, "error": None}))}
     posts = []
-    monkeypatch.setattr(fetch_pivot, "_store", lambda: SimpleNamespace(load=lambda task: saved.get(task, []),
-                                                                       save=saved.__setitem__))
+    store = SimpleNamespace(load=lambda task: saved.get(task, []), save=saved.__setitem__)
+    from etlhub.core.dependencies import get_fetched_imports
+    monkeypatch.setitem(app.dependency_overrides, get_fetched_imports, lambda: store)  # the API's
+    monkeypatch.setattr(tasks, "RedisFetchedImports", lambda: store)  # the worker's
     monkeypatch.setattr(fetch_pivot, "setup_logging", lambda: None)
     monkeypatch.setattr(fetch_pivot, "get_dhis_url", lambda: "https://dhis2.test")
     monkeypatch.setattr(fetch_pivot, "get_dhis_token", lambda: "t")
@@ -663,9 +665,10 @@ def test_import_gee_imports_the_variables_chosen_in_its_dialog_and_keeps_them_on
     assert client.post("/import_gee", params={"confirm": "true"}).status_code == 202  # no body: the pass's choice
     assert queue[-1][1]["pass_config"]["gee_variables"] == "b_2"
 
-    from etlhub.application.use_cases import gee_import
+    from etlhub.core.dependencies import get_fetched_imports
     state = {"status": "imported", "at": "t", "dry_run": True, "error": None, "rows": 3}
-    monkeypatch.setattr(gee_import, "_store", lambda: SimpleNamespace(load=lambda task: [{"variable": "b_2", **state}]))
+    monkeypatch.setitem(client.app.dependency_overrides, get_fetched_imports,
+                        lambda: SimpleNamespace(load=lambda task: [{"variable": "b_2", **state}]))
     listed = client.get("/pipeline/imports/gee").json()["variables"]
     assert [(v["variable"], v["chosen"], v["state"]) for v in listed] == [("a_1", False, None), ("b_2", True, {"variable": "b_2", **state}),
                                                                            ("c_3", False, None)]

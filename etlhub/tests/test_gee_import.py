@@ -34,7 +34,6 @@ def job(monkeypatch):
     monkeypatch.setattr(module, "get_parent_ou", lambda: "OU")
     monkeypatch.setattr(module, "get_dry_run", lambda: True)
     monkeypatch.setattr(module, "GEE_SERVICE_ACCOUNT", "sa@gee")
-    monkeypatch.setattr(module, "_store", lambda: store)
     monkeypatch.setattr(module, "_fetch", lambda variables, url, token, parent_ou: rows["value"])
 
     def post(base_url, payload, token, dryRun):
@@ -57,7 +56,7 @@ def test_one_fetch_then_one_post_per_chosen_variable_with_its_values_only(job):
     rows["value"] = [_row("a_1"), _row("a_1"), _row("z_9"), _row("b_2"), _row("c_3")]
 
     with pytest.raises(RuntimeError, match="GEE import failed for b_2"):
-        module.import_gee()
+        module.import_gee(store)
 
     assert posts == [["a_1", "a_1"], ["b_2"], ["c_3"]]  # b_2 failed, c_3 still posted (independent variables)
     assert _states(store) == {"a_1": ("imported", 2, None), "b_2": ("failed", None, "500 Server Error"),
@@ -70,12 +69,12 @@ def test_a_variable_without_values_is_empty_and_the_job_succeeds(job):
     rows["value"] = [_row("a_1"), _row("c_3")]
     module.get_gee_variables = lambda: ["a_1", "c_3"]  # monkeypatched by the fixture: restored after the test
 
-    module.import_gee()
+    module.import_gee(store)
 
     assert _states(store) == {"a_1": ("imported", 1, None), "c_3": ("imported", 1, None)}
 
     rows["value"] = [_row("a_1")]
-    module.import_gee()
+    module.import_gee(store)
     assert _states(store)["c_3"] == ("empty", 0, None)
 
 
@@ -87,7 +86,7 @@ def test_a_failed_fetch_fails_every_chosen_variable(job, monkeypatch):
 
     monkeypatch.setattr(module, "_fetch", fetch)
     with pytest.raises(RuntimeError, match="GEE quota"):
-        module.import_gee()
+        module.import_gee(store)
 
     assert posts == []
     assert {v: s[0] for v, s in _states(store).items()} == {"a_1": "failed", "b_2": "failed", "c_3": "failed"}
@@ -97,14 +96,14 @@ def test_a_failed_fetch_fails_every_chosen_variable(job, monkeypatch):
 def test_the_list_has_every_variable_whether_the_pass_imports_it_and_its_last_state(job, monkeypatch):
     store, _, rows = job
     monkeypatch.setattr(module, "available_gee_variables", lambda: ["a_1", "b_2", "c_3"])
-    assert [(v["variable"], v["chosen"], v["state"]) for v in module.gee_imports(None)] == [
+    assert [(v["variable"], v["chosen"], v["state"]) for v in module.gee_imports(store, None)] == [
         ("a_1", True, None), ("b_2", True, None), ("c_3", True, None)]  # a pass without a choice imports them all
 
     rows["value"] = [_row("a_1")]
     module.get_gee_variables = lambda: ["a_1"]
-    module.import_gee()
+    module.import_gee(store)
 
-    listed = module.gee_imports("a_1,c_3")
+    listed = module.gee_imports(store, "a_1,c_3")
     assert [(v["variable"], v["chosen"]) for v in listed] == [("a_1", True), ("b_2", False), ("c_3", True)]
     assert listed[0]["state"]["status"] == "imported"
     assert listed[2]["state"] is None  # chosen now, not imported yet

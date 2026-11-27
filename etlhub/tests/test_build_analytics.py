@@ -50,7 +50,7 @@ def run_job(job_store, monkeypatch):
         monkeypatch.setattr(job.httpx, "get", get)
         token = pipeline_test_mode.set(test_mode)  # as _run_task does: the launcher's mode
         try:
-            etl_use_cases.run_etl_job("build_analytics", job_store, "build_analytics_1", etl_events)
+            etl_use_cases.run_etl_job("build_analytics", job_store, "build_analytics_1", etl_events, None)  # no FetchedImports
         finally:
             pipeline_test_mode.reset(token)
             log = job_store.get_logs("build_analytics_1") or ""

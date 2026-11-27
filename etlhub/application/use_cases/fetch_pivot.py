@@ -26,15 +26,13 @@ PRIOR_MONTHS = 8  # as the scripts' __main__ (and check_import_availability's pe
 PIVOT_ELEMENTS = {"import_pivot_com": COM_ELEMENTS, "import_pivot_csb": CSB_ELEMENTS}  # the files each fetch writes
 
 
-def _store() -> FetchedImports:
-    # The composition root's adapter, read when called: the jobs and the module functions get no injection.
-    from etlhub.core.dependencies import get_fetched_imports  # not at import: dependencies imports this module's users
-    return get_fetched_imports()
+# Every function reading or writing the fetched data takes the FetchedImports port: the jobs get the worker's adapter
+# (infrastructure/tasks.py, through run_etl_job), the API the composition root's (Depends(get_fetched_imports)).
 
 
-def _save(task: str, results: list[dict]) -> None:
+def _save(imports: FetchedImports, task: str, results: list[dict]) -> None:
     """The import's answer (the library's items), replacing its previous one in the pass."""
-    _store().save(task, results)
+    imports.save(task, results)
     for item in results:
         logger.info("%s: %d rows, %s", item["dataElement"], len(item["fetched_data"]),
                     "FLAGGED" if item["summary"]["flagged"] else "ok")
@@ -51,29 +49,29 @@ def has_pivot_token() -> bool:
     return bool(PIVOT_TOKEN)
 
 
-def import_pivot_com() -> None:
+def import_pivot_com(imports: FetchedImports) -> None:
     setup_logging()  # here, not at import: the job's stdout/stderr redirection must be active
     url, parent_ou = pivot_url(), get_parent_ou()  # both the pass's
     check_envvars({"PIVOT_TOKEN": PIVOT_TOKEN, "PIVOT_URL": url, "PARENT_OU": parent_ou})
-    _save("import_pivot_com", fetch_pivot_com_etlhub(pivot_token=PIVOT_TOKEN, pivot_url=url,
+    _save(imports, "import_pivot_com", fetch_pivot_com_etlhub(pivot_token=PIVOT_TOKEN, pivot_url=url,
                                                      prior_months=PRIOR_MONTHS, parent_ou=parent_ou))
 
 
-def import_pivot_csb() -> None:
+def import_pivot_csb(imports: FetchedImports) -> None:
     setup_logging()
     url = pivot_url()
     check_envvars({"PIVOT_TOKEN": PIVOT_TOKEN, "PIVOT_URL": url})
-    _save("import_pivot_csb", fetch_pivot_csb_etlhub(pivot_token=PIVOT_TOKEN, pivot_url=url, prior_months=PRIOR_MONTHS))
+    _save(imports, "import_pivot_csb", fetch_pivot_csb_etlhub(pivot_token=PIVOT_TOKEN, pivot_url=url, prior_months=PRIOR_MONTHS))
 
 
-def _fetched() -> dict[str, dict]:
+def _fetched(imports: FetchedImports) -> dict[str, dict]:
     """Every element the Pivot imports fetched in this pass and mode: dataElement -> its item."""
-    return {item["dataElement"]: item for task in PIVOT_ELEMENTS for item in _store().load(task)}
+    return {item["dataElement"]: item for task in PIVOT_ELEMENTS for item in imports.load(task)}
 
 
-def fetched_imports() -> list[dict]:
+def fetched_imports(imports: FetchedImports) -> list[dict]:
     """Per Pivot import, the elements of its last fetch in the pass (only those, in its list's order): rows and check."""
-    items = {task: {i["dataElement"]: i for i in _store().load(task)} for task in PIVOT_ELEMENTS}
+    items = {task: {i["dataElement"]: i for i in imports.load(task)} for task in PIVOT_ELEMENTS}
     return [{"task": task, "elements": [_element(items[task][name]) for name in names if name in items[task]]}
             for task, names in PIVOT_ELEMENTS.items()]
 
@@ -84,25 +82,25 @@ def _element(item: dict) -> dict:
             "text": summary.get("text"), "error": summary.get("error"), "post": item.get("post")}
 
 
-def not_fetched(elements: list[str]) -> list[str]:
-    fetched = _fetched()
+def not_fetched(imports: FetchedImports, elements: list[str]) -> list[str]:
+    fetched = _fetched(imports)
     return [name for name in elements if name not in fetched]
 
 
-def _mark(name: str, status: str, dry_run: bool, error: str | None = None) -> None:
+def _mark(imports: FetchedImports, name: str, status: str, dry_run: bool, error: str | None = None) -> None:
     """Keeps an element's post state with its fetched data (`post`, shown per line in the approval): posted, empty
     (nothing to post) or failed. Until a new fetch of its import replaces the data, and the state with it."""
     for task in PIVOT_ELEMENTS:
-        items = _store().load(task)
+        items = imports.load(task)
         for item in items:
             if item["dataElement"] == name:
                 item["post"] = {"status": status, "at": datetime.now().isoformat(timespec="seconds"), "dry_run": dry_run,
                                 "error": error}
-                _store().save(task, items)
+                imports.save(task, items)
                 return
 
 
-def post_pivot_imports(elements: list[str]) -> str:
+def post_pivot_imports(imports: FetchedImports, elements: list[str]) -> str:
     """approve_imports job (Celery since 2026-11-27): posts each chosen element's fetched values to DHIS2, with the
     job's DRYRUN (the mode's). A failed post stops the job (error): the elements posted before it stay
     (CREATE_AND_UPDATE: posting again is safe). Each element's outcome is kept with it (_mark), for the approval's
@@ -111,20 +109,20 @@ def post_pivot_imports(elements: list[str]) -> str:
     url, token, dry_run = get_dhis_url(), get_dhis_token(), get_dry_run()
     if not elements:
         logger.info("Imports approved without any data element: nothing posted to %s", url)
-    fetched = _fetched()
+    fetched = _fetched(imports)
     for name in elements:
         payload = {"dataValues": fetched[name]["fetched_data"]}
         if not payload["dataValues"]:
             logger.warning("%s: no value fetched, nothing to post", name)
-            _mark(name, "empty", dry_run)
+            _mark(imports, name, "empty", dry_run)
             continue
         logger.info("Posting %s (%d values) to %s, dryRun=%s", name, len(payload["dataValues"]), url, dry_run)
         try:
             _check_import(name, post_dataElements(dhis_url=url, payload=payload, token=token, dryRun=dry_run))
         except Exception as e:
-            _mark(name, "failed", dry_run, str(e))
+            _mark(imports, name, "failed", dry_run, str(e))
             raise
-        _mark(name, "posted", dry_run)
+        _mark(imports, name, "posted", dry_run)
     return f"Imports approved, posted: {', '.join(elements) or 'nothing'}"
 
 

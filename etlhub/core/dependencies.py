@@ -9,6 +9,10 @@ from etlhub.infrastructure.tasks import CeleryTaskLauncher
 from etlhub.infrastructure import auth_store, etl_events
 from etlhub.infrastructure.config_store import ConfigStore
 from etlhub.infrastructure.fetched_imports import RedisFetchedImports
+from etlhub.infrastructure.dhis2_reader import HttpDHIS2Reader
+from etlhub.infrastructure.output_files import WorkDirOutputFiles
+from etlhub.infrastructure.dhis2_accounts import HttpDHIS2Accounts
+from etlhub.infrastructure.import_settings import ScriptImportSettings
 
 from etlhub.domain.interfaces.job_repository import JobRepository
 from etlhub.domain.interfaces.task_launcher import TaskLauncher
@@ -18,6 +22,11 @@ from etlhub.domain.interfaces.auth_store import AuthStore
 from etlhub.domain.interfaces.config_repository import ConfigRepository
 from etlhub.domain.interfaces.event_publisher import EventPublisher
 from etlhub.domain.interfaces.fetched_imports import FetchedImports
+from etlhub.domain.interfaces.dhis2_reader import DHIS2Reader
+from etlhub.domain.interfaces.event_subscriber import EventSubscriber
+from etlhub.domain.interfaces.output_files import OutputFiles
+from etlhub.domain.interfaces.dhis2_accounts import DHIS2Accounts
+from etlhub.domain.interfaces.import_settings import ImportSettings
 
 from etlhub.application.use_cases.forecast_service import ForecastService
 from etlhub.application.use_cases.analytics_service import AnalyticsService
@@ -53,12 +62,24 @@ def get_event_publisher() -> EventPublisher:
     return etl_events
 
 
+def get_event_subscriber() -> EventSubscriber:
+    return etl_events.RedisEventSubscriber()  # one subscription per WebSocket
+
+
+def get_output_files() -> OutputFiles:
+    return WorkDirOutputFiles()
+
+
 def get_config_store() -> ConfigRepository:
     return ConfigStore()
 
 
 def get_fetched_imports() -> FetchedImports:
     return RedisFetchedImports()
+
+
+def get_dhis2_accounts() -> DHIS2Accounts:
+    return HttpDHIS2Accounts()  # a new one per login or logout: opened with `with`
 
 
 def get_pipeline_gate() -> PipelineGate:
@@ -72,8 +93,18 @@ def get_journal_service(
     return JournalService(gate, request_tracker)
 
 
-def get_availability_service(gate: PipelineGate = Depends(get_pipeline_gate)) -> AvailabilityService:
-    return AvailabilityService(gate)
+def get_dhis2_reader() -> DHIS2Reader:
+    return HttpDHIS2Reader()
+
+
+def get_import_settings() -> ImportSettings:
+    return ScriptImportSettings()
+
+
+def get_availability_service(gate: PipelineGate = Depends(get_pipeline_gate),
+                             dhis2: DHIS2Reader = Depends(get_dhis2_reader),
+                             settings: ImportSettings = Depends(get_import_settings)) -> AvailabilityService:
+    return AvailabilityService(gate, dhis2, settings)
 
 
 def get_forecast_service(
@@ -86,14 +117,16 @@ def get_forecast_service(
 def get_analytics_service(
     task_launcher: TaskLauncher = Depends(get_task_launcher),
     gate: PipelineGate = Depends(get_pipeline_gate),
+    imports: FetchedImports = Depends(get_fetched_imports),
 ) -> AnalyticsService:
-    return AnalyticsService(task_launcher, gate)
+    return AnalyticsService(task_launcher, gate, imports)
 
 
 def get_ingestion_service(
     task_launcher: TaskLauncher = Depends(get_task_launcher),
+    settings: ImportSettings = Depends(get_import_settings),
 ) -> IngestionService:
-    return IngestionService(task_launcher)
+    return IngestionService(task_launcher, settings)
 
 
 def get_tracking_service(

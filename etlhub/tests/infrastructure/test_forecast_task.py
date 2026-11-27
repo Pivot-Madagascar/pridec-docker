@@ -13,7 +13,7 @@ def job_store(job_store, monkeypatch):
 @pytest.fixture
 def webhooks(monkeypatch):
     sent = []
-    monkeypatch.setattr(tasks, "notify_webhook", lambda url, job_id, status, message: sent.append({"status": status}))
+    monkeypatch.setattr(tasks, "notify_webhook", lambda url, job_id, status, message, webhooks: sent.append({"status": status}))
     return sent
 
 
@@ -73,11 +73,13 @@ def test_launch_records_the_job_as_pending_before_queueing(monkeypatch, job_stor
 
 def test_generic_task_runs_the_job_with_its_kwargs(monkeypatch, job_store, webhooks):
     calls = []
-    monkeypatch.setattr(tasks, "run_etl_job", lambda task_type, store, job_id, events, **kw: calls.append((task_type, job_id, events, kw)))
+    monkeypatch.setattr(tasks, "run_etl_job", lambda task_type, store, job_id, events, imports, **kw: calls.append(
+        (task_type, job_id, events, type(imports), kw)))
 
     tasks.task_etl.run("validate_inputs", "validate_inputs_1", webhook_url="http://hook", input_dir="input/x")
 
-    assert calls == [("validate_inputs", "validate_inputs_1", tasks.etl_events, {"input_dir": "input/x"})]
+    assert calls == [("validate_inputs", "validate_inputs_1", tasks.etl_events, tasks.RedisFetchedImports,
+                      {"input_dir": "input/x"})]
     assert job_store.get("validate_inputs_1")["message"] == "validate inputs completed"
     assert webhooks[-1]["status"] == "success"
 

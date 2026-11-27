@@ -8,13 +8,16 @@ from etlhub.api.routers import BLOCKED, LAUNCH_FAILED, error_doc
 from etlhub.application.use_cases import fetch_pivot, gee_import
 from etlhub.application.use_cases.analytics_service import AnalyticsService
 from etlhub.application.use_cases.check_import_availability import COM_ELEMENTS, CSB_ELEMENTS
+from etlhub.application.use_cases.check_import_availability import availability_plan
 from etlhub.application.use_cases.ingestion_service import chosen_gee_variables, current_import_params
 from etlhub.application.use_cases.journal_service import JournalService
 from etlhub.api.auth.dhis2_auth import SESSION_COOKIE
-from etlhub.core.dependencies import (get_analytics_service, get_auth_store, get_job_repository, get_journal_service,
-                                      get_pipeline_gate, get_task_launcher)
+from etlhub.core.dependencies import (get_analytics_service, get_auth_store, get_fetched_imports, get_import_settings,
+                                      get_job_repository, get_journal_service, get_pipeline_gate, get_task_launcher)
 from etlhub.core.job_context import current_test_mode
 from etlhub.domain.interfaces.auth_store import AuthStore
+from etlhub.domain.interfaces.fetched_imports import FetchedImports
+from etlhub.domain.interfaces.import_settings import ImportSettings
 from etlhub.domain.exceptions import ConfirmationRequiredError
 from etlhub.domain.schemas import ETLResponse, GeeChoice
 from etlhub.domain.interfaces.job_repository import JobRepository
@@ -159,8 +162,8 @@ def skip_alerts(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict[str, st
          "text": "numNA: 0 | minimum value: 0 | maximum value: 36 | negative values: 0 | number of values: 279",
          "error": None, "post": {"status": "posted", "at": "2026-11-23T15:40:12", "dry_run": True, "error": None}}]}]}}}}},
 )
-def fetched_imports() -> dict:
-    return {"imports": fetch_pivot.fetched_imports()}
+def fetched_imports(imports: FetchedImports = Depends(get_fetched_imports)) -> dict:
+    return {"imports": fetch_pivot.fetched_imports(imports)}
 
 
 @router.get(
@@ -176,9 +179,10 @@ def fetched_imports() -> dict:
         {"variable": "pridec_climate_precipitation", "chosen": True,
          "state": {"status": "imported", "at": "2026-11-24T10:12:03", "dry_run": True, "error": None, "rows": 840}}]}}}}},
 )
-def gee_imports(gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
+def gee_imports(gate: PipelineGate = Depends(get_pipeline_gate),
+                imports: FetchedImports = Depends(get_fetched_imports)) -> dict:
     shown = gate.progress()["pass"]
-    return {"variables": gee_import.gee_imports(shown["gee_variables"] if shown else None)}
+    return {"variables": gee_import.gee_imports(imports, shown["gee_variables"] if shown else None)}
 
 
 @router.post(
@@ -276,10 +280,12 @@ def set_cycle(body: Cycle, gate: PipelineGate = Depends(get_pipeline_gate)) -> d
         **BLOCKED},
 )
 def start_pass(body: GeeChoice | None = None, confirm: bool = CONFIRM,
-               gate: PipelineGate = Depends(get_pipeline_gate)) -> dict:
+               gate: PipelineGate = Depends(get_pipeline_gate),
+               settings: ImportSettings = Depends(get_import_settings)) -> dict:
     body = body or GeeChoice()
     chosen = chosen_gee_variables(body.gee_variables)
-    return gate.start_pass(confirm, current_import_params(gee_variables=chosen), ",".join(chosen))
+    params = current_import_params(lambda: availability_plan(settings), gee_variables=chosen)
+    return gate.start_pass(confirm, params, ",".join(chosen))
 
 
 @router.post(

@@ -10,6 +10,8 @@ from etlhub.infrastructure.forecast_runner import run_rscript
 from etlhub.infrastructure.job_store import JobStore
 from etlhub.infrastructure.checkpoint_store import get_checkpoint_store
 from etlhub.infrastructure import etl_events
+from etlhub.infrastructure.fetched_imports import RedisFetchedImports
+from etlhub.infrastructure.webhook_notifier import HttpWebhookNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +56,7 @@ def _run(job_id: str, task_name: str, run_fn, webhook_url: str | None) -> None:
         # A job may say how it ended (post_forecast: alerts not included); else the usual message.
         message = result if isinstance(result, str) and result else f"{task_name} completed"
         _update_task_status(job_store, job_id, "success", message)
-        notify_webhook(webhook_url, job_id, "success", message)
+        notify_webhook(webhook_url, job_id, "success", message, HttpWebhookNotifier())
     except Exception as e:
         tb = traceback.format_exc()
         job_store.append_logs(job_id, tb)  # after the job's own output (a forecast's R logs), not instead of it
@@ -63,7 +65,7 @@ def _run(job_id: str, task_name: str, run_fn, webhook_url: str | None) -> None:
         except Exception as pub_error:
             logger.warning("Could not publish the error log of %s: %s", job_id, pub_error)
         _update_task_status(job_store, job_id, "error", str(e))
-        notify_webhook(webhook_url, job_id, "error", str(e))
+        notify_webhook(webhook_url, job_id, "error", str(e), HttpWebhookNotifier())
         raise
 
 
@@ -72,7 +74,8 @@ def task_etl(task_type: str, job_id: str, webhook_url: str | None = None, test_m
              pass_config: dict | None = None, **kwargs):
     """Every ETL_JOBS entry; kwargs go to the job function (validate_inputs paths)."""
     _run_task(job_id, ETL_JOBS[task_type][1],
-              lambda job_store, job_id: run_etl_job(task_type, job_store, job_id, etl_events, **kwargs), webhook_url,
+              lambda job_store, job_id: run_etl_job(task_type, job_store, job_id, etl_events, RedisFetchedImports(),
+                                                    **kwargs), webhook_url,
               test_mode, pass_config)
 
 

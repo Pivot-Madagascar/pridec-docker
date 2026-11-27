@@ -6,13 +6,13 @@ import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
-import httpx
-
 from etlhub.core.config import get_settings
 from etlhub.core.job_context import current_test_mode, work_dir
 from etlhub.domain.exceptions import ETLException
 from etlhub.domain.interfaces.event_publisher import EventPublisher
+from etlhub.domain.interfaces.fetched_imports import FetchedImports
 from etlhub.domain.interfaces.job_repository import JobRepository
+from etlhub.domain.interfaces.webhook_notifier import WebhookNotifier
 from etlhub.application.use_cases.validation_use_cases import validate_input_files
 from etlhub.application.use_cases.gee_import import import_gee  # one post per variable, its state kept
 from etlhub.application.use_cases.calc_alerts import calc_orgunit_alerts  # etlhub's copy of the CLI script
@@ -23,8 +23,6 @@ from etl.scripts.fetch_pridec_geojson import fetch_geojson
 from etlhub.application.use_cases.build_analytics import build_analytics
 from etlhub.application.use_cases.post_forecast import post_forecast
 from etl.scripts.update_pridec_key import update_key
-
-logger = logging.getLogger(__name__)
 
 # Jobs run by the Celery worker: task_type -> (function, label of the job status messages).
 ETL_JOBS = {
@@ -42,6 +40,8 @@ ETL_JOBS = {
     "update_key": (update_key, "PRIDE-C key update"),
     "approve_imports": (post_pivot_imports, "imports approval"),
 }
+# The jobs that keep their data or state in FetchedImports: run_etl_job passes them the worker's adapter (`imports`).
+WITH_FETCHED_IMPORTS = {"import_gee", "import_pivot_com", "import_pivot_csb", "approve_imports"}
 
 
 class _JobLogger(io.StringIO):
@@ -92,8 +92,11 @@ def _reason(e: Exception) -> str:
     return str(e) or "\n".join(getattr(e, "errors", None) or []) or type(e).__name__
 
 
-def run_etl_job(task_type: str, job_store: JobRepository, job_id: str, events: EventPublisher, **kwargs):
+def run_etl_job(task_type: str, job_store: JobRepository, job_id: str, events: EventPublisher,
+                imports: FetchedImports, **kwargs):
     fn = ETL_JOBS[task_type][0]
+    if task_type in WITH_FETCHED_IMPORTS:
+        kwargs["imports"] = imports
     with _into_mode_folder(task_type):
         return _execute_etl_job(fn, _JobLogger(job_store, job_id, events), task_type, **kwargs)
 
@@ -130,17 +133,13 @@ def _into_mode_folder(task_type: str) -> Iterator[None]:
             os.replace(aside, written)
 
 
-def notify_webhook(webhook_url: str | None, job_id: str, status: str, message: str) -> None:
-    """POSTs {job_id, status, message, logs_url} to webhook_url, if any. Failures are ignored."""
+def notify_webhook(webhook_url: str | None, job_id: str, status: str, message: str, webhooks: WebhookNotifier) -> None:
+    """POSTs {job_id, status, message, logs_url} to webhook_url, if any. Failures are ignored (logged by the adapter)."""
     if not webhook_url:
         return
-    try:
-        # httpx does not follow redirects: the host checked at launch is the only one called.
-        httpx.post(webhook_url, json={
-            "job_id": job_id,
-            "status": status,
-            "message": message,
-            "logs_url": f"/api/tracking/etl-logs/{job_id}",
-        }, timeout=10)
-    except Exception as e:  # the host only: the path or query of a webhook may carry a token
-        logger.warning("Webhook of %s to %s failed: %s", job_id, httpx.URL(webhook_url).host, type(e).__name__)
+    webhooks.post(webhook_url, job_id, {
+        "job_id": job_id,
+        "status": status,
+        "message": message,
+        "logs_url": f"/api/tracking/etl-logs/{job_id}",
+    })

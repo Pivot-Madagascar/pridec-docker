@@ -1,9 +1,9 @@
 """GET /import_availability: the report of application/use_cases/check_import_availability.py, shared in the cycle, journaled and tracked."""
-import pandas as pd
 import pytest
 
 from etlhub.application.use_cases.availability_service import AvailabilityService
 from etlhub.core.dependencies import get_availability_service
+from etlhub.infrastructure.import_settings import ScriptImportSettings  # reads the patched etl/scripts/config.py
 
 TASKS = ["import_gee", "import_pivot_com", "import_pivot_csb"]
 ELEMENT = {"code": "pridec_historic_COMMalaria", "raw": {"202609": 3}, "analytics": {"202609": 0},
@@ -18,13 +18,13 @@ class FakeScript:
     def __init__(self):
         self.parent_ou, self.calls, self.error = "P1", [], None
 
-    def plan(self):
+    def plan(self, settings):
         if self.error:
             raise self.error
         return {"dhis_url": "http://dhis2.test", "imports": [
             {"task": t, "elements": ["e"], "periods": ["202609"], "org_units": f"ou:LEVEL-6;{self.parent_ou}"} for t in TASKS]}
 
-    def report(self, tasks):
+    def report(self, dhis2, settings, tasks):
         self.calls.append(tasks)
         return {"checked_at": "x", "dhis_url": "http://dhis2.test", "last_analytics": f"build-{len(self.calls)}",
                 "imports": [{"task": t, "periods": ["202609"], "org_units": "ou:LEVEL-6;P1",
@@ -34,7 +34,7 @@ class FakeScript:
 @pytest.fixture
 def script(app, checkpoint_store):
     fake = FakeScript()
-    app.dependency_overrides[get_availability_service] = lambda: AvailabilityService(checkpoint_store, fake.plan, fake.report)
+    app.dependency_overrides[get_availability_service] = lambda: AvailabilityService(checkpoint_store, None, None, fake.plan, fake.report)
     yield fake
     app.dependency_overrides.pop(get_availability_service, None)
 
@@ -131,7 +131,7 @@ def test_a_check_before_the_first_launch_needs_no_pass_and_is_shared_with_the_pa
     assert [i["reused"] for i in body["imports"]] == [True, True, False]
 
 
-# --- the script itself (DHIS2 faked at its two entry points) ------------------------------
+# --- the script itself (DHIS2 faked behind its DHIS2Reader port) --------------------------
 
 @pytest.fixture
 def dhis2(monkeypatch):
@@ -140,31 +140,31 @@ def dhis2(monkeypatch):
     for name, value in {"get_dhis_url": "http://dhis2.test", "get_dhis_token": "t", "get_parent_ou": "P1",
                         "get_gee_variables": ["pridec_climate_precipitation", "unknown_code"]}.items():
         monkeypatch.setattr(config, name, lambda value=value: value)
-    monkeypatch.setattr(script, "create_period_range", lambda start: "pe:202608;202609")
+    monkeypatch.setattr(script, "_last_months", lambda n: ["202608", "202609"])
     stored, queries = [], []
 
-    def get(url, token, path, params=None):
-        if path == "/api/system/info.json":
+    class Reader:  # the DHIS2Reader port
+        def system_info(self, url, token):
             return {"lastAnalyticsTableSuccess": "2026-10-20T13:36:07.058"}
-        queries.append(params)
-        if params["dataElement"] == "unknown_code":
-            raise RuntimeError("409 Conflict")
-        return {"dataValues": [v for v in stored if v["period"] in params["period"]]}
 
-    def analytics(dx_query, pe_query, **kwargs):  # the analytics tables hold 202608 only
-        return pd.DataFrame([{"dx": dx_query[3:], "ou": "a", "pe": "202608", "value": "1"}])
+        def data_values(self, url, token, params):
+            queries.append(params)
+            if params["dataElement"] == "unknown_code":
+                raise RuntimeError("409 Conflict")
+            return [v for v in stored if v["period"] in params["period"]]
 
-    monkeypatch.setattr(script, "_get", get)
-    monkeypatch.setattr(script, "get_dataElements", analytics)
-    return script, stored, queries
+        def analytics(self, url, token, code, periods, ou_query):  # the analytics tables hold 202608 only
+            return [{"dx": code, "ou": "a", "pe": "202608", "value": "1"}]
+
+    return script, stored, queries, Reader()
 
 
 def test_raw_and_analytics_counts_per_period(dhis2):
-    script, stored, _ = dhis2
+    script, stored, _, reader = dhis2
     stored += [{"orgUnit": ou, "period": pe, "lastUpdated": f"2026-10-0{i}"}
                for i, (ou, pe) in enumerate([("a", "202608"), ("a", "202609"), ("b", "202609")], 1)]
 
-    report = script.availability_report()
+    report = script.availability_report(reader, ScriptImportSettings())
 
     assert report["last_analytics"] == "2026-10-20T13:36:07.058"
     assert [i["task"] for i in report["imports"]] == TASKS
@@ -178,19 +178,32 @@ def test_raw_and_analytics_counts_per_period(dhis2):
 
 
 def test_a_period_without_stored_value_is_not_imported(dhis2):
-    script, stored, _ = dhis2
+    script, stored, _, reader = dhis2
     stored.append({"orgUnit": "a", "period": "202608", "lastUpdated": "2026-10-01"})
 
-    com = script.availability_report()["imports"][1]["elements"][0]
+    com = script.availability_report(reader, ScriptImportSettings())["imports"][1]["elements"][0]
 
     assert (com["raw"], com["imported"], com["analytics_up_to_date"]) == ({"202608": 1, "202609": 0}, False, True)
 
 
 def test_only_the_asked_sections_query_dhis2_with_their_own_org_units(dhis2):
-    script, _, queries = dhis2
+    script, _, queries, reader = dhis2
 
-    report = script.availability_report(["import_pivot_csb"])
+    report = script.availability_report(reader, ScriptImportSettings(), ["import_pivot_csb"])
 
     assert [i["task"] for i in report["imports"]] == ["import_pivot_csb"]
     assert {(q["children"], len(q["orgUnit"])) for q in queries} == {("false", len(script.CSB_IDS))}
-    assert [s["org_units"] for s in script.availability_plan()["imports"]][:2] == ["ou:LEVEL-6;P1"] * 2
+    assert [s["org_units"] for s in script.availability_plan(ScriptImportSettings())["imports"]][:2] == ["ou:LEVEL-6;P1"] * 2
+
+
+def test_the_route_reads_dhis2_through_the_bound_reader(client, app, dhis2, monkeypatch):
+    from etlhub.core.dependencies import get_dhis2_reader
+    _, stored, queries, reader = dhis2
+    stored.append({"orgUnit": "a", "period": "202608", "lastUpdated": "2026-10-01"})
+    monkeypatch.setitem(app.dependency_overrides, get_dhis2_reader, lambda: reader)
+
+    body = client.get("/import_availability").json()
+
+    assert body["last_analytics"] == "2026-10-20T13:36:07.058"  # the fake's, not a real DHIS2
+    assert body["imports"][1]["elements"][0]["raw"] == {"202608": 1, "202609": 0}
+    assert queries  # every DHIS2 read went to the injected reader
