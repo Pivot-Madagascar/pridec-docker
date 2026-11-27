@@ -827,7 +827,7 @@ class CheckpointStore:
         self._event(conn, p, "carried_over", step, item, prev["job_id"],
                     {"from_pass": prev["pass_id"], "status": "success", "updated_at": prev["updated_at"], **extra})
 
-    def finish(self, job_id: str, state: str) -> None:
+    def finish(self, job_id: str, status: str) -> None:
         """Records the final status (success | error) and frees the lock. A post_forecast success closes the run.
 
         The success that completes an active pass closes it (cycle_closed). A pass paused or abandoned meanwhile
@@ -835,19 +835,19 @@ class CheckpointStore:
         """
         with self._transaction() as conn:
             row = conn.execute("SELECT step, item FROM checkpoints WHERE job_id = ?", (job_id,)).fetchone()
-            conn.execute("UPDATE checkpoints SET status = ?, updated_at = ? WHERE job_id = ?", (state, _now(), job_id))
+            conn.execute("UPDATE checkpoints SET status = ?, updated_at = ? WHERE job_id = ?", (status, _now(), job_id))
             self._free_lock(conn, job_id)
             # The launched event, not the checkpoint: a reset may have deleted the job's row before it ended.
             step, item, pass_id = self._launched(conn, job_id) or (*(row or (None, None)), None)
             p = self._pass_of(conn, pass_id)
-            self._event(conn, p, "succeeded" if state == "success" else "failed", step, item, job_id)
-            if row and state == "success" and row[0] == "forecast" and row[1].endswith(":post_forecast"):
+            self._event(conn, p, "succeeded" if status == "success" else "failed", step, item, job_id)
+            if row and status == "success" and row[0] == "forecast" and row[1].endswith(":post_forecast"):
                 couple = row[1].split(":")[0]
                 conn.execute("UPDATE forecast_runs SET state = 'closed', closed_at = ?"
                              " WHERE state = 'open' AND couple = ? AND pass_id = ?", (_now(), couple, p["id"]))
                 self._archive_report(p, couple)
                 self._event(conn, p, "run_closed", "forecast", job_id=job_id, detail={"couple": couple})
-            if state == "success" and p.get("state") == "active" and progress(self._rows(conn, p["id"]))["current_step"] is None:
+            if status == "success" and p.get("state") == "active" and progress(self._rows(conn, p["id"]))["current_step"] is None:
                 conn.execute("UPDATE passes SET state = 'complete' WHERE id = ?", (p["id"],))
                 self._event(conn, p, "cycle_closed", job_id=job_id)
                 self._save_work(p)  # a complete pass keeps its folders
