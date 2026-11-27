@@ -49,13 +49,13 @@ def validate_input_files(
     root = work_dir(get_settings().data_dir, "input", current_test_mode()).parent
     input_base = root / (input_dir or "input")
 
-    paths = {
-        "config": str(root / (config_path or input_base / "config.json")),
-        "external_data": str(root / (external_data_path or input_base / "external_data.csv")),
-        "disease_data": str(root / (disease_data_path or input_base / "disease_data.json")),
-        "climate_data": str(root / (climate_data_path or input_base / "climate_data.json")),
-        "orgunit_poly": str(root / (orgunit_poly_path or input_base / "orgUnit_poly.geojson")),
-    }
+    # A given path is relative to root; a default is already under root (input_base): never join root twice, a
+    # relative DATA_DIR (".") would give test/test/input.
+    given = {"config": (config_path, "config.json"), "external_data": (external_data_path, "external_data.csv"),
+             "disease_data": (disease_data_path, "disease_data.json"),
+             "climate_data": (climate_data_path, "climate_data.json"),
+             "orgunit_poly": (orgunit_poly_path, "orgUnit_poly.geojson")}
+    paths = {k: str(root / path if path else input_base / default) for k, (path, default) in given.items()}
 
     for p in [paths["config"], paths["disease_data"], paths["climate_data"], paths["orgunit_poly"]]:
         if not os.path.exists(p):

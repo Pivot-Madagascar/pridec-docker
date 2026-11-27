@@ -45,18 +45,28 @@ def test_a_grid_that_misses_a_forecast_month_is_refused():
     _check_forecast_months(config, _grid("2015-01", "2027-12"))  # the production external data's months
 
 
+@pytest.mark.parametrize("relative", [False, True])  # DATA_DIR "." is the default: test/test/input on 2026-11-27
 @pytest.mark.parametrize("test_mode, folder", [(False, "input"), (True, "test/input")])
-def test_the_inputs_are_read_in_the_mode_s_folder_under_data_dir(monkeypatch, tmp_path, test_mode, folder):
+def test_the_inputs_are_read_in_the_mode_s_folder_under_data_dir(monkeypatch, tmp_path, test_mode, folder, relative):
+    from pathlib import Path
     from types import SimpleNamespace
 
     from etlhub.application.use_cases import validation_use_cases
     from etlhub.core.job_context import pipeline_test_mode
-    monkeypatch.setattr(validation_use_cases, "get_settings", lambda: SimpleNamespace(data_dir=str(tmp_path)))
+    data_dir = "." if relative else str(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(validation_use_cases, "get_settings", lambda: SimpleNamespace(data_dir=data_dir))
+
+    def missing(**kwargs) -> str:
+        with pytest.raises(FileNotFoundError) as e:
+            validation_use_cases.validate_input_files(**kwargs)
+        return str(e.value)
+
     token = pipeline_test_mode.set(test_mode)
     try:
-        with pytest.raises(FileNotFoundError, match=re.escape(str(tmp_path / folder / "config.json"))):
-            validation_use_cases.validate_input_files()
-        with pytest.raises(FileNotFoundError, match=re.escape(str(tmp_path / folder / "run1" / "config.json"))):
-            validation_use_cases.validate_input_files(input_dir="input/run1")
+        root = Path(data_dir) / folder
+        assert missing() == f"Required input file not found: {root / 'config.json'}"
+        assert missing(input_dir="input/run1") == f"Required input file not found: {root / 'run1' / 'config.json'}"
+        assert missing(config_path="input/c.json") == f"Required input file not found: {root / 'c.json'}"
     finally:
         pipeline_test_mode.reset(token)
