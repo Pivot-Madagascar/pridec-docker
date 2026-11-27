@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -5,11 +7,23 @@ CONFIG = b'{"pred_vars": ["rain"]}'
 CSV = b"orgUnit,period,rain\nOU1,202401,3.2\n"
 
 
+class OpenGate:
+    """What InputUploadService asks the gate, always allowed. Not tests.conftest.OpenGate: importing tests.conftest
+    re-runs it (a second redis mock) and broke test_auth.py when it ran after this file."""
+
+    def launch_cycle(self):
+        from etlhub.domain.pipeline import this_month
+        return this_month()
+
+    @contextmanager
+    def change_input(self, name, confirm=False, removed=False):
+        yield
+
+
 @pytest.fixture
 def input_dir(app, tmp_path):
     from etlhub.core.dependencies import get_input_upload_service
     from etlhub.application.use_cases.input_upload_service import InputUploadService
-    from tests.conftest import OpenGate
 
     # tmp_path itself also holds the request tracker db (autouse fixture).
     directory = tmp_path / "input"

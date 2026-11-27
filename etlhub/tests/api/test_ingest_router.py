@@ -1,62 +1,28 @@
 import pytest
-from unittest.mock import MagicMock
 
 
-def test_import_gee_returns_202(override_dependencies):
+@pytest.fixture
+def launches(override_dependencies, mock_task_launcher, monkeypatch):
+    """The launcher calls of the IngestionService the routes get: (task_type, job_id, keyword arguments)."""
+    calls = []
+    monkeypatch.setattr(mock_task_launcher, "launch",
+                        lambda task_type, job_id, **kwargs: calls.append((task_type, job_id, kwargs)))
+    return calls
+
+
+@pytest.mark.parametrize(
+    "task", ["import_gee", "import_pivot_com", "import_pivot_csb", "fetch_climate", "fetch_disease", "fetch_geojson"])
+def test_a_launch_returns_202_with_the_job_id_it_queued(override_dependencies, launches, task):
     from fastapi.testclient import TestClient
-    from etlhub.main import app
 
-    client = TestClient(app)
-    response = client.post("/import_gee")
+    response = TestClient(override_dependencies).post(f"/{task}", params={"confirm": "true"})
+
     assert response.status_code == 202
     data = response.json()
     assert data["status"] == "accepted"
-    assert "job_id" in data
+    assert data["job_id"].startswith(f"{task}_")
+    assert [(t, j, k["confirm"], k["webhook_url"]) for t, j, k in launches] == [(task, data["job_id"], True, None)]
 
-
-def test_import_pivot_com_returns_202(override_dependencies):
-    from fastapi.testclient import TestClient
-    from etlhub.main import app
-    
-    client = TestClient(app)
-    response = client.post("/import_pivot_com")
-    assert response.status_code == 202
-
-
-def test_import_pivot_csb_returns_202(override_dependencies):
-    from fastapi.testclient import TestClient
-    from etlhub.main import app
-    
-    client = TestClient(app)
-    response = client.post("/import_pivot_csb")
-    assert response.status_code == 202
-
-
-def test_fetch_climate_returns_202(override_dependencies):
-    from fastapi.testclient import TestClient
-    from etlhub.main import app
-    
-    client = TestClient(app)
-    response = client.post("/fetch_climate")
-    assert response.status_code == 202
-
-
-def test_fetch_disease_returns_202(override_dependencies):
-    from fastapi.testclient import TestClient
-    from etlhub.main import app
-    
-    client = TestClient(app)
-    response = client.post("/fetch_disease")
-    assert response.status_code == 202
-
-
-def test_fetch_geojson_returns_202(override_dependencies):
-    from fastapi.testclient import TestClient
-    from etlhub.main import app
-    
-    client = TestClient(app)
-    response = client.post("/fetch_geojson")
-    assert response.status_code == 202
 
 class _RecordingLauncher:
     def __init__(self):

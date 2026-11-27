@@ -8,7 +8,7 @@ from dateutil.relativedelta import relativedelta
 from pivot_dhis_tools import get_dataElements, create_period_range
 
 # ponytail: periods, orgUnits and dataElements are copied from import_gee and from pivot_dhis_tools.pridec.import_pivot
-# (COM_ELEMENTS, CSB_IDS, CSB_ELEMENTS, used by fetch_pivot.py). Keep in sync when one of them changes.
+# (COM_ELEMENTS, CSB_IDS, CSB_ELEMENTS, used by fetch_pivot.py). Keep in sync when one of them changes (tests/test_library_constants_sync.py checks the installed library).
 CSB_IDS = [
     "D9UWDj19ljP", "U1YeJp3NDNV", "DDR2w1c1GyE", "uWoBok9YyvB",
     "O1wNJut8eci", "FGM6Ric1YnC", "r4U7PhBKR7S", "RRe6ic0AU1Z",
