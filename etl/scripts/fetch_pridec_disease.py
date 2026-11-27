@@ -1,4 +1,7 @@
-import argparse
+from pivot_dhis_tools import pridec_fetch_disease
+import os
+import json
+import logging
 
 def print_help():
     print(f"""
@@ -14,48 +17,60 @@ Notes:
     Options: 
 """)
 
-parser = argparse.ArgumentParser(add_help=False)  # disable default help
-parser.add_argument("--help", "-h", action="store_true")
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False) # disable default help
+    parser.add_argument("--help", "-h", action="store_true")
+    return parser.parse_args()
 
-args = parser.parse_args()
+def fetch_disease():
+    from .config import get_dhis_token, get_dhis_url, get_parent_ou, get_ou_level, get_disease_code, setup_logging, check_envvars
 
-if args.help:
-    print_help()
-    exit(0)
+    DHIS_TOKEN = get_dhis_token()
+    DHIS_URL = get_dhis_url()
+    PARENT_OU = get_parent_ou()
+    OU_LEVEL = get_ou_level()
+    DISEASE_CODE = get_disease_code()
 
-from config import DHIS_TOKEN, DHIS_URL, PARENT_OU, OU_LEVEL, DISEASE_CODE, setup_logging, check_envvars
-from pivot_dhis_tools import pridec_fetch_disease
-import os
-import json
+    setup_logging()
 
-import logging
+    logger = logging.getLogger("fetch_disease")
 
-setup_logging()
+    check_envvars(required_vars = {
+                'DHIS_TOKEN': DHIS_TOKEN,
+                'DHIS_URL': DHIS_URL,
+                'PARENT_OU': PARENT_OU,
+                'OU_LEVEL': OU_LEVEL,
+                'DISEASE_CODE': DISEASE_CODE
+            }
+    )
 
-logger = logging.getLogger("fetch_disease")
+    #TO DO: Update to get OU automatically based on disease code
 
-check_envvars(required_vars = {
-            'DHIS_TOKEN': DHIS_TOKEN,
-            'DHIS_URL': DHIS_URL,
-            'PARENT_OU': PARENT_OU,
-            'OU_LEVEL': OU_LEVEL,
-            'DISEASE_CODE': DISEASE_CODE
-        }
-)
+    logger.info("Fetching disease data %s from %s", DISEASE_CODE, DHIS_URL)
 
-#TO DO: Update to get OU automatically based on disease code
+    input_dir = os.path.join(os.getcwd(), 'input')
+    os.makedirs(input_dir, exist_ok=True)
 
-logger.info("Fetching disease data %s from %s", DISEASE_CODE, DHIS_URL)
+    try:
+        os.chmod(input_dir, 0o755)
+    except PermissionError:
+        pass
 
-if not os.path.isdir('input'):
-    raise NotADirectoryError("Directory 'input' not found.")
+    data_out = pridec_fetch_disease(dhis_url = DHIS_URL, ou_level = OU_LEVEL,
+                         ou_parent =  PARENT_OU,
+                         disease_code = DISEASE_CODE,
+                         token=DHIS_TOKEN, past_years = 6)
 
-data_out = pridec_fetch_disease(dhis_url = DHIS_URL, ou_level = OU_LEVEL, 
-                     ou_parent =  PARENT_OU,
-                     disease_code = DISEASE_CODE,
-                     token=DHIS_TOKEN, past_years = 6)
+    output_path = os.path.join(input_dir, "disease_data.json")
+    with open(output_path, "w") as f:
+        json.dump({"dataValues": data_out}, f, indent=2)
 
-with open("input/disease_data.json", "w") as f:
-    json.dump({"dataValues": data_out}, f, indent=2)
+    logger.info("Saved %s to input/disease_data.json", DISEASE_CODE)
 
-logger.info("Saved %s to input/disease_data.json", DISEASE_CODE)
+if __name__ == "__main__":
+    args = parse_args()
+    if args.help:
+        print_help()
+        exit(0)
+    fetch_disease()

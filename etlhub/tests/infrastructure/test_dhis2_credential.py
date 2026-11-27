@@ -1,0 +1,119 @@
+"""Where the ETL scripts and the forecast get their config: etlhub's version (Redis, login) or the CLI's (.env)."""
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+import redis
+
+from etl.scripts import config
+from etlhub import script_config
+from etlhub.infrastructure import auth_store, redis_client
+
+CREDENTIAL = {"url": "https://dhis2.test/", "token": "d2pat_login", "pat_uid": "tokenUid001"}
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_etlhub_plugs_its_config_into_the_scripts():
+    assert config._get is script_config._get
+    assert config._dhis2_credential is script_config._dhis2_credential
+
+
+def test_scripts_use_the_login_credential(monkeypatch):
+    monkeypatch.setattr(auth_store, "get_credential", lambda: CREDENTIAL)
+    monkeypatch.setenv("DHIS_TOKEN", "d2pat_from_env")
+
+    assert config.get_dhis_url() == "https://dhis2.test"
+    assert config.get_dhis_token() == "d2pat_login"
+
+
+def test_without_login_etlhub_fails_instead_of_using_env(monkeypatch):
+    monkeypatch.setattr(auth_store, "get_credential", lambda: None)
+    monkeypatch.setattr(script_config, "_ENV_FALLBACK", False)
+    monkeypatch.setenv("DHIS_TOKEN", "d2pat_from_env")
+
+    with pytest.raises(script_config.DHIS2SessionError, match="Log in again"):
+        config.get_dhis_token()
+
+
+def test_env_fallback_uses_env(monkeypatch):
+    monkeypatch.setattr(auth_store, "get_credential", lambda: None)
+    monkeypatch.setattr(script_config, "_ENV_FALLBACK", True)
+    monkeypatch.setenv("DHIS_TOKEN", "d2pat_from_env")
+
+    assert config.get_dhis_token() == "d2pat_from_env"
+
+
+class _Redis:
+    def __init__(self, values=None, down=False):
+        self.values, self.down = values or {}, down
+
+    def hget(self, _key, field):
+        if self.down:
+            raise redis.RedisError("down")
+        return self.values.get(field)
+
+
+def test_editable_keys_come_from_redis_only(monkeypatch):
+    monkeypatch.setattr(redis_client, "get_redis", lambda: _Redis({"OU_LEVEL": " 5 "}))
+    monkeypatch.setenv("OU_LEVEL", "6")
+    monkeypatch.setenv("PARENT_OU", "ou_env")
+    monkeypatch.setenv("DRYRUN", "true")
+    monkeypatch.setenv("PIVOT_URL", "https://pivot.test")
+    monkeypatch.setenv("GEE_PROJECT", "gee-env")
+
+    assert config.get_ou_level() == "5"
+    assert config.get_parent_ou() is None  # absent from Redis: the default, not .env
+    assert config.get_dry_run() is False  # DRYRUN = TEST MODE (production here), never .env
+    assert script_config._get("PIVOT_URL") is None  # editable since 2026-11-20: Redis only
+    assert script_config._get("GEE_PROJECT") == "gee-env"  # not editable: the environment
+
+
+def test_redis_down_fails_the_job_instead_of_using_env(monkeypatch):
+    monkeypatch.setattr(redis_client, "get_redis", lambda: _Redis(down=True))
+    monkeypatch.setenv("PARENT_OU", "ou_env")
+
+    with pytest.raises(redis.RedisError):
+        config.get_parent_ou()
+
+
+def test_dryrun_is_the_test_mode_outside_a_job_too(monkeypatch):
+    from etlhub.core.job_context import pipeline_test_mode
+    monkeypatch.setenv("DRYRUN", "false")  # .env: the CLI's only
+    token = pipeline_test_mode.set(True)
+    try:
+        assert config.get_dry_run() is True
+    finally:
+        pipeline_test_mode.reset(token)
+
+
+def test_cli_reads_env_without_etlhub_or_redis(tmp_path):
+    """The CLI image has neither etlhub nor redis: config must import and read -e / .env alone."""
+    code = (
+        "import sys; sys.path.insert(0, 'etl'); import scripts.config as c; "
+        "assert not any(m == 'redis' or m.startswith('etlhub') for m in sys.modules), sorted(sys.modules); "
+        "assert (c.get_dhis_url(), c.get_dhis_token(), c.get_ou_level()) == ('https://cli.test', 'd2pat_cli', '5'); "
+        "assert (c.dryRun, c.DHIS_URL, c.LOG_LEVEL) == (False, 'https://cli.test', 'DEBUG')"
+    )
+    env = {"PATH": os.environ["PATH"], "DHIS_URL": "https://cli.test/", "DHIS_TOKEN": "d2pat_cli",
+           "OU_LEVEL": "5", "DRYRUN": "false", "LOG_LEVEL": "debug"}
+    result = subprocess.run([sys.executable, "-c", code], cwd=REPO_ROOT, env=env, capture_output=True, text=True)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_a_job_reads_the_configuration_of_its_own_pass_and_its_dhis2(monkeypatch):
+    from etlhub.core.job_context import job_pass_config
+    monkeypatch.setattr(auth_store, "get_credential", lambda: CREDENTIAL)
+    token = job_pass_config.set({"gee_variables": "v1,v2", "parent_ou": "ou_fixed", "log_level": "DEBUG",
+                                 "dry_run": True, "dhis_url": CREDENTIAL["url"]})
+    try:
+        assert (config.get_gee_variables(), config.get_parent_ou(), config.get_log_level()) == (
+            ["v1", "v2"], "ou_fixed", "DEBUG")  # never the active pass, Redis or .env
+        assert config.get_dhis_token() == "d2pat_login"
+        monkeypatch.setattr(auth_store, "get_credential", lambda: {**CREDENTIAL, "url": "https://other.dhis2/"})
+        with pytest.raises(script_config.DHIS2SessionError, match="pass runs on https://dhis2.test/"):
+            config.get_dhis_token()  # someone logged in to another DHIS2 since the launch
+    finally:
+        job_pass_config.reset(token)
