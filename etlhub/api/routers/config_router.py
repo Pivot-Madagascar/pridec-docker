@@ -1,12 +1,14 @@
 import logging
 from typing import Literal
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from etlhub.api.routers import error_doc
 from etlhub.application.use_cases import fetch_pivot
 from etlhub.application.use_cases.ingestion_service import available_gee_variables
 from etlhub.core.dependencies import get_auth_store, get_config_store
+from etlhub.domain.interfaces.auth_store import AuthStore
+from etlhub.domain.interfaces.config_repository import ConfigRepository
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/config", tags=["Configuration"])
@@ -39,20 +41,9 @@ class ConfigResponse(BaseModel):
     # Read only: every GEE variable of pridec_gee. Each pass chooses its own when it starts (POST /pipeline/passes).
     gee_variables: list[str] = []
 
-@router.get(
-    "/",
-    response_model=ConfigResponse,
-    summary="Current dynamic configuration",
-    description=(
-        "PARENT_OU, OU_LEVEL, DISEASE_CODE, LOG_LEVEL and PIVOT_URL from Redis, plus the DHIS2 URL and token expiry of "
-        "the last login. No token is ever returned (has_dhis_token, has_pivot_token only: PIVOT_TOKEN stays in etlhub's "
-        "environment). gee_variables: every GEE variable of pridec_gee, "
-        "read only (a pass chooses its own when it starts)."
-    ),
-)
-async def get_config():
-    data = get_config_store().get_all()
-    credential = get_auth_store().get_credential() or {}
+def _response(store: ConfigRepository, auth: AuthStore) -> ConfigResponse:
+    data = store.get_all()
+    credential = auth.get_credential() or {}
     return ConfigResponse(
         dhis_url=credential.get("url"),
         has_dhis_token=bool(credential.get("token")),
@@ -66,6 +57,21 @@ async def get_config():
         gee_variables=available_gee_variables(),
     )
 
+@router.get(
+    "/",
+    response_model=ConfigResponse,
+    summary="Current dynamic configuration",
+    description=(
+        "PARENT_OU, OU_LEVEL, DISEASE_CODE, LOG_LEVEL and PIVOT_URL from Redis, plus the DHIS2 URL and token expiry of "
+        "the last login. No token is ever returned (has_dhis_token, has_pivot_token only: PIVOT_TOKEN stays in etlhub's "
+        "environment). gee_variables: every GEE variable of pridec_gee, "
+        "read only (a pass chooses its own when it starts)."
+    ),
+)
+async def get_config(store: ConfigRepository = Depends(get_config_store),
+                     auth: AuthStore = Depends(get_auth_store)) -> ConfigResponse:
+    return _response(store, auth)
+
 @router.put(
     "/",
     response_model=ConfigResponse,
@@ -73,11 +79,12 @@ async def get_config():
     description="Writes the fields that are set (null fields are left as they are) and returns the new configuration.",
     responses={502: error_doc("Redis write failed", {"detail": "Failed to write config to Redis"})},
 )
-async def update_config(config: ConfigUpdate):
+async def update_config(config: ConfigUpdate, store: ConfigRepository = Depends(get_config_store),
+                        auth: AuthStore = Depends(get_auth_store)) -> ConfigResponse:
     updates = {k.upper(): v for k, v in config.model_dump(exclude_none=True).items()}
-    if updates and not get_config_store().set_all(updates):
+    if updates and not store.set_all(updates):
         raise HTTPException(status_code=502, detail="Failed to write config to Redis")
-    return await get_config()
+    return _response(store, auth)
 
 @router.put(
     "/reload",
@@ -85,10 +92,11 @@ async def update_config(config: ConfigUpdate):
     summary="Reload the dynamic configuration from .env",
     responses={502: error_doc("Redis write failed", {"detail": "Failed to write config to Redis"})},
 )
-async def reload_config():
+async def reload_config(store: ConfigRepository = Depends(get_config_store),
+                        auth: AuthStore = Depends(get_auth_store)) -> ConfigResponse:
     """Rereads the editable keys (config_store.EDITABLE_KEYS) from etlhub's .env and writes them to Redis,
     overwriting the current values, as the API does at each start. A key missing from .env is removed from Redis.
     Use it after editing .env by hand."""
-    if not get_config_store().load_env():
+    if not store.load_env():
         raise HTTPException(status_code=502, detail="Failed to write config to Redis")
-    return await get_config()
+    return _response(store, auth)

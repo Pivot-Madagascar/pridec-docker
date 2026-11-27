@@ -1,5 +1,6 @@
 """Editable config: .env loaded into Redis at each API start and on reload, edited from etlui, read by the scripts."""
 import sys
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -110,3 +111,33 @@ def test_reload_uses_the_same_loading(redis, client):
     body = client.put("/api/config/reload").json()
 
     assert body["parent_ou"] == "ou_env" and body["gee_variables"] == ["a_1", "b_2", "c_3"]
+
+
+def test_the_routes_get_their_stores_by_injection(redis, app, client):
+    """Depends in the route signatures (etlhub/CLAUDE.MD, Architecture): app.dependency_overrides reaches every route."""
+    from etlhub.core.dependencies import get_auth_store, get_config_store
+
+    class Store:
+        data = {"PARENT_OU": "ou_fake"}
+
+        def get_all(self):
+            return dict(self.data)
+
+        def set_all(self, config):
+            self.data = {**self.data, **config}
+            return True
+
+        def load_env(self):
+            return False  # the real one succeeds on the fixture's .env
+
+    store = Store()
+    app.dependency_overrides[get_config_store] = lambda: store
+    app.dependency_overrides[get_auth_store] = lambda: SimpleNamespace(get_credential=lambda: {"token": "t"})
+    try:
+        assert client.get("/api/config/").json()["parent_ou"] == "ou_fake"  # the real store holds ou_edited
+        body = client.put("/api/config/", json={"log_level": "DEBUG"}).json()
+        assert (body["log_level"], body["has_dhis_token"]) == ("DEBUG", True) and "LOG_LEVEL" not in redis
+        assert client.put("/api/config/reload").status_code == 502
+    finally:
+        app.dependency_overrides.pop(get_config_store, None)
+        app.dependency_overrides.pop(get_auth_store, None)
