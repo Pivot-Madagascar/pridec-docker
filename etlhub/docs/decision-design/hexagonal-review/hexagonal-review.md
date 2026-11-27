@@ -1,7 +1,7 @@
 # Hexagonal architecture review of etlhub
 
 Review 2026-11-26, confronted with `etlhub/CLAUDE.md` ("Rules", "Architecture", "Gotchas") and the decision docs on
-2026-11-27. Nothing applied: each recommendation waits for the owner's decision, item by item.
+2026-11-27. The owner decided every item on 2026-11-27; each item below says what was done ("Outcome 2026-11-27").
 
 ## Verdict
 
@@ -75,6 +75,7 @@ the team's decision (A2). Kept here so that a change to the decision is a consci
   storage means rewriting the pass rules; testing them needs SQLite (the `checkpoint_store` fixture provides it).
 - Revisit if: a second storage is needed, or the pass rules must be tested without SQLite. Direction then: extend the
   pattern of `domain/pipeline.py` (pure functions on `Rows`) to the pass state machine.
+- Outcome 2026-11-27: written in `CLAUDE.md` "Architecture" (A1 line), unchanged in the code.
 
 ### A2. ETL copies in `application` call DHIS2, Pivot and GEE directly
 
@@ -86,12 +87,13 @@ the team's decision (A2). Kept here so that a change to the decision is a consci
 | `fetch_pivot.py` | Pivot and DHIS2 through `pivot_dhis_tools` | yes: copy of `import_pivot_*_etlhub.py`, `ponytail:` marked |
 | `gee_import.py` | GEE and DHIS2 | yes: version of `import_gee.py`, `ponytail:` marked |
 | `validation_use_cases.py` | pandas / geopandas on files | yes: named in the tolerance |
-| `check_import_availability.py` | DHIS2 through `requests` | **not by its wording**: no ETL script behind it (constants copied from them, `ponytail:` marked); its location is documented in `CLAUDE.md` Gotchas (`GET /import_availability`) |
-| `etl_use_cases.py` (`notify_webhook`) | webhook through `httpx` | **no**: listed in the `CLAUDE.md` module map and `ARCHITECTURE.md` as part of `application`, but not in the tolerance, and it contradicts "only through ports" |
+| `check_import_availability.py` | DHIS2 through `requests` | **not by its wording**: no ETL script behind it (constants copied from them, `ponytail:` marked); its location is documented in `CLAUDE.md` Gotchas (`GET /import_availability`). **Outcome 2026-11-27: behind a port.** `DHIS2Reader` (`data_values`, `analytics`, `system_info`), adapter `infrastructure/dhis2_reader.py` (`HttpDHIS2Reader`), bound by `get_dhis2_reader`; the file keeps the plan and the copied constants. Then (owner's decision, 2026-11-27) its configuration went behind `ImportSettings` (adapter `infrastructure/import_settings.py`, `ScriptImportSettings`, over `etl/scripts/config.py`) and its periods are computed by `_last_months` (stdlib, checked against `create_period_range` by `tests/test_library_constants_sync.py`): it imports no ETL library any more |
+| `etl_use_cases.py` (`notify_webhook`) | webhook through `httpx` | **no**: listed in the `CLAUDE.md` module map and `ARCHITECTURE.md` as part of `application`, but not in the tolerance, and it contradicts "only through ports". **Outcome 2026-11-27: behind a port.** `WebhookNotifier`, adapter `infrastructure/webhook_notifier.py` (`HttpWebhookNotifier`), passed by the worker (`tasks._run`); `etl_use_cases.py` no longer imports `httpx` |
 
 - Where written: `CLAUDE.md` "Architecture": "Tolerated, pending the team's decision: `application` → `etl.scripts` and
   the libraries they need (the ETL wrappers ...)". The copies' debt is tracked by their `ponytail:` comments.
 - Residual: `tests/conftest.py` replaces these libraries with a global `MagicMock`; the team decision is still pending.
+- Outcome 2026-11-27: the tolerance is now enforced file by file (`THIRD_PARTY_FILES` in `tests/test_architecture.py`): only the ETL copies may import `etl`, `pivot_dhis_tools`, `pridec_gee`, `ee`, `pandas`, `geopandas`, `httpx` (`build_analytics.py`). Not an ETL copy, accepted by the owner on 2026-11-27 and named in the guard: `ingestion_service.py` → `pridec_gee.AVAILABLE_VARIABLES` (a constant list).
 
 ### A3. Mode and request context as `contextvars` in `core`
 
@@ -101,6 +103,7 @@ the team's decision (A2). Kept here so that a change to the decision is a consci
   every path through `work_dir`) and "Cycle journal" (actor and `request_id` from `core/request_context.py`);
   `mode-isolation/mode-isolation.md`. Tolerated: "any layer → `core` settings".
 - Residual: these modules are context, not settings; the tolerance's wording does not name them.
+- Outcome 2026-11-27: named in `CLAUDE.md` "Architecture" (A3 line and table) and in the guard (`CORE_SHARED`).
 
 ### A4. Adapters built outside `core/dependencies.py`
 
@@ -113,10 +116,12 @@ the team's decision (A2). Kept here so that a change to the decision is a consci
   `pipeline-checkpoints.md` (`_update_task_status` calls `finish()`).
 - Residual: `CLAUDE.md` calls `core/dependencies.py` "the only place that binds a port to its adapter"; true for `api`
   and `application` only. `script_config.py` is outside the four folders `tests/test_architecture.py` walks.
+- Outcome 2026-11-27: written in `CLAUDE.md` "Architecture" (A4 line; table row for the composition roots). The guard
+  now walks `core/`, `main.py`, `script_config.py`, `migrate.py` and the other root files, each with its rule.
 
 ## B. Deviations from the letter of `etlhub/CLAUDE.md`
 
-None is caught by `tests/test_architecture.py`.
+None was caught by `tests/test_architecture.py`; since 2026-11-27 each would be.
 
 ### B1. Direct getter calls in route bodies: `api/routers/config_router.py`
 
@@ -134,20 +139,36 @@ functions get no injection"); `gee_import.py` reuses `_store()`, and `api` reach
 only. The guard is wider than the doc: it allows all of `core`, and `core.dependencies` imports all of
 `infrastructure`, so any `application` module could reach any adapter this way without the test failing.
 
+**Outcome 2026-11-27: injected.** `_store()` is gone; the functions of `fetch_pivot.py` and `gee_import.py` take
+`imports: FetchedImports`, given by the worker (`tasks.task_etl` builds `RedisFetchedImports()`) or by `Depends(get_fetched_imports)`
+(`pipeline_router.py`, `AnalyticsService`). The guard refuses `application` → `core.dependencies`.
+
 ### B3. The log WebSocket builds its own Redis client: `api/websockets/etl_logs.py`
 
 It creates a `redis.asyncio` pool and subscribes to pub/sub directly. `CLAUDE.md`: `api` "gets services and adapters by
 injection". The `EventPublisher` port covers publishing, not subscribing. Invisible to the test, which checks `etlhub`
 imports only.
 
+**Outcome 2026-11-27: port.** `EventSubscriber` (`subscribe`, `next_event`, `close`), adapter `RedisEventSubscriber` in
+`infrastructure/etl_events.py` (same channels, the async pool moved there), bound by `get_event_subscriber` and passed
+with `Depends`. Nothing under `api/` imports `redis`; the guard refuses it.
+
 ## C. Not covered by `etlhub/CLAUDE.md`
 
 - `api/routers/forecast_report_router.py` reads `output/forecast_report.html` and archives `output/` itself. It follows
   the path rule (`work_dir`); no port exists for output files. Same pattern as `PipelineGate.report()`, which returns a
-  `Path` that the router serves.
+  `Path` that the router serves. **Outcome 2026-11-27: port** `OutputFiles` (`report`, `archive`), adapter
+  `infrastructure/output_files.py` (`WorkDirOutputFiles`), bound by `get_output_files`.
 - `api/auth/router.py` catches `redis.RedisError` (2 places): an infrastructure exception reaches the API layer.
   `CLAUDE.md` mentions `except redis.RedisError` only as a test pitfall (Gotchas, `test_auth.py`), never as a choice.
+  **Outcome 2026-11-27: domain exception.** `infrastructure/auth_store.py` turns `redis.RedisError` into
+  `AuthStoreUnavailable` (`domain/exceptions.py`); the router catches that (same 503). Login's DHIS2 HTTP calls moved
+  from `api/auth/dhis2_auth.py` behind the `DHIS2Accounts` port (`infrastructure/dhis2_accounts.py`), `DHIS2Error` to
+  `domain/exceptions.py`.
 - Third-party imports by layer: nothing says which libraries `api` or `domain` may import (`redis`, `sqlite3`, `httpx`).
+  **Outcome 2026-11-27: rule and guard.** `CLAUDE.md` "Architecture" lists the libraries per layer;
+  `tests/test_architecture.py` (`THIRD_PARTY`, `THIRD_PARTY_FILES`) enforces them (`sqlite3` is stdlib: allowed
+  everywhere by the stdlib rule, used in `infrastructure` only today).
 
 ## D. Drift between `etlhub/CLAUDE.md` and the code
 
@@ -178,15 +199,22 @@ imports only.
 2. **Decide B2.** Either inject `FetchedImports` into `fetch_pivot` / `gee_import`, or write the exception into
    `CLAUDE.md`. Then align the guard with the doc: allow `application` the `core` modules it is meant to use
    (`config`, `job_context`, `request_context`), not `core.dependencies`. Today this fails on `fetch_pivot.py` only.
+   **Done 2026-11-27**: injected (B2) and the guard aligned (relative and one-part imports, `core/` and root files too).
 3. **Decide B3.** A subscription port for the log WebSocket, bound in `core/dependencies.py`, or a written exception.
+   **Done 2026-11-27**: port `EventSubscriber` (B3).
 4. **Write the choices of section A into `CLAUDE.md` "Architecture"** (one line each): the store holds the pass rules
    (A1), the mode / request `contextvars` (A3), the adapters built by the worker, `main.py` and `script_config.py`
    (A4), and settle the webhook and the availability check (A2, last two rows): tolerated, or behind a port.
+   **Done 2026-11-27**: A1, A3, A4 lines in `CLAUDE.md`; webhook and availability check behind ports (A2).
 5. **Fix the drift of section D** in the `CLAUDE.md` module map and architecture table.
+   **Done 2026-11-27** for the module map (14 ports, the new adapters) and the table (`core` modules per layer,
+   composition roots, root files). Most other D items had been fixed before (module map already listed 9 ports).
 6. **Optional, lower priority than first thought.** A type checker on `domain/interfaces`, `infrastructure` and
    `tests/conftest.py`: the static comparison shows every adapter in sync; only `finish`'s parameter name drifts.
    `CLAUDE.md` says of linters and formatters "none configured. Do not invent one": adding any such tool is the
    owner's explicit call. The cheaper fix is renaming `state` to `status` in `CheckpointStore.finish`.
+   **Done 2026-11-27**: renamed (no type checker added); every caller passes it positionally, the fakes already said
+   `status`.
 
 ## Not verified
 

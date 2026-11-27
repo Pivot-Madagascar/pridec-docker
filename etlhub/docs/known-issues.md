@@ -1,6 +1,6 @@
 # etlhub — Known issues
 
-Checked against the code on 2026-11-17 (commit `a720737`); technical debt (section 8) and the entries changed by the 2026-11-24 work updated on 2026-11-25; first written on 2026-10-08, after the DHIS2 login and route protection work (commit `9f66b09`). Items marked *(audit 2026-11-27)* come from a docs-versus-code audit of that day (full suite run, AST scripts, code read). Items marked *(patched 2026-11-27)* were fixed or decided the same day, after the audit (suite: 406 pass, etlui 206). Items marked *unverified* come from reading the code only. Fixed items are listed at the end of each section so the history stays readable.
+Checked against the code on 2026-11-17 (commit `a720737`); technical debt (section 8) and the entries changed by the 2026-11-24 work updated on 2026-11-25; first written on 2026-10-08, after the DHIS2 login and route protection work (commit `9f66b09`). Items marked *(audit 2026-11-27)* come from a docs-versus-code audit of that day (full suite run, AST scripts, code read). Items marked *(patched 2026-11-27)* were fixed or decided the same day, after the audit (suite: 415 pass, etlui 206). Items marked *unverified* come from reading the code only. Fixed items are listed at the end of each section so the history stays readable.
 
 Scope: etlhub only. Errors of the R forecast pipeline itself (the `pridec_forecast` image, INLA, the `PRIDEC` package) are not listed here; see the tickets in `testing-QA/` (e.g. `ticket-forecast-inla-com-malaria.md`).
 
@@ -38,7 +38,7 @@ None between etlhub layers since 2026-10-23, guarded by `tests/test_architecture
 
 Tolerated, not fixed (team decision pending, `CLAUDE.MD`): `application` → `etl.scripts` and pandas/geopandas (`validation_use_cases.py` reads the input files) (`infrastructure/checkpoint_store.py` → `etl.scripts.config.get_dry_run`: gone since 2026-11-23, DRYRUN = TEST MODE). Bypasses inside `infrastructure` (allowed by the rule): `tasks.py` builds `JobStore()` and calls `get_checkpoint_store()` directly.
 
-**P3 — Not caught by `tests/test_architecture.py`** *(audit 2026-11-27)*. The guard walks `domain`, `application`, `infrastructure` and `api` only (not `core/`, `main.py`, `script_config.py`, `migrate.py`), skips relative imports (`node.level == 0`) and `from etlhub import infrastructure` (a one-part module name), never flags an import of `core` (so `domain` or `application` → `core.dependencies` → any adapter passes), and ignores third-party libraries. Seven such imports in a throwaway tree gave no crossing. Not caught today: `application/use_cases/fetch_pivot.py:31` calls `core.dependencies.get_fetched_imports()` (a service locator, reused by `gee_import.py`); `api/websockets/etl_logs.py:9` builds its own `redis.asyncio` pool; `api/auth/router.py:8,93,187` catches `redis.RedisError`; `api/auth/dhis2_auth.py` holds the DHIS2 HTTP client (`httpx`); (the `domain.pipeline.RUN_TASKS` import added to `ingest_router.py` on 2026-11-27 was removed the same day, owner's decision: the 500 is declared on every launch). Owner's decision for each (`decision-design/hexagonal-review/`, B2, B3, C), then widen the guard without extending `ALLOWED_DEBT`.
+*Fixed (2026-11-27, owner's decisions, `decision-design/hexagonal-review/`):* `tests/test_architecture.py` missed crossings. It now walks every source file (layers, `core/`, root files), resolves relative and `from etlhub import x` imports, lets `application` read only `core.config`, `core.job_context`, `core.request_context`, and checks third-party libraries per layer (ETL copies per file; `ingestion_service.py` → `pridec_gee.AVAILABLE_VARIABLES` accepted). The crossings it now refuses were fixed behind ports: `FetchedImports` injected into `fetch_pivot` / `gee_import` (B2); `EventSubscriber` for the log WebSocket (B3); `AuthStoreUnavailable` instead of `redis.RedisError` in `api/auth/router.py`; `DHIS2Accounts` for the login's DHIS2 client; `OutputFiles` for the report and archive; `WebhookNotifier`; `DHIS2Reader` and `ImportSettings` for the availability check. Nothing under `api/` imports `redis`, `httpx` or `etlhub.infrastructure`. Limits: the guard reads import statements only (not `importlib`, nor a client passed in), and allows the whole stdlib (`subprocess`, `urllib.request`, `socket`, `sqlite3` in `application`, `domain` or `api` would pass). Was: the guard walked 4 folders, skipped relative imports, never flagged `core`, ignored third-party libraries; `fetch_pivot.py` used `core.dependencies` as a service locator, the WebSocket built its own Redis pool, the auth router caught `redis.RedisError`, `dhis2_auth.py` held an `httpx` client.
 
 ## 3. Behaviour worth knowing
 
@@ -83,7 +83,7 @@ Fixed: the five separate Redis clients · (2026-10-23) `get_request_tracker_repo
 
 ## 5. Tests
 
-- 2026-11-27: 406 pass, 1 deselected (etlui: 206 pass). 2026-11-24: 377 pass, 1 deselected (`-m "not integration"`). 2026-11-17: 287 pass, 1 skipped. Coverage of the sources (`api`, `application`, `core`, `domain`, `infrastructure`) was **91 %** on 2026-11-04; `job_store.py` 49 %, `websockets/etl_logs.py` 80 %, auth 84–95 %.
+- 2026-11-27: 415 pass, 1 deselected (etlui: 206 pass). 2026-11-24: 377 pass, 1 deselected (`-m "not integration"`). 2026-11-17: 287 pass, 1 skipped. Coverage of the sources (`api`, `application`, `core`, `domain`, `infrastructure`) was **91 %** on 2026-11-04; `job_store.py` 49 %, `websockets/etl_logs.py` 80 %, auth 84–95 %.
 - *Fixed (2026-11-17):* three tests of `tests/infrastructure/test_checkpoint_store.py` expected cycle `202610` without the `month` fixture, so they read the real month and failed since 2026-11. They now take the fixture.
 - ~~**P3** — `etlhub/pytest.ini` used `[tool:pytest]`, so the file was ignored.~~ Fixed 2026-10-21: header renamed to `[pytest]` (CI broke on `No module named 'tests'` without its `pythonpath = .`).
 - *Fixed (2026-11-27):* `test_tracking_router.py:10,22,34` patched `etlhub.core.dependencies.get_tracking_service`, which has no effect; the tests pass thanks to `override_dependencies`.
@@ -124,7 +124,7 @@ Fixed: the order-dependent `test_auth.py` failure (file rewritten) · tests no l
   - Public routes: `/auth/dhis2-urls` is public too.
   - `os.chdir` is also in `migrate.py`.
   - The forecast container gets `HOME=/tmp`.
-  - `test_architecture.py` checks less than stated (section 2).
+  - `test_architecture.py` checked less than stated (section 2; fixed 2026-11-27).
   - `set_cycle` and the first transaction of `change_input` write without a journal event.
 - *Fixed (2026-11-27):* same drift elsewhere (skills, `references/reference.md`, `ARCHITECTURE.md`, superseded notes, this file):
   - `.claude/skills/etlhub/SKILL.md`: `DRYRUN` editable, a `.env` for the forecast, 31 tests, 24 h, JSON bodies.

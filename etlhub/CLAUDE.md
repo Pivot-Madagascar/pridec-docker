@@ -7,9 +7,9 @@ FastAPI service (port 8111) that exposes the PRIDE-C ETL scripts (`etl/scripts/*
 ## Module map
 
 - `core/` — config, `dependencies.py` (composition root), `celery_app.py`, `job_context.py` (mode served, a job's pass config, `work_dir`), `request_context.py` (a request's actor and `request_id`)
-- `domain/` — exceptions, `pipeline.py`, 9 ports (`interfaces/`: `JobRepository`, `TaskLauncher`, `PipelineGate`, `RequestTrackerProtocol`, `DefaultFileSource`, `EventPublisher`, `AuthStore`, `ConfigRepository`, `FetchedImports`), Pydantic DTOs (`schemas/`)
-- `application/use_cases/` — `*_service.py` (generate `job_id`, launch through the `TaskLauncher` port), `etl_use_cases.py` (`ETL_JOBS`, stdout capture, `notify_webhook`), `validation_use_cases.py`, `check_import_availability.py` (`GET /import_availability`), and etlhub's own job functions: `build_analytics.py`, `calc_alerts.py`, `fetch_pivot.py`, `gee_import.py`, `post_forecast.py`
-- `infrastructure/` — `tasks.py` (`task_etl`, `task_forecast`, `CeleryTaskLauncher`), `job_store.py`, `request_tracker.py`, `config_store.py`, `auth_store.py`, `forecast_runner.py`, `etl_events.py` (live job events, Redis pub/sub), `checkpoint_store.py` (pipeline gate, passes, journal), `fetched_imports.py`, `default_files.py`, `redis_client.py`
+- `domain/` — exceptions (`AuthStoreUnavailable`, `DHIS2Error` among them), `pipeline.py`, 15 ports (`interfaces/`: `JobRepository`, `TaskLauncher`, `PipelineGate`, `RequestTrackerProtocol`, `DefaultFileSource`, `EventPublisher`, `EventSubscriber`, `AuthStore`, `ConfigRepository`, `FetchedImports`, `DHIS2Reader`, `DHIS2Accounts`, `WebhookNotifier`, `OutputFiles`, `ImportSettings`), Pydantic DTOs (`schemas/`)
+- `application/use_cases/` — `*_service.py` (generate `job_id`, launch through the `TaskLauncher` port), `etl_use_cases.py` (`ETL_JOBS`, stdout capture, `notify_webhook` through `WebhookNotifier`), `validation_use_cases.py`, `check_import_availability.py` (`GET /import_availability`, DHIS2 read through `DHIS2Reader`, its configuration through `ImportSettings`), and etlhub's own job functions: `build_analytics.py`, `calc_alerts.py`, `fetch_pivot.py`, `gee_import.py`, `post_forecast.py`
+- `infrastructure/` — `tasks.py` (`task_etl`, `task_forecast`, `CeleryTaskLauncher`), `job_store.py`, `request_tracker.py`, `config_store.py`, `auth_store.py`, `forecast_runner.py`, `etl_events.py` (live job events, Redis pub/sub: `publish_*` and `RedisEventSubscriber`), `checkpoint_store.py` (pipeline gate, passes, journal), `fetched_imports.py`, `default_files.py`, `redis_client.py`, `dhis2_reader.py` (`HttpDHIS2Reader`), `dhis2_accounts.py` (`HttpDHIS2Accounts`: login's `/api/me` and PATs), `webhook_notifier.py` (`HttpWebhookNotifier`), `output_files.py`, `import_settings.py` (`WorkDirOutputFiles`: report and `output/` archive)
 - `api/` — `routers/`, `websockets/etl_logs.py`, `auth/` (DHIS2), `middleware.py`
 - `tests/` — `api/`, `infrastructure/`, and at its root `test_architecture.py` and the use-case tests
 
@@ -35,17 +35,23 @@ Imports go inward only:
 | Layer | May import (etlhub) | Holds |
 |---|---|---|
 | `domain/` | nothing | rules (`pipeline.py`), DTOs, exceptions, **ports** (`interfaces/`, `typing.Protocol`) |
-| `application/` | `domain`, `core` settings | use cases; they talk to the outside **only through ports** |
-| `infrastructure/` | `domain`, `application`, `core` | adapters (Redis, SQLite, Celery, Docker) implementing the ports |
+| `application/` | `domain`, `core.config`, `core.job_context`, `core.request_context` | use cases; they talk to the outside **only through ports** |
+| `infrastructure/` | `domain`, `application`, `core` but `core.dependencies` | adapters (Redis, SQLite, Celery, Docker, HTTP) implementing the ports |
 | `api/` | `application`, `domain` DTOs, `core` | HTTP / WebSocket; gets services and adapters by injection |
-| `core/dependencies.py` | everything | composition root: the only place that binds a port to its adapter |
+| `core/` (other modules) | `core` | settings, Celery app, contextvars |
+| `script_config.py`, `migrate.py` | `infrastructure` (and `core.config`, `core.job_context`, `core.request_context`) | adapter of `etl/scripts/config.py`; migration CLI |
+| `core/dependencies.py`, `main.py`, `run_*.py` | everything | composition roots: `core/dependencies.py` binds every port `api` and `application` get (A4 below for the others) |
 
 - A use case annotates its collaborators with **ports**, never with an `infrastructure` class, not even under `TYPE_CHECKING`.
 - `api` gets services and ports from the getters of `core/dependencies.py` (`Depends(get_…)` in a route signature; a direct call such as `get_auth_store()` in middleware, helpers and `get_current_user`); it never imports `etlhub.infrastructure`. An adapter may be a module whose functions implement the port (`auth_store`, `etl_events`).
 - A new adapter method used by a use case or a router goes into its port in the same change. A new adapter gets a port when `application/` uses it.
 - A port with a single adapter is normal (the second implementation is the test fake): never delete a port as dead code or "yagni".
-- `tests/test_architecture.py` walks the layers' imports (lazy and `TYPE_CHECKING` ones included) and fails on a new crossing. It misses some (`docs/known-issues.md` §2): passing it is no proof. Its `ALLOWED_DEBT` is empty since 2026-10-23: never add an entry, fix the code.
-- Tolerated, pending the team's decision: `application` → `etl.scripts` and the libraries they need (the ETL wrappers; `validation_use_cases.py` reads the files with pandas/geopandas), `api` → `domain` DTOs, any layer → `core` settings. The test checks `etlhub` imports only.
+- Third-party libraries per layer (since 2026-11-27, owner's decision): `domain` stdlib + `pydantic`; `api` stdlib + `fastapi`, `starlette`, `pydantic` (no `redis`, `httpx`: an adapter's error reaches `api` as a domain exception, `AuthStoreUnavailable`, `DHIS2Error`); `application` stdlib + `pydantic`, plus, per file, the libraries of the ETL copies (`etl`, `httpx` in `build_analytics.py`, `pivot_dhis_tools`, `pridec_gee`, `ee`, `pandas`, `geopandas`: the list is `THIRD_PARTY_FILES` in the test); `core` `pydantic_settings` (`config.py`), `celery` (`celery_app.py`), `fastapi` (`dependencies.py`); I/O libraries (`redis`, `httpx`, `requests`, `docker`...) otherwise only in `infrastructure`, which may import any.
+- `tests/test_architecture.py` walks every source file outside `tests/` (layers, `core/`, root files; a file with no rule fails) and every import (lazy, `TYPE_CHECKING`, relative ones resolved, `from etlhub import x`), against both rules above. Its `ALLOWED_DEBT` is empty since 2026-10-23: never add an entry, fix the code. It sees imports only: a call through an object it cannot see (e.g. a client passed in) is not checked.
+- Tolerated, pending the team's decision: `application` → `etl.scripts` and the libraries they need (the ETL copies, per file in the test; `validation_use_cases.py` reads the files with pandas/geopandas), `api` → `domain` DTOs. `ingestion_service.py` reads `pridec_gee.AVAILABLE_VARIABLES` (a constant list, not an ETL copy): accepted by the owner (2026-11-27), named in the test. Nothing else outside the ETL copies imports an ETL library: `check_import_availability.py` reads its configuration through `ImportSettings` and computes its periods itself (`_last_months`, checked against `create_period_range` by `tests/test_library_constants_sync.py`).
+- A1, the pass rules live in the store: `infrastructure/checkpoint_store.py` (`PipelineGate`) holds the pass state machine and raises the domain exceptions, so that check and write share one SQLite transaction (a refused launch writes nothing). `domain/pipeline.py` keeps the pure rules; testing the pass rules needs SQLite (`checkpoint_store` fixture).
+- A3, context: the mode served and a job's pass config (`core/job_context.py`) and a request's actor and `request_id` (`core/request_context.py`) are `contextvars` every layer but `domain` may read, without a port.
+- A4, adapters built outside `core/dependencies.py`: the worker side in `infrastructure/tasks.py` (`JobStore()`, `get_checkpoint_store()`, `etl_events`, `RedisFetchedImports()`, `HttpWebhookNotifier()`), the `main.py` lifespan (`ConfigStore().load_env()`, `check_schema()`), `script_config.py` (Redis config, `pass_config()`, `auth_store.get_credential`) and `checkpoint_store.py` (`ConfigStore()`). Otherwise `core/dependencies.py` is the only binding: `api` gets every port there, and `application` receives them from it or from the worker side above.
 - No type checker runs: nothing checks that an adapter or a test fake matches its port. Keep them in sync by hand.
 
 ## Gotchas
@@ -82,7 +88,7 @@ Python 3.12 (use `test-venv`; the system `python3` is 3.11). Run from the repo r
 - Worker: `python -m etlhub.run_celery`
 - Schema migrations (by hand, API and workers stopped): `python -m etlhub.migrate --check`, then `python -m etlhub.migrate`
 - API: `cd etlhub && python -m run_server`
-- Tests: `cd etlhub && ../test-venv/bin/python -m pytest tests -m "not integration"` (406 tests on 2026-11-27; bare `pytest` works too since `pytest.ini` is read)
+- Tests: `cd etlhub && ../test-venv/bin/python -m pytest tests -m "not integration"` (415 tests on 2026-11-27; bare `pytest` works too since `pytest.ini` is read)
 - One file: `cd etlhub && ../test-venv/bin/python -m pytest tests/api/test_ingest_router.py`
 - Linter / formatter: none configured. Do not invent one.
 
